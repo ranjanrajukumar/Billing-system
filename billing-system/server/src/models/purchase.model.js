@@ -1,0 +1,30 @@
+import { DataTypes } from 'sequelize';
+import { enumType, unsignedInteger } from './types.js';
+
+const purchaseStatuses = ['Draft', 'Received', 'Cancelled'];
+const paymentStatuses = ['Unpaid', 'Partially Paid', 'Paid'];
+
+export default (sequelize) => sequelize.define('Purchase', {
+  id: { type: unsignedInteger(sequelize), autoIncrement: true, primaryKey: true },
+  purchaseNumber: { type: DataTypes.STRING(40), allowNull: false, unique: true },
+  purchaseDate: { type: DataTypes.DATEONLY, allowNull: false },
+  subtotal: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
+  taxAmount: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
+  grandTotal: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
+  paidAmount: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
+  status: { ...enumType(sequelize, purchaseStatuses), defaultValue: 'Received' },
+  paymentStatus: { ...enumType(sequelize, paymentStatuses), defaultValue: 'Unpaid' },
+  notes: { type: DataTypes.TEXT }
+,
+  authadd: { type: DataTypes.INTEGER, allowNull: true },
+  authlstedit: { type: DataTypes.INTEGER, allowNull: true },
+  authdel: { type: DataTypes.INTEGER, allowNull: true },
+  detstatus: { type: DataTypes.BOOLEAN, defaultValue: false },
+  delondt: { type: DataTypes.DATE, allowNull: true }
+}, {
+  timestamps: true,
+  createdAt: 'addondt',
+  updatedAt: 'editondt',
+  tableName: 'purchases',
+  indexes: [{ fields: ['purchase_number'] }, { fields: ['purchase_date'] }]
+});

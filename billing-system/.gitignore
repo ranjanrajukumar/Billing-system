@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+server/logs/*
+server/pdf/*
+server/uploads/*
+!server/logs/.gitkeep
+!server/pdf/.gitkeep
+!server/uploads/.gitkeep

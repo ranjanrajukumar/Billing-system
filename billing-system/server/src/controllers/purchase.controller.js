@@ -1,0 +1,103 @@
+import { Op } from 'sequelize';
+import { sequelize, Product, Purchase, PurchaseItem, StockMovement, Supplier } from '../models/index.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { getPagination, paged } from '../utils/pagination.js';
+
+async function nextPurchaseNumber(transaction) {
+  const year = new Date().getFullYear();
+  const count = await Purchase.count({ where: { purchaseNumber: { [Op.like]: `PO-${year}-%` } }, transaction });
+  return `PO-${year}-${String(count + 1).padStart(5, '0')}`;
+}
+
+function calculateItems(items) {
+  const calculated = items.map((item) => {
+    const quantity = Number(item.quantity || 0);
+    const rate = Number(item.rate || 0);
+    const gstPercent = Number(item.gstPercent || 0);
+    const taxable = quantity * rate;
+    const gstAmount = taxable * gstPercent / 100;
+    return { ...item, quantity, rate, gstPercent, gstAmount, amount: taxable + gstAmount };
+  });
+  const subtotal = calculated.reduce((sum, item) => sum + item.quantity * item.rate, 0);
+  const taxAmount = calculated.reduce((sum, item) => sum + item.gstAmount, 0);
+  return { items: calculated, subtotal, taxAmount, grandTotal: subtotal + taxAmount };
+}
+
+export const listPurchases = asyncHandler(async (req, res) => {
+  const { page, limit, offset } = getPagination(req.query);
+  const where = {};
+  if (req.query.from || req.query.to) where.purchaseDate = {};
+  if (req.query.from) where.purchaseDate[Op.gte] = req.query.from;
+  if (req.query.to) where.purchaseDate[Op.lte] = req.query.to;
+  const { rows, count } = await Purchase.findAndCountAll({
+    where,
+    include: [Supplier, { model: PurchaseItem, include: Product }],
+    limit,
+    offset,
+    order: [['purchaseDate', 'DESC'], ['id', 'DESC']]
+  });
+  res.json(paged(rows, count, page, limit));
+});
+
+export const getPurchase = asyncHandler(async (req, res) => {
+  const purchase = await Purchase.findOne({ where: { id: req.params.id, detstatus: false }, include: [Supplier, { model: PurchaseItem, include: Product }] });
+  if (!purchase) return res.status(404).json({ message: 'Purchase not found' });
+  res.json(purchase);
+});
+
+export const createPurchase = asyncHandler(async (req, res) => {
+  const created = await sequelize.transaction(async (transaction) => {
+    const supplier = await Supplier.findOne({ where: { id: req.body.supplierId, detstatus: false }, transaction });
+    if (!supplier) throw Object.assign(new Error('Supplier not found'), { status: 404 });
+
+    const productIds = req.body.items.map((item) => item.productId);
+    const products = await Product.findAll({ where: { id: productIds }, transaction, lock: transaction.LOCK.UPDATE });
+    const byId = new Map(products.map((p) => [p.id, p]));
+    req.body.items.forEach((item) => {
+      if (!byId.has(Number(item.productId))) throw Object.assign(new Error(`Product ${item.productId} not found`), { status: 404 });
+    });
+
+    const totals = calculateItems(req.body.items);
+    const purchase = await Purchase.create({
+      purchaseNumber: req.body.purchaseNumber || await nextPurchaseNumber(transaction),
+      purchaseDate: req.body.purchaseDate,
+      supplierId: supplier.id,
+      createdBy: req.user.id,
+      subtotal: totals.subtotal,
+      taxAmount: totals.taxAmount,
+      grandTotal: totals.grandTotal,
+      paidAmount: req.body.paidAmount || 0,
+      paymentStatus: Number(req.body.paidAmount || 0) >= totals.grandTotal ? 'Paid' : Number(req.body.paidAmount || 0) > 0 ? 'Partially Paid' : 'Unpaid',
+      status: req.body.status || 'Received',
+      notes: req.body.notes
+    }, { transaction });
+
+    await PurchaseItem.bulkCreate(totals.items.map((item) => ({
+      purchaseId: purchase.id,
+      productId: item.productId,
+      quantity: item.quantity,
+      rate: item.rate,
+      gstPercent: item.gstPercent,
+      gstAmount: item.gstAmount,
+      amount: item.amount
+    })), { transaction });
+
+    if (purchase.status === 'Received') {
+      await Promise.all(totals.items.map((item) => Product.increment('stock', { by: item.quantity, where: { id: item.productId }, transaction })));
+      await StockMovement.bulkCreate(totals.items.map((item) => ({
+        productId: item.productId,
+        createdBy: req.user.id,
+        movementType: 'Purchase',
+        quantity: item.quantity,
+        referenceType: 'Purchase',
+        referenceId: purchase.id,
+        notes: purchase.purchaseNumber
+      })), { transaction });
+    }
+
+    return purchase;
+  });
+
+  const purchase = await Purchase.findOne({ where: { id: created.id}, include: [Supplier, { model: PurchaseItem, include: Product }] });
+  res.status(201).json(purchase);
+});
