@@ -37,11 +37,33 @@ export const getOne = asyncHandler(async (req, res) => {
   res.json(item);
 });
 
+async function nextQuotationNumber(transaction) {
+  const year = new Date().getFullYear();
+  const count = await Quotation.count({ where: { quotationNumber: { [Op.like]: `QT-${year}-%` } }, transaction });
+  return `QT-${year}-${String(count + 1).padStart(5, '0')}`;
+}
+
 export const create = asyncHandler(async (req, res) => {
   const { items, ...data } = req.body;
   data.authadd = req.user.id;
 
   const result = await sequelize.transaction(async (t) => {
+    if (!data.quotationNumber) {
+      data.quotationNumber = await nextQuotationNumber(t);
+    }
+    if (!data.quotationDate) {
+      data.quotationDate = new Date().toISOString().slice(0, 10);
+    }
+    if (!data.totalAmount && items && items.length > 0) {
+      data.totalAmount = items.reduce((sum, it) => {
+        const qty = Number(it.quantity || 0);
+        const rate = Number(it.rate || 0);
+        const disc = Number(it.discount || 0);
+        const gst = Number(it.gstPercent || 0);
+        const taxable = Math.max(qty * rate - disc, 0);
+        return sum + Math.round(taxable + (taxable * gst / 100));
+      }, 0);
+    }
     const parent = await Quotation.create(data, { transaction: t });
     if (items && items.length > 0) {
       const parentIdField = 'quotationId';

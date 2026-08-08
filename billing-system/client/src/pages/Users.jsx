@@ -1,18 +1,27 @@
-import React, { useState } from 'react';
-import {
-  Button, Card, CardContent, Chip, Stack, Typography, Tab, Tabs, Box, Checkbox, Paper
-} from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import GroupIcon from '@mui/icons-material/Group';
+import ShieldIcon from '@mui/icons-material/Shield';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import {
+  alpha, Avatar, Box, Button, Checkbox, Chip, FormControlLabel,
+  MenuItem, Paper, Stack, Switch, Tab, Tabs, TextField,
+  Tooltip, Typography, useTheme,
+} from '@mui/material';
+import { useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import DataTable from '../components/DataTable.jsx';
+import Loader from '../components/Loader.jsx';
 import Modal from '../components/Modal.jsx';
+import PageHeader from '../components/PageHeader.jsx';
+import Pagination from '../components/Pagination.jsx';
+import SearchBox from '../components/SearchBox.jsx';
+import { useToast } from '../context/ToastContext.jsx';
 import { useFetch } from '../hooks/useFetch.js';
 import { usersApi } from '../services/resource.service.js';
-import { useForm, Controller } from 'react-hook-form';
-import { TextField, MenuItem, FormControlLabel, Switch } from '@mui/material';
-import { useToast } from '../context/ToastContext.jsx';
-import ConfirmDialog from '../components/ConfirmDialog.jsx';
 
-const modules = [
+const MODULES = [
   { id: 'users', label: 'User Management' },
   { id: 'roles', label: 'Role & Permissions' },
   { id: 'masters', label: 'Master Data' },
@@ -21,146 +30,112 @@ const modules = [
   { id: 'sales', label: 'Sales & Billing' },
   { id: 'accounts', label: 'Accounts & Ledgers' },
   { id: 'reports', label: 'Reports' },
-  { id: 'settings', label: 'System Settings' }
+  { id: 'settings', label: 'System Settings' },
 ];
+const ACTIONS = ['view', 'create', 'edit', 'delete'];
 
-const actionsList = ['view', 'create', 'edit', 'delete'];
-
+/* ──────────────────── ROLE MANAGER ──────────────────── */
 function RoleManager() {
-  const { data, loading, error, mutate } = useFetch(() => usersApi.roles.list(), []);
+  const { data, loading, mutate } = useFetch(() => usersApi.roles.list(), []);
   const roles = Array.isArray(data) ? data : (data?.data || []);
-  
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingRole, setEditingRole] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
   const { showToast } = useToast();
-  
-  const { register, handleSubmit, formState: { errors, isSubmitting }, reset, control, watch } = useForm();
+  const theme = useTheme();
+  const { register, handleSubmit, formState: { errors, isSubmitting }, reset, control } = useForm();
 
   const handleOpen = (role = null) => {
-    setEditingRole(role);
-    const defaultPermissions = {};
-    modules.forEach(m => {
-      defaultPermissions[m.id] = { view: false, create: false, edit: false, delete: false };
-    });
-    
-    reset(role ? {
-      name: role.name,
-      permissions: { ...defaultPermissions, ...role.permissions }
-    } : { name: '', permissions: defaultPermissions });
-    
-    setIsModalOpen(true);
+    setEditing(role);
+    const defaultPerm = {};
+    MODULES.forEach((m) => { defaultPerm[m.id] = { view: false, create: false, edit: false, delete: false }; });
+    reset(role ? { name: role.name, permissions: { ...defaultPerm, ...role.permissions } } : { name: '', permissions: defaultPerm });
+    setOpen(true);
   };
-
-  const handleClose = () => {
-    setIsModalOpen(false);
-    setEditingRole(null);
-    reset();
-  };
+  const handleClose = () => { setOpen(false); setEditing(null); reset(); };
 
   const onSubmit = async (values) => {
     try {
-      if (editingRole) {
-        await usersApi.roles.update(editingRole.id, values);
-        showToast('Role updated successfully', 'success');
-      } else {
-        await usersApi.roles.create(values);
-        showToast('Role created successfully', 'success');
-      }
-      mutate();
-      handleClose();
-    } catch (err) {
-      showToast(err.response?.data?.message || 'Error saving role', 'error');
-    }
+      editing ? await usersApi.roles.update(editing.id, values) : await usersApi.roles.create(values);
+      showToast(`Role ${editing ? 'updated' : 'created'} successfully`);
+      mutate(); handleClose();
+    } catch (err) { showToast(err.response?.data?.message || 'Error saving role', 'error'); }
   };
 
   const handleDelete = async () => {
-    try {
-      await usersApi.roles.remove(deleteConfirm.id);
-      showToast('Role deleted successfully', 'success');
-      mutate();
-    } catch (err) {
-      showToast(err.response?.data?.message || 'Error deleting role', 'error');
-    } finally {
-      setDeleteConfirm(null);
-    }
+    try { await usersApi.roles.remove(deleting.id); showToast('Role deleted'); mutate(); }
+    catch (err) { showToast(err.response?.data?.message || 'Error deleting role', 'error'); }
+    finally { setDeleting(null); }
   };
 
-  const columns = [
-    { field: 'name', headerName: 'Role Name' },
-    { field: 'permissions', headerName: 'Access Overview', render: (row) => {
-        if (row.name === 'Admin') return <Chip size="small" label="Full Access" color="primary" />;
-        const p = row.permissions || {};
-        const count = Object.values(p).filter(v => v.view).length;
-        return `${count} Modules Enabled`;
-      }
-    }
-  ];
-
-  const actions = [
-    { label: 'Edit', onClick: handleOpen },
-    { label: 'Delete', color: 'error', onClick: setDeleteConfirm, disabled: (row) => row.name === 'Admin' }
-  ];
+  if (loading) return <Loader />;
 
   return (
     <Stack spacing={2}>
       <Stack direction="row" justifyContent="space-between" alignItems="center">
-        <Typography variant="h6">Roles</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpen()}>
+        <Typography variant="subtitle1" fontWeight={700} color="text.secondary">
+          {roles.length} roles configured
+        </Typography>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpen()} sx={{ borderRadius: 2 }}>
           Add Role
         </Button>
       </Stack>
 
-      <Card variant="outlined">
-        <CardContent>
-          <DataTable
-            columns={columns}
-            rows={roles}
-            loading={loading}
-            error={error}
-            actions={actions}
-          />
-        </CardContent>
-      </Card>
+      <DataTable
+        columns={[
+          { field: 'name', headerName: 'Role Name', render: (r) => (
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Box sx={{ width: 28, height: 28, borderRadius: 1.5, bgcolor: alpha(theme.palette.primary.main, 0.1), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'primary.main' }}>
+                <ShieldIcon sx={{ fontSize: 14 }} />
+              </Box>
+              <Typography fontWeight={700} variant="body2">{r.name}</Typography>
+            </Stack>
+          )},
+          { field: 'permissions', headerName: 'Access', render: (r) => {
+            if (r.name === 'Admin') return <Chip size="small" label="Full Access" color="primary" sx={{ fontWeight: 700, fontSize: '0.7rem' }} />;
+            const count = Object.values(r.permissions || {}).filter((v) => v.view).length;
+            return <Chip size="small" label={`${count} Modules`} variant="outlined" sx={{ fontWeight: 700, fontSize: '0.7rem' }} />;
+          }},
+          { field: 'actions', headerName: 'Actions', render: (r) => (
+            <Stack direction="row" spacing={0.5}>
+              <Tooltip title="Edit">
+                <Button size="small" onClick={() => handleOpen(r)} sx={{ borderRadius: 1.5, minWidth: 0, px: 1.5 }} variant="outlined">Edit</Button>
+              </Tooltip>
+              <Tooltip title="Delete">
+                <Button size="small" color="error" onClick={() => setDeleting(r)} disabled={r.name === 'Admin'} sx={{ borderRadius: 1.5, minWidth: 0, px: 1.5 }} variant="outlined">Delete</Button>
+              </Tooltip>
+            </Stack>
+          )},
+        ]}
+        rows={roles}
+      />
 
-      <Modal open={isModalOpen} onClose={handleClose} title={editingRole ? 'Edit Role' : 'Add Role'} maxWidth="md">
+      <Modal open={open} onClose={handleClose} title={editing ? 'Edit Role' : 'Add Role'} maxWidth="md">
         <form onSubmit={handleSubmit(onSubmit)}>
-          <Stack spacing={3} sx={{ pt: 1 }}>
-            <TextField
-              label="Role Name"
-              fullWidth
-              disabled={editingRole?.name === 'Admin'}
-              {...register('name', { required: 'Role name is required' })}
-              error={!!errors.name}
-              helperText={errors.name?.message}
-            />
-
-            <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <Stack spacing={2.5} sx={{ pt: 0.5 }}>
+            <TextField label="Role Name" fullWidth disabled={editing?.name === 'Admin'}
+              {...register('name', { required: 'Role name is required' })} error={Boolean(errors.name)} helperText={errors.name?.message} />
+            <Box sx={{ overflowX: 'auto', borderRadius: 2, border: `1px solid ${alpha(theme.palette.divider, 1)}` }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #e0e0e0' }}>
-                    <th style={{ padding: '12px' }}>Module</th>
-                    {actionsList.map(a => (
-                      <th key={a} style={{ padding: '12px', textTransform: 'capitalize' }}>{a}</th>
+                  <tr style={{ background: alpha(theme.palette.primary.main, 0.05) }}>
+                    <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.palette.text.secondary }}>Module</th>
+                    {ACTIONS.map((a) => (
+                      <th key={a} style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, fontSize: '0.75rem', textTransform: 'capitalize', color: theme.palette.text.secondary }}>{a}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {modules.map((m) => (
-                    <tr key={m.id} style={{ borderBottom: '1px solid #eee' }}>
-                      <td style={{ padding: '8px 12px', fontWeight: 500 }}>{m.label}</td>
-                      {actionsList.map(action => (
-                        <td key={action} style={{ padding: '4px 12px' }}>
+                  {MODULES.map((m, mi) => (
+                    <tr key={m.id} style={{ borderTop: `1px solid ${alpha(theme.palette.divider, 1)}`, background: mi % 2 === 0 ? 'transparent' : alpha(theme.palette.action.hover, 0.3) }}>
+                      <td style={{ padding: '6px 14px', fontWeight: 600, fontSize: '0.875rem' }}>{m.label}</td>
+                      {ACTIONS.map((action) => (
+                        <td key={action} style={{ padding: '2px 8px', textAlign: 'center' }}>
                           <Controller
                             name={`permissions.${m.id}.${action}`}
                             control={control}
                             render={({ field }) => (
-                              <Checkbox
-                                {...field}
-                                checked={field.value || false}
-                                disabled={editingRole?.name === 'Admin'}
-                                color="primary"
-                              />
+                              <Checkbox {...field} checked={field.value || false} disabled={editing?.name === 'Admin'} size="small" color="primary" />
                             )}
                           />
                         </td>
@@ -169,207 +144,149 @@ function RoleManager() {
                   ))}
                 </tbody>
               </table>
-            </Paper>
-
-            <Stack direction="row" spacing={2} justifyContent="flex-end">
-              <Button onClick={handleClose}>Cancel</Button>
-              <Button type="submit" variant="contained" disabled={isSubmitting}>Save</Button>
+            </Box>
+            <Stack direction="row" spacing={1} justifyContent="flex-end">
+              <Button onClick={handleClose} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+              <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ borderRadius: 2 }}>
+                {isSubmitting ? 'Saving…' : 'Save Role'}
+              </Button>
             </Stack>
           </Stack>
         </form>
       </Modal>
 
-      <ConfirmDialog
-        open={!!deleteConfirm}
-        title="Delete Role"
-        message={`Are you sure you want to delete the ${deleteConfirm?.name} role?`}
-        onConfirm={handleDelete}
-        onCancel={() => setDeleteConfirm(null)}
-      />
+      <ConfirmDialog open={Boolean(deleting)} title="Delete Role" message={`Delete the "${deleting?.name}" role?`} onCancel={() => setDeleting(null)} onConfirm={handleDelete} />
     </Stack>
   );
 }
 
+/* ──────────────────── USER MANAGER ──────────────────── */
 function UserManager() {
   const [params, setParams] = useState({ page: 1, limit: 10, search: '' });
-  const { data, loading, error, mutate } = useFetch(() => usersApi.list(params), [params]);
-  const { data: rolesResponse } = useFetch(() => usersApi.roles.list(), []);
-  const roles = Array.isArray(rolesResponse) ? rolesResponse : (rolesResponse?.data || []);
-  
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const { data, loading, mutate } = useFetch(() => usersApi.list(params), [params]);
+  const { data: rolesRes } = useFetch(() => usersApi.roles.list(), []);
+  const roles = Array.isArray(rolesRes) ? rolesRes : (rolesRes?.data || []);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
   const { showToast } = useToast();
-  
+  const theme = useTheme();
   const { register, handleSubmit, formState: { errors }, reset } = useForm();
 
-  const handleOpen = (user = null) => {
-    setEditingUser(user);
-    reset(user || { isActive: true, roleId: roles[0]?.id || '' });
-    setIsModalOpen(true);
-  };
+  const getImageUrl = (path) => path ? (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '') + path : '';
+  const initials = (name) => name ? name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) : '?';
 
-  const handleClose = () => {
-    setIsModalOpen(false);
-    setEditingUser(null);
-    reset();
+  const handleOpen = (user = null) => {
+    setEditing(user);
+    reset(user || { isActive: true, roleId: roles[0]?.id || '' });
+    setOpen(true);
   };
+  const handleClose = () => { setOpen(false); setEditing(null); reset(); };
 
   const onSubmit = async (values) => {
     try {
-      if (editingUser) {
-        if (!values.password) delete values.password;
-        await usersApi.update(editingUser.id, values);
-        showToast('User updated successfully', 'success');
-      } else {
-        await usersApi.create(values);
-        showToast('User created successfully', 'success');
-      }
-      mutate();
-      handleClose();
-    } catch (err) {
-      showToast(err.response?.data?.message || 'Error saving user', 'error');
-    }
+      if (editing) { if (!values.password) delete values.password; await usersApi.update(editing.id, values); }
+      else await usersApi.create(values);
+      showToast(`User ${editing ? 'updated' : 'created'} successfully`);
+      mutate(); handleClose();
+    } catch (err) { showToast(err.response?.data?.message || 'Error saving user', 'error'); }
   };
 
   const handleDelete = async () => {
-    try {
-      await usersApi.remove(deleteConfirm.id);
-      showToast('User deleted successfully', 'success');
-      mutate();
-    } catch (err) {
-      showToast(err.response?.data?.message || 'Error deleting user', 'error');
-    } finally {
-      setDeleteConfirm(null);
-    }
+    try { await usersApi.remove(deleting.id); showToast('User deleted'); mutate(); }
+    catch (err) { showToast(err.response?.data?.message || 'Error deleting user', 'error'); }
+    finally { setDeleting(null); }
   };
 
-  const columns = [
-    { field: 'name', headerName: 'Name' },
-    { field: 'email', headerName: 'Email' },
-    { field: 'mobile', headerName: 'Mobile' },
-    { field: 'role', headerName: 'Role', render: (row) => row.role || 'Unknown' },
-    { field: 'isActive', headerName: 'Status', render: (row) => (
-        <Chip label={row.isActive ? 'Active' : 'Inactive'} color={row.isActive ? 'success' : 'default'} size="small" />
-      ) 
-    }
-  ];
-
-  const actions = [
-    { label: 'Edit', onClick: handleOpen },
-    { label: 'Delete', color: 'error', onClick: setDeleteConfirm }
-  ];
+  if (loading) return <Loader />;
 
   return (
     <Stack spacing={2}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center">
-        <Typography variant="h6">Users</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpen()}>
-          Add User
-        </Button>
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1.5} alignItems={{ xs: 'stretch', sm: 'center' }}>
+        <Typography variant="subtitle1" fontWeight={700} color="text.secondary">
+          {data?.meta?.total || 0} users in the system
+        </Typography>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+          <SearchBox value={params.search} onChange={(s) => setParams((p) => ({ ...p, search: s, page: 1 }))} placeholder="Search users…" />
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpen()} sx={{ borderRadius: 2 }}>Add User</Button>
+        </Stack>
       </Stack>
 
-      <Card variant="outlined">
-        <CardContent>
-          <DataTable
-            columns={columns}
-            rows={data?.data}
-            loading={loading}
-            error={error}
-            actions={actions}
-            onSearch={(search) => setParams(p => ({ ...p, search, page: 1 }))}
-            pagination={{
-              page: params.page,
-              limit: params.limit,
-              total: data?.total || 0,
-              onPageChange: (page) => setParams(p => ({ ...p, page })),
-              onLimitChange: (limit) => setParams(p => ({ ...p, limit, page: 1 }))
-            }}
-          />
-        </CardContent>
-      </Card>
+      <DataTable
+        mobileKeyField="name"
+        columns={[
+          { field: 'photo', headerName: '', render: (r) => (
+            <Avatar src={getImageUrl(r.profileImagePath)} sx={{ width: 34, height: 34, fontSize: '0.8rem', fontWeight: 700, background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}>
+              {initials(r.name)}
+            </Avatar>
+          )},
+          { field: 'name', headerName: 'Name', render: (r) => <Box><Typography variant="body2" fontWeight={700}>{r.name}</Typography><Typography variant="caption" color="text.secondary">{r.email}</Typography></Box> },
+          { field: 'mobile', headerName: 'Mobile', render: (r) => r.mobile || '—' },
+          { field: 'role', headerName: 'Role', render: (r) => <Chip label={r.role || 'Unknown'} size="small" variant="outlined" color="primary" sx={{ fontWeight: 700, fontSize: '0.7rem' }} /> },
+          { field: 'isActive', headerName: 'Status', render: (r) => <Chip label={r.isActive ? 'Active' : 'Inactive'} size="small" color={r.isActive ? 'success' : 'default'} sx={{ fontWeight: 700, fontSize: '0.7rem' }} /> },
+          { field: 'actions', headerName: 'Actions', render: (r) => (
+            <Stack direction="row" spacing={0.5}>
+              <Tooltip title="Edit"><Button size="small" onClick={() => handleOpen(r)} variant="outlined" sx={{ borderRadius: 1.5, minWidth: 0, px: 1.5 }}>Edit</Button></Tooltip>
+              <Tooltip title="Delete"><Button size="small" color="error" onClick={() => setDeleting(r)} variant="outlined" sx={{ borderRadius: 1.5, minWidth: 0, px: 1.5 }}>Delete</Button></Tooltip>
+            </Stack>
+          )},
+        ]}
+        rows={data?.data || []}
+      />
+      <Pagination meta={data?.meta} onChangePage={(p) => setParams((pr) => ({ ...pr, page: p }))} onChangeLimit={(l) => setParams((pr) => ({ ...pr, limit: l, page: 1 }))} />
 
-      <Modal open={isModalOpen} onClose={handleClose} title={editingUser ? 'Edit User' : 'Add User'}>
+      <Modal open={open} onClose={handleClose} title={editing ? 'Edit User' : 'Add User'}>
         <form onSubmit={handleSubmit(onSubmit)}>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField
-              label="Name"
-              fullWidth
-              {...register('name', { required: 'Name is required' })}
-              error={!!errors.name}
-              helperText={errors.name?.message}
-            />
-            <TextField
-              label="Email"
-              type="email"
-              fullWidth
-              {...register('email', { required: 'Email is required' })}
-              error={!!errors.email}
-              helperText={errors.email?.message}
-            />
-            <TextField
-              label="Mobile"
-              fullWidth
-              {...register('mobile')}
-            />
-            <TextField
-              label="Password"
-              type="password"
-              fullWidth
-              {...register('password', { required: !editingUser ? 'Password is required' : false, minLength: 6 })}
-              error={!!errors.password}
-              helperText={errors.password?.message || (editingUser ? 'Leave blank to keep unchanged' : '')}
-            />
-            <TextField
-              select
-              label="Role"
-              fullWidth
-              {...register('roleId', { required: 'Role is required' })}
-              error={!!errors.roleId}
-              helperText={errors.roleId?.message}
-              defaultValue=""
-            >
-              {roles.map(role => (
-                <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
-              ))}
+          <Stack spacing={2.5} sx={{ pt: 0.5 }}>
+            <TextField label="Full Name" fullWidth {...register('name', { required: 'Required' })} error={Boolean(errors.name)} helperText={errors.name?.message} InputLabelProps={{ shrink: true }} />
+            <TextField label="Email" type="email" fullWidth {...register('email', { required: 'Required' })} error={Boolean(errors.email)} helperText={errors.email?.message} InputLabelProps={{ shrink: true }} />
+            <TextField label="Mobile" fullWidth {...register('mobile')} InputLabelProps={{ shrink: true }} />
+            <TextField label="Password" type="password" fullWidth {...register('password', { required: !editing && 'Required', minLength: 6 })} error={Boolean(errors.password)} helperText={errors.password?.message || (editing ? 'Leave blank to keep unchanged' : '')} InputLabelProps={{ shrink: true }} />
+            <TextField select label="Role" fullWidth {...register('roleId', { required: 'Required' })} error={Boolean(errors.roleId)} helperText={errors.roleId?.message} defaultValue="">
+              {roles.map((r) => <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>)}
             </TextField>
-            <FormControlLabel
-              control={<Switch {...register('isActive')} defaultChecked />}
-              label="Active User"
-            />
-            <Stack direction="row" spacing={2} justifyContent="flex-end">
-              <Button onClick={handleClose}>Cancel</Button>
-              <Button type="submit" variant="contained">Save</Button>
+            <FormControlLabel control={<Switch {...register('isActive')} defaultChecked />} label="Active User" />
+            <Stack direction="row" spacing={1} justifyContent="flex-end">
+              <Button onClick={handleClose} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+              <Button type="submit" variant="contained" sx={{ borderRadius: 2 }}>
+                {editing ? 'Update User' : 'Create User'}
+              </Button>
             </Stack>
           </Stack>
         </form>
       </Modal>
 
-      <ConfirmDialog
-        open={!!deleteConfirm}
-        title="Delete User"
-        message={`Are you sure you want to delete ${deleteConfirm?.name}?`}
-        onConfirm={handleDelete}
-        onCancel={() => setDeleteConfirm(null)}
-      />
+      <ConfirmDialog open={Boolean(deleting)} title="Delete User" message={`Delete user "${deleting?.name}"? This cannot be undone.`} onCancel={() => setDeleting(null)} onConfirm={handleDelete} />
     </Stack>
   );
 }
 
+/* ──────────────────── MAIN EXPORT ──────────────────── */
 export default function Users() {
   const [tab, setTab] = useState(0);
 
   return (
-    <Stack spacing={3}>
-      <Typography variant="h4">User & Role Management</Typography>
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)}>
-          <Tab label="Users" />
-          <Tab label="Roles & Permissions" />
+    <Stack spacing={3} className="animate-fadeInUp">
+      <PageHeader
+        title="Users & Role Management"
+        subtitle="Manage system users, assign roles and configure access permissions"
+        icon={<GroupIcon />}
+      />
+
+      <Paper variant="outlined" sx={{ borderRadius: 3, overflow: 'hidden' }}>
+        <Tabs
+          value={tab}
+          onChange={(_, v) => setTab(v)}
+          sx={{ px: 2, borderBottom: 1, borderColor: 'divider', bgcolor: (t) => alpha(t.palette.primary.main, 0.03) }}
+        >
+          <Tab icon={<GroupIcon fontSize="small" />} iconPosition="start" label="Users" />
+          <Tab icon={<ShieldIcon fontSize="small" />} iconPosition="start" label="Roles & Permissions" />
         </Tabs>
-      </Box>
-      {tab === 0 && <UserManager />}
-      {tab === 1 && <RoleManager />}
+        <Box sx={{ p: { xs: 1.5, sm: 2.5 } }}>
+          {tab === 0 && <UserManager />}
+          {tab === 1 && <RoleManager />}
+        </Box>
+      </Paper>
     </Stack>
   );
 }

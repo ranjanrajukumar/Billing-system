@@ -11,7 +11,8 @@ export default (sequelize) => sequelize.define('Product', {
   stock: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   barcode: { type: DataTypes.STRING(80), unique: true },
   lowStockThreshold: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 5 },
-  isActive: { type: DataTypes.BOOLEAN, defaultValue: true }
+  isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+  imagePath: { type: DataTypes.STRING(255) }
 ,
   authadd: { type: DataTypes.INTEGER, allowNull: true },
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },

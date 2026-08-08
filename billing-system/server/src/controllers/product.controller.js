@@ -1,11 +1,12 @@
 import { Op } from 'sequelize';
 import { Category, Product } from '../models/index.js';
+import { normalizeProductPayload, normalizeProductUpdate } from '../services/product.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { getPagination, paged } from '../utils/pagination.js';
 
 export const listProducts = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  const where = {};
+  const where = { detstatus: false };
   if (req.query.search) {
     where[Op.or] = [
       { productName: { [Op.like]: `%${req.query.search}%` } },
@@ -25,14 +26,18 @@ export const getProduct = asyncHandler(async (req, res) => {
 });
 
 export const createProduct = asyncHandler(async (req, res) => {
-  const product = await Product.create({ ...req.body, authadd: req.user?.id });
+  const payload = normalizeProductPayload(req.body, req.user?.id);
+  if (req.file) payload.imagePath = `/uploads/${req.file.filename}`;
+  const product = await Product.create(payload);
   res.status(201).json(product);
 });
 
 export const updateProduct = asyncHandler(async (req, res) => {
   const product = await Product.findOne({ where: { id: req.params.id, detstatus: false } });
   if (!product) return res.status(404).json({ message: 'Product not found' });
-  await product.update({ ...req.body, authlstedit: req.user?.id });
+  const payload = normalizeProductUpdate(req.body, req.user?.id);
+  if (req.file) payload.imagePath = `/uploads/${req.file.filename}`;
+  await product.update(payload);
   res.json(product);
 });
 

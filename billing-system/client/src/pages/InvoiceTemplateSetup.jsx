@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Box, Button, Typography, Paper, Tooltip, IconButton, Chip } from '@mui/material';
+import { Box, Button, Typography, Paper, Tooltip, IconButton, Chip, Stack } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -10,6 +10,7 @@ import DataTable from '../components/DataTable';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 import TemplateFormModal from '../components/TemplateFormModal';
+import Pagination from '../components/Pagination';
 
 export default function InvoiceTemplateSetup() {
   const [data, setData] = useState({ data: [], total: 0 });
@@ -21,9 +22,18 @@ export default function InvoiceTemplateSetup() {
   const loadData = async () => {
     try {
       const res = await api.get('/invoice-templates', { params });
-      setData(res.data);
+      setData({
+        data: res.data.data || [],
+        total: res.data.total || 0,
+        meta: {
+          page: res.data.page || 1,
+          limit: res.data.limit || 10,
+          total: res.data.total || 0,
+          pages: res.data.pages || 1
+        }
+      });
     } catch (error) {
-      showToast('Failed to load templates', 'error');
+      showToast(error.response?.data?.message || 'Failed to load templates', 'error');
     }
   };
 
@@ -69,18 +79,18 @@ export default function InvoiceTemplateSetup() {
         </Button>
       </Box>
 
-      <Paper sx={{ p: 2 }}>
+      <Paper variant="outlined" sx={{ p: 2 }}>
         <DataTable
           columns={[
-            { field: 'templateName', label: 'Template Name' },
-            { field: 'paperSize', label: 'Paper Size' },
-            { field: 'orientation', label: 'Orientation' },
-            { field: 'isDefault', label: 'Default', render: (val) => val ? <Chip label="Default" color="primary" size="small" /> : null },
-            { field: 'isActive', label: 'Status', render: (val) => val ? <Chip label="Active" color="success" size="small" /> : <Chip label="Inactive" color="default" size="small" /> },
+            { field: 'templateName', headerName: 'Template Name' },
+            { field: 'paperSize', headerName: 'Paper Size' },
+            { field: 'orientation', headerName: 'Orientation' },
+            { field: 'isDefault', headerName: 'Default', render: (row) => row.isDefault ? <Chip label="Default" color="primary" size="small" /> : null },
+            { field: 'isActive', headerName: 'Status', render: (row) => row.isActive ? <Chip label="Active" color="success" size="small" /> : <Chip label="Inactive" color="default" size="small" /> },
             {
               field: 'actions',
-              label: 'Actions',
-              render: (_, row) => (
+              headerName: 'Actions',
+              render: (row) => (
                 <Box>
                   <Tooltip title={row.isDefault ? "Current Default" : "Set as Default"}>
                     <IconButton size="small" color={row.isDefault ? "primary" : "default"} onClick={() => handleSetDefault(row.id)}>
@@ -106,12 +116,15 @@ export default function InvoiceTemplateSetup() {
               )
             }
           ]}
-          data={data.data}
-          total={data.total}
-          page={params.page}
-          onPageChange={(page) => setParams({ ...params, page })}
-          onSearch={(search) => setParams({ ...params, search, page: 1 })}
+          rows={data.data}
         />
+        <Stack sx={{ mt: 2 }}>
+          <Pagination
+            meta={data.meta}
+            onChangePage={(page) => setParams({ ...params, page })}
+            onChangeLimit={(limit) => setParams({ ...params, limit, page: 1 })}
+          />
+        </Stack>
       </Paper>
 
       {modalOpen && (

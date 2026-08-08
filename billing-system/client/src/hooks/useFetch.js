@@ -16,5 +16,5 @@ export function useFetch(fn, deps = []) {
     }
   }, deps);
   useEffect(() => { load(); }, [load]);
-  return { data, loading, error, reload: load };
+  return { data, loading, error, reload: load, mutate: load };
 }

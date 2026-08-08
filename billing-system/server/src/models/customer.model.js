@@ -7,10 +7,10 @@ export default (sequelize) => sequelize.define('Customer', {
   mobileNumber: { type: DataTypes.STRING(20), allowNull: false },
   email: { type: DataTypes.STRING(160), validate: { isEmail: true } },
   gstNumber: { type: DataTypes.STRING(20) },
-  address: { type: DataTypes.TEXT, allowNull: false },
-  city: { type: DataTypes.STRING(80), allowNull: false },
-  state: { type: DataTypes.STRING(80), allowNull: false },
-  pincode: { type: DataTypes.STRING(10), allowNull: false }
+  address: { type: DataTypes.TEXT, allowNull: true },
+  city: { type: DataTypes.STRING(80), allowNull: true },
+  state: { type: DataTypes.STRING(80), allowNull: true },
+  pincode: { type: DataTypes.STRING(10), allowNull: true }
 ,
   authadd: { type: DataTypes.INTEGER, allowNull: true },
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },

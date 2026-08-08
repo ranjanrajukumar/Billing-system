@@ -78,9 +78,66 @@ export async function seedDefaults() {
   await Category.bulkCreate([{ name: 'General' }, { name: 'Electronics' }, { name: 'Services' }], { ignoreDuplicates: true });
 }
 
+async function dropDuplicateIndexes() {
+  const dialect = sequelize.getDialect();
+  if (dialect !== 'mysql' && dialect !== 'mariadb') return;
+
+  const dbName = sequelize.config.database;
+
+  const [tables] = await sequelize.query(`
+    SELECT TABLE_NAME, COUNT(*) AS key_count
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = :dbName
+    GROUP BY TABLE_NAME
+    HAVING key_count > 5
+  `, { replacements: { dbName } });
+
+  for (const { TABLE_NAME: table } of tables) {
+    const [indexes] = await sequelize.query(`SHOW INDEX FROM \`${table}\``);
+    const columnToIndexes = {};
+
+    for (const idx of indexes) {
+      const col = idx.Column_name;
+      if (!columnToIndexes[col]) columnToIndexes[col] = [];
+      columnToIndexes[col].push(idx.Key_name);
+    }
+
+    for (const [, names] of Object.entries(columnToIndexes)) {
+      const unique = [...new Set(names)];
+      if (unique.length <= 1) continue;
+
+      const keep = unique.find((n) => n === 'PRIMARY') || unique[0];
+      for (const name of unique) {
+        if (name === keep) continue;
+
+        try {
+          const [fks] = await sequelize.query(`
+            SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE TABLE_SCHEMA = :dbName AND TABLE_NAME = :table
+              AND CONSTRAINT_NAME = :name AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+          `, { replacements: { dbName, table, name } });
+
+          if (fks.length) {
+            await sequelize.query(`ALTER TABLE \`${table}\` DROP FOREIGN KEY \`${name}\``);
+          }
+
+          await sequelize.query(`ALTER TABLE \`${table}\` DROP INDEX \`${name}\``);
+        } catch {
+          // index may already have been removed
+        }
+      }
+    }
+  }
+}
+
 export async function migrateDatabase() {
   await ensureDatabase();
   await sequelize.authenticate();
+
+  if (process.env.DB_SYNC_ALTER !== 'false') {
+    await dropDuplicateIndexes();
+  }
+
   await sequelize.sync({ alter: process.env.DB_SYNC_ALTER !== 'false' });
   await seedDefaults();
 }

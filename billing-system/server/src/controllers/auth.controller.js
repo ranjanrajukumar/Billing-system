@@ -9,7 +9,7 @@ const signToken = (user) => jwt.sign({ id: user.id }, process.env.JWT_SECRET, { 
 
 const buildAuthResponse = (user) => ({
   token: signToken(user),
-  user: { id: user.id, name: user.name, email: user.email, mobile: user.mobile, role: user.Role?.name }
+  user: { id: user.id, name: user.name, email: user.email, mobile: user.mobile, role: user.Role?.name, profileImagePath: user.profileImagePath }
 });
 
 export const register = asyncHandler(async (req, res) => {
@@ -61,4 +61,31 @@ export const resetPassword = asyncHandler(async (req, res) => {
   user.resetTokenExpiresAt = null;
   await user.save();
   res.json({ message: 'Password reset successful' });
+});
+
+export const updateProfile = asyncHandler(async (req, res) => {
+  const user = await User.findByPk(req.user.id, { include: Role });
+  if (!user) return res.status(404).json({ message: 'User not found' });
+
+  const { name, email, password, mobile } = req.body;
+  
+  if (email && email !== user.email) {
+    const existing = await User.findOne({ where: { email } });
+    if (existing) return res.status(409).json({ message: 'Email is already taken' });
+    user.email = email;
+  }
+  
+  if (name) user.name = name;
+  if (mobile !== undefined) user.mobile = mobile;
+  
+  if (password) {
+    user.passwordHash = await bcrypt.hash(password, Number(process.env.BCRYPT_ROUNDS || 12));
+  }
+  
+  if (req.file) {
+    user.profileImagePath = `/uploads/${req.file.filename}`;
+  }
+
+  await user.save();
+  res.json(buildAuthResponse(user));
 });

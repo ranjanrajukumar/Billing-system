@@ -1,22 +1,53 @@
-import { Box, Container } from '@mui/material';
+import { Box } from '@mui/material';
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import Footer from '../components/Footer.jsx';
 import Navbar from '../components/Navbar.jsx';
 import Sidebar from '../components/Sidebar.jsx';
+import MobileBottomNav from '../components/MobileBottomNav.jsx';
 
 export default function AppLayout({ mode, onToggleMode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+      {/* Sidebar — permanent variant adds its own flex-width; temporary is overlay */}
       <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
-      <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column', m: { xs: 0, md: 2 }, ml: { xs: 0, md: 0 }, borderRadius: { xs: 0, md: 3 }, overflow: 'hidden', bgcolor: 'background.paper', boxShadow: { xs: 0, md: 1 } }}>
-        <Navbar onMenu={() => setMobileOpen(true)} mode={mode} onToggleMode={onToggleMode} />
-        <Container maxWidth="xl" sx={{ py: 3 }}>
+
+      {/* Main content — flexGrow:1 fills the rest after the sidebar's flex-width */}
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        <Navbar
+          onMenu={() => setMobileOpen(true)}
+          mode={mode}
+          onToggleMode={onToggleMode}
+        />
+
+        {/* Page content */}
+        <Box
+          sx={{
+            flexGrow: 1,
+            px: { xs: 2, sm: 3 },
+            py: { xs: 2, sm: 3 },
+            // Extra bottom padding on mobile for bottom nav
+            pb: { xs: '88px', sm: 3 },
+            maxWidth: '100%',
+            boxSizing: 'border-box',
+          }}
+        >
           <Outlet />
-          <Footer />
-        </Container>
+        </Box>
       </Box>
+
+      {/* Mobile bottom navigation */}
+      <MobileBottomNav onOpenSidebar={() => setMobileOpen(true)} />
     </Box>
   );
 }

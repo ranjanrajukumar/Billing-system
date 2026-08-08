@@ -17,6 +17,7 @@ export async function authenticate(req, res, next) {
       email: user.email, 
       mobile: user.mobile, 
       role: user.Role?.name,
+      profileImagePath: user.profileImagePath,
       permissions: user.Role?.permissions || {}
     };
     return next();
@@ -27,7 +28,11 @@ export async function authenticate(req, res, next) {
 
 export function authorize(...roles) {
   return (req, res, next) => {
-    if (!roles.includes(req.user?.role)) return res.status(403).json({ message: 'Forbidden' });
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+    if (req.user.role === 'Admin') return next();
+    if (roles.length > 0 && !roles.includes(req.user.role)) {
+      return res.status(403).json({ message: 'Forbidden: Insufficient permissions' });
+    }
     return next();
   };
 }

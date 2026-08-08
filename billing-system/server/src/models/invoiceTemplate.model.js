@@ -5,8 +5,10 @@ export default (sequelize) => {
   const InvoiceTemplate = sequelize.define('InvoiceTemplate', {
     id: { type: unsignedInteger(sequelize), autoIncrement: true, primaryKey: true },
     templateName: { type: DataTypes.STRING, allowNull: false },
+    invoiceTitle: { type: DataTypes.STRING, defaultValue: 'TAX INVOICE' },
     isDefault: { type: DataTypes.BOOLEAN, defaultValue: false },
     isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+    designLayout: { type: DataTypes.JSON },
 
     // Section 1 - Company Info
     companyName: { type: DataTypes.STRING },

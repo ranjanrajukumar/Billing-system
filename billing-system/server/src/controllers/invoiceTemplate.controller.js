@@ -1,5 +1,5 @@
 import { Op } from 'sequelize';
-import { InvoiceTemplate } from '../models/index.js';
+import { Company, InvoiceTemplate } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { buildInvoicePdf } from '../services/pdf.service.js';
 
@@ -81,6 +81,8 @@ export const setDefault = asyncHandler(async (req, res) => {
 
   await InvoiceTemplate.update({ isDefault: false }, { where: { isDefault: true } });
   await template.update({ isDefault: true });
+  const company = await Company.findOne();
+  if (company) await company.update({ defaultInvoiceTemplate: `template:${template.id}` });
 
   res.json(template);
 });
@@ -131,7 +133,7 @@ export const generateSample = asyncHandler(async (req, res) => {
   };
 
   // We need to pass the templateConfig to buildInvoicePdf
-  const pdfBuffer = await buildInvoicePdf(dummyInvoice, dummyCompany, templateConfig, 'TAX INVOICE');
+  const pdfBuffer = await buildInvoicePdf(dummyInvoice, dummyCompany, templateConfig, templateConfig.invoiceTitle || 'TAX INVOICE');
   
   res.set({
     'Content-Type': 'application/pdf',

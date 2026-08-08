@@ -1,5 +1,5 @@
 import { Op } from 'sequelize';
-import { sequelize, Customer, Invoice, InvoiceItem, Product, Company, Payment, StockMovement } from '../models/index.js';
+import { sequelize, Customer, Invoice, InvoiceItem, Product, Company, Payment, StockMovement, InvoiceTemplate } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { calculateInvoice } from '../utils/invoiceMath.js';
 import { getPagination, paged } from '../utils/pagination.js';
@@ -135,8 +135,17 @@ export const downloadInvoicePdf = asyncHandler(async (req, res) => {
   const invoice = await Invoice.findOne({ where: { id: req.params.id, detstatus: false }, include: [{ model: Customer }, { model: InvoiceItem, include: Product }] });
   if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
   const company = await Company.findOne();
-  const template = req.query.template || company?.defaultInvoiceTemplate || 'standard';
-  const buffer = await buildInvoicePdf(invoice, company, template);
+  const selectedTemplate = req.query.template || company?.defaultInvoiceTemplate || 'standard';
+  let template = selectedTemplate;
+
+  if (String(selectedTemplate).startsWith('template:')) {
+    const templateId = String(selectedTemplate).replace('template:', '');
+    const savedTemplate = await InvoiceTemplate.findOne({ where: { id: templateId, detstatus: false, isActive: true } });
+    if (!savedTemplate) return res.status(404).json({ message: 'Invoice template not found' });
+    template = savedTemplate.toJSON();
+  }
+
+  const buffer = await buildInvoicePdf(invoice, company, template, template.invoiceTitle || 'TAX INVOICE');
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${invoice.invoiceNumber}.pdf"`);
   res.send(buffer);

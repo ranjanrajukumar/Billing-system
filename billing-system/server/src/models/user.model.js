@@ -9,7 +9,8 @@ export default (sequelize) => sequelize.define('User', {
   mobile: { type: DataTypes.STRING(20) },
   resetToken: { type: DataTypes.STRING(255) },
   resetTokenExpiresAt: { type: DataTypes.DATE },
-  isActive: { type: DataTypes.BOOLEAN, defaultValue: true }
+  isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+  profileImagePath: { type: DataTypes.STRING(255) }
 ,
   authadd: { type: DataTypes.INTEGER, allowNull: true },
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },

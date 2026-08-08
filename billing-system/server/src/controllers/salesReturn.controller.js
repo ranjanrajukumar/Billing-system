@@ -38,11 +38,23 @@ export const getOne = asyncHandler(async (req, res) => {
   res.json(item);
 });
 
+async function nextReturnNumber(transaction) {
+  const year = new Date().getFullYear();
+  const count = await SalesReturn.count({ where: { returnNumber: { [Op.like]: `SR-${year}-%` } }, transaction });
+  return `SR-${year}-${String(count + 1).padStart(5, '0')}`;
+}
+
 export const create = asyncHandler(async (req, res) => {
   const { items, ...data } = req.body;
   data.authadd = req.user.id;
 
   const result = await sequelize.transaction(async (t) => {
+    if (!data.returnNumber) {
+      data.returnNumber = await nextReturnNumber(t);
+    }
+    if (!data.returnDate) {
+      data.returnDate = new Date().toISOString().slice(0, 10);
+    }
     const parent = await SalesReturn.create(data, { transaction: t });
     if (items && items.length > 0) {
       const parentIdField = 'returnId';

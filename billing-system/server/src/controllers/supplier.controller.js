@@ -25,15 +25,24 @@ export const getSupplier = asyncHandler(async (req, res) => {
   res.json(supplier);
 });
 
+function sanitizeSupplier(data) {
+  const payload = { ...data };
+  if (!payload.email || !payload.email.trim()) payload.email = null;
+  if (!payload.gstNumber || !payload.gstNumber.trim()) payload.gstNumber = null;
+  return payload;
+}
+
 export const createSupplier = asyncHandler(async (req, res) => {
-  const supplier = await Supplier.create({ ...req.body, authadd: req.user?.id });
+  const payload = sanitizeSupplier(req.body);
+  const supplier = await Supplier.create({ ...payload, authadd: req.user?.id });
   res.status(201).json(supplier);
 });
 
 export const updateSupplier = asyncHandler(async (req, res) => {
   const supplier = await Supplier.findOne({ where: { id: req.params.id, detstatus: false } });
   if (!supplier) return res.status(404).json({ message: 'Supplier not found' });
-  await supplier.update({ ...req.body, authlstedit: req.user?.id });
+  const payload = sanitizeSupplier(req.body);
+  await supplier.update({ ...payload, authlstedit: req.user?.id });
   res.json(supplier);
 });
 

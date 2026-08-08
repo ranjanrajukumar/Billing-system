@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.use(protect);
 
+router.get('/summary', controller.getSummary);
 router.get('/movements', controller.getMovements);
 router.post('/adjust', controller.adjustStock);
 

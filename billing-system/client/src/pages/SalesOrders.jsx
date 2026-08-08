@@ -1,31 +1,39 @@
 import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
 import PrintIcon from '@mui/icons-material/Print';
 import ShareIcon from '@mui/icons-material/Share';
-import DeleteIcon from '@mui/icons-material/Delete';
-import { Button, Grid, IconButton, MenuItem, Paper, Stack, TextField, Typography } from '@mui/material';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import {
+  alpha, Box, Button, Chip, Divider, Grid, IconButton,
+  MenuItem, Paper, Stack, TextField, Tooltip, Typography, useTheme,
+} from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import api from '../services/api.js';
 import DataTable from '../components/DataTable.jsx';
 import Loader from '../components/Loader.jsx';
 import Modal from '../components/Modal.jsx';
+import PageHeader from '../components/PageHeader.jsx';
 import Pagination from '../components/Pagination.jsx';
+import StatsCard from '../components/StatsCard.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { customersApi, salesOrdersApi, productsApi } from '../services/resource.service.js';
 import { currency, date } from '../utils/formatters.js';
 
 const blankItem = { productId: '', quantity: 1, rate: 0, discount: 0, gstPercent: 18 };
 
-function calculate(items) {
-  const subtotal = items.reduce((sum, item) => sum + Math.max(Number(item.quantity || 0) * Number(item.rate || 0) - Number(item.discount || 0), 0), 0);
-  const tax = items.reduce((sum, item) => {
-    const taxable = Math.max(Number(item.quantity || 0) * Number(item.rate || 0) - Number(item.discount || 0), 0);
-    return sum + taxable * Number(item.gstPercent || 0) / 100;
+function calc(items) {
+  const sub = items.reduce((s, it) => s + Math.max(Number(it.quantity || 0) * Number(it.rate || 0) - Number(it.discount || 0), 0), 0);
+  const tax = items.reduce((s, it) => {
+    const t = Math.max(Number(it.quantity || 0) * Number(it.rate || 0) - Number(it.discount || 0), 0);
+    return s + t * Number(it.gstPercent || 0) / 100;
   }, 0);
-  const grand = Math.round(subtotal + tax);
-  return { subtotal, cgst: tax / 2, sgst: tax / 2, igst: 0, grand, roundOff: grand - subtotal - tax };
+  const grand = Math.round(sub + tax);
+  return { subtotal: sub, cgst: tax / 2, sgst: tax / 2, igst: 0, grand, roundOff: grand - sub - tax };
 }
+
+const STATUS_COLORS = { Pending: 'warning', Approved: 'info', Shipped: 'primary', Delivered: 'success', Cancelled: 'error' };
 
 export default function SalesOrders() {
   const [rows, setRows] = useState([]);
@@ -37,90 +45,198 @@ export default function SalesOrders() {
   const [products, setProducts] = useState([]);
   const [items, setItems] = useState([blankItem]);
   const { showToast } = useToast();
-  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm({ defaultValues: { orderDate: new Date().toISOString().slice(0, 10), customerId: '', status: 'Cash', notes: '' } });
-  const totals = useMemo(() => calculate(items), [items]);
+  const theme = useTheme();
+  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm({
+    defaultValues: { orderDate: new Date().toISOString().slice(0, 10), customerId: '', status: 'Pending', notes: '' },
+  });
+  const totals = useMemo(() => calc(items), [items]);
 
   const load = async () => {
     setLoading(true);
-    const [result, customerResult, productResult] = await Promise.all([
-      salesOrdersApi.list(query),
-      customersApi.list({ limit: 100 }),
-      productsApi.list({ limit: 100 })
-    ]);
-    setRows(result.data);
-    setMeta(result.meta);
-    setCustomers(customerResult.data);
-    setProducts(productResult.data);
+    try {
+      const [result, cr, pr] = await Promise.all([
+        salesOrdersApi.list(query),
+        customersApi.list({ limit: 200 }),
+        productsApi.list({ limit: 200 }),
+      ]);
+      setRows(result?.data || []); setMeta(result?.meta || {});
+      setCustomers(cr?.data || []); setProducts(pr?.data || []);
+    } catch {
+      setRows([]); setMeta({});
+      setCustomers([]); setProducts([]);
+    }
     setLoading(false);
   };
   useEffect(() => { load(); }, [query]);
 
-  const setItem = (index, patch) => setItems((prev) => prev.map((item, i) => i === index ? { ...item, ...patch } : item));
-  const chooseProduct = (index, productId) => {
-    const product = products.find((p) => p.id === Number(productId));
-    setItem(index, { productId, rate: product?.sellingPrice || 0, gstPercent: product?.gstPercent || 0 });
-  };
-  const submit = async (values) => {
-    await salesOrdersApi.create({ ...values, items });
-    showToast('Sales Order saved');
-    setOpen(false);
-    setItems([blankItem]);
-    reset();
-    load();
-  };
-  const download = async (id) => {
-    const blob = await api.get(`/invoices/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data);
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
+  const setItem = (i, patch) => setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, ...patch } : it));
+  const chooseProduct = (i, productId) => {
+    const p = products.find((p) => p.id === Number(productId));
+    setItem(i, { productId, rate: p?.sellingPrice || 0, gstPercent: p?.gstPercent || 0 });
   };
 
+  const submit = async (values) => {
+    const selected = items.filter((it) => it.productId && Number(it.quantity) > 0);
+    if (!selected.length) { showToast('Add at least one product', 'error'); return; }
+    try {
+      await salesOrdersApi.create({ ...values, items: selected, totalAmount: totals.grand });
+      showToast('Sales Order saved');
+      setOpen(false); setItems([blankItem]); reset(); load();
+    } catch (err) { showToast(err.response?.data?.message || 'Error saving order', 'error'); }
+  };
+
+  const download = async (id) => {
+    const blob = await api.get(`/sales-orders/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data);
+    window.open(URL.createObjectURL(blob), '_blank');
+  };
+
+  const stats = useMemo(() => ({
+    total: rows.length,
+    pending: rows.filter((r) => r.status === 'Pending').length,
+    delivered: rows.filter((r) => r.status === 'Delivered').length,
+    value: rows.reduce((s, r) => s + Number(r.totalAmount || 0), 0),
+  }), [rows]);
+
   return (
-    <Stack spacing={2}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={2}>
-        <Typography variant="h4">SalesOrders</Typography>
-        <Button startIcon={<AddIcon />} variant="contained" onClick={() => setOpen(true)}>New Sales Order</Button>
-      </Stack>
-      {loading ? <Loader /> : <><DataTable columns={[
-        { field: 'orderNumber', headerName: 'Sales Order' },
-        { field: 'orderDate', headerName: 'Date', render: (row) => date(row.orderDate) },
-        { field: 'customer', headerName: 'Customer', render: (row) => row.Customer?.customerName },
-        { field: 'status', headerName: 'Status' },
-        { field: 'totalAmount', headerName: 'Total', render: (row) => currency(row.totalAmount) },
-        { field: 'actions', headerName: 'Actions', render: (row) => <><IconButton onClick={() => download(row.id)}><DownloadIcon /></IconButton><IconButton onClick={() => window.print()}><PrintIcon /></IconButton><IconButton><ShareIcon /></IconButton></> }
-      ]} rows={rows} /><Pagination meta={meta} onChangePage={(page) => setQuery({ ...query, page })} onChangeLimit={(limit) => setQuery({ ...query, limit })} /></>}
-      <Modal open={open} title="Create Sales Order" onClose={() => setOpen(false)} maxWidth="lg">
-        <Stack spacing={2} component="form" onSubmit={handleSubmit(submit)} sx={{ pt: 1 }}>
+    <Stack spacing={3} className="animate-fadeInUp">
+      <PageHeader
+        title="Sales Orders"
+        subtitle="Create and track sales orders before invoicing"
+        icon={<ShoppingCartIcon />}
+        action={
+          <Button startIcon={<AddIcon />} variant="contained" onClick={() => setOpen(true)}>
+            New Order
+          </Button>
+        }
+      />
+
+      {/* Stats */}
+      <Grid container spacing={2}>
+        <Grid item xs={6} md={3}>
+          <StatsCard title="Total Orders" value={meta.total || stats.total} detail="All orders" icon={<ShoppingCartIcon />} gradient="primary" />
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <StatsCard title="Pending" value={stats.pending} detail="Awaiting action" icon={<ShoppingCartIcon />} gradient="warning" />
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <StatsCard title="Delivered" value={stats.delivered} detail="Completed" icon={<ShoppingCartIcon />} gradient="success" />
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <StatsCard title="Order Value" value={currency(stats.value)} detail="This page" icon={<ShoppingCartIcon />} gradient="info" />
+        </Grid>
+      </Grid>
+
+      {/* Table */}
+      {loading ? <Loader /> : (
+        <>
+          <DataTable
+            mobileKeyField="orderNumber"
+            columns={[
+              { field: 'orderNumber', headerName: 'Order #', render: (r) => <Typography fontWeight={700} color="primary.main">{r.orderNumber}</Typography> },
+              { field: 'orderDate', headerName: 'Date', render: (r) => date(r.orderDate) },
+              { field: 'customer', headerName: 'Customer', render: (r) => r.Customer?.customerName },
+              { field: 'status', headerName: 'Status', render: (r) => <Chip label={r.status} size="small" color={STATUS_COLORS[r.status] || 'default'} sx={{ fontWeight: 700, fontSize: '0.7rem' }} /> },
+              { field: 'totalAmount', headerName: 'Total', render: (r) => <Typography fontWeight={800} color="success.main">{currency(r.totalAmount)}</Typography> },
+              { field: 'actions', headerName: 'Actions', render: (r) => (
+                <Stack direction="row" spacing={0.25}>
+                  <Tooltip title="Download PDF"><IconButton size="small" onClick={() => download(r.id)} sx={{ borderRadius: 1.5 }}><DownloadIcon fontSize="small" /></IconButton></Tooltip>
+                  <Tooltip title="Print"><IconButton size="small" onClick={() => window.print()} sx={{ borderRadius: 1.5 }}><PrintIcon fontSize="small" /></IconButton></Tooltip>
+                  <Tooltip title="Share"><IconButton size="small" sx={{ borderRadius: 1.5 }}><ShareIcon fontSize="small" /></IconButton></Tooltip>
+                </Stack>
+              )},
+            ]}
+            rows={rows}
+          />
+          <Pagination meta={meta} onChangePage={(p) => setQuery({ ...query, page: p })} onChangeLimit={(l) => setQuery({ ...query, limit: l })} />
+        </>
+      )}
+
+      {/* Create Modal */}
+      <Modal open={open} title="New Sales Order" onClose={() => setOpen(false)} maxWidth="lg">
+        <Stack spacing={3} component="form" onSubmit={handleSubmit(submit)}>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={4}><TextField fullWidth type="date" label="Sales Order Date" InputLabelProps={{ shrink: true }} {...register('orderDate', { required: true })} /></Grid>
-            <Grid item xs={12} sm={4}><TextField fullWidth select label="Customer" {...register('customerId', { required: true })}>{customers.map((c) => <MenuItem value={c.id} key={c.id}>{c.customerName}</MenuItem>)}</TextField></Grid>
-            <Grid item xs={12} sm={4}><TextField fullWidth select label="Status" {...register('status')}>{['Pending', 'Approved', 'Shipped', 'Delivered', 'Cancelled'].map((m) => <MenuItem value={m} key={m}>{m}</MenuItem>)}</TextField></Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField fullWidth type="date" label="Order Date" InputLabelProps={{ shrink: true }} {...register('orderDate', { required: true })} />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField fullWidth select label="Customer" {...register('customerId', { required: true })}>
+                {customers.map((c) => <MenuItem key={c.id} value={c.id}>{c.customerName}</MenuItem>)}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField fullWidth select label="Status" {...register('status')}>
+                {Object.keys(STATUS_COLORS).map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+              </TextField>
+            </Grid>
           </Grid>
-          <Paper variant="outlined" sx={{ p: 2 }}>
-            <Stack spacing={1}>
-              {items.map((item, index) => (
-                <Grid container spacing={1} key={index} alignItems="center">
-                  <Grid item xs={12} md={4}><TextField fullWidth select size="small" label="Product" value={item.productId} onChange={(e) => chooseProduct(index, e.target.value)}>{products.map((p) => <MenuItem value={p.id} key={p.id}>{p.productName} ({p.stock})</MenuItem>)}</TextField></Grid>
-                  {['quantity', 'rate', 'discount', 'gstPercent'].map((name) => <Grid item xs={6} md={1.6} key={name}><TextField fullWidth size="small" type="number" label={name} value={item[name]} onChange={(e) => setItem(index, { [name]: e.target.value })} /></Grid>)}
-                  <Grid item xs={6} md={1}><IconButton color="error" onClick={() => setItems(items.filter((_, i) => i !== index))}><DeleteIcon /></IconButton></Grid>
-                </Grid>
+
+          {/* Line items */}
+          <Paper variant="outlined" sx={{ borderRadius: 2.5, overflow: 'hidden' }}>
+            <Box sx={{ px: 2, py: 1.5, bgcolor: alpha(theme.palette.primary.main, 0.04), borderBottom: 1, borderColor: 'divider' }}>
+              <Typography variant="subtitle2" fontWeight={700}>Line Items</Typography>
+            </Box>
+            <Stack spacing={1.5} sx={{ p: 2 }}>
+              {items.map((item, i) => (
+                <Box key={i}>
+                  <Grid container spacing={1} alignItems="center">
+                    <Grid item xs={12} md={4}>
+                      <TextField fullWidth select size="small" label="Product" value={item.productId} onChange={(e) => chooseProduct(i, e.target.value)}>
+                        {products.map((p) => (
+                          <MenuItem key={p.id} value={p.id} disabled={Number(p.stock || 0) <= 0}>
+                            <Box><Typography variant="body2" fontWeight={600}>{p.productName}</Typography><Typography variant="caption" color="text.secondary">Stock: {p.stock}</Typography></Box>
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    </Grid>
+                    {[['quantity', 'Qty'], ['rate', 'Rate'], ['discount', 'Disc.'], ['gstPercent', 'GST%']].map(([name, label]) => (
+                      <Grid item xs={6} sm={3} md={1.5} key={name}>
+                        <TextField fullWidth size="small" type="number" label={label} value={item[name]} onChange={(e) => setItem(i, { [name]: e.target.value })} />
+                      </Grid>
+                    ))}
+                    <Grid item xs={6} sm={3} md={0.5}>
+                      <IconButton size="small" color="error" onClick={() => setItems(items.filter((_, idx) => idx !== i))} disabled={items.length === 1}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Grid>
+                  </Grid>
+                  {i < items.length - 1 && <Divider sx={{ mt: 1.5 }} />}
+                </Box>
               ))}
-              <Button startIcon={<AddIcon />} onClick={() => setItems([...items, blankItem])}>Add Product</Button>
+              <Button startIcon={<AddIcon />} onClick={() => setItems([...items, blankItem])} sx={{ alignSelf: 'flex-start' }}>Add Product</Button>
             </Stack>
           </Paper>
+
+          {/* Totals */}
           <Grid container spacing={2}>
-            <Grid item xs={12} md={6}><TextField fullWidth multiline minRows={3} label="Notes" {...register('notes')} /></Grid>
             <Grid item xs={12} md={6}>
-              <Paper variant="outlined" sx={{ p: 2 }}>
-                <Typography>Subtotal: {currency(totals.subtotal)}</Typography>
-                <Typography>CGST: {currency(totals.cgst)}</Typography>
-                <Typography>SGST: {currency(totals.sgst)}</Typography>
-                <Typography>IGST: {currency(totals.igst)}</Typography>
-                <Typography>Round Off: {currency(totals.roundOff)}</Typography>
-                <Typography variant="h6">Grand Total: {currency(totals.grand)}</Typography>
+              <TextField fullWidth multiline minRows={3} label="Notes" {...register('notes')} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Paper variant="outlined" sx={{ p: 2, borderRadius: 2.5 }}>
+                <Stack spacing={0.75}>
+                  {[['Subtotal', totals.subtotal], ['CGST', totals.cgst], ['SGST', totals.sgst], ['IGST', totals.igst], ['Round Off', totals.roundOff]].map(([l, v]) => (
+                    <Stack key={l} direction="row" justifyContent="space-between">
+                      <Typography variant="body2" color="text.secondary">{l}</Typography>
+                      <Typography variant="body2" fontWeight={500}>{currency(v)}</Typography>
+                    </Stack>
+                  ))}
+                  <Divider sx={{ my: 0.5 }} />
+                  <Stack direction="row" justifyContent="space-between">
+                    <Typography fontWeight={800}>Grand Total</Typography>
+                    <Typography fontWeight={800} color="primary.main">{currency(totals.grand)}</Typography>
+                  </Stack>
+                </Stack>
               </Paper>
             </Grid>
           </Grid>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}><Button type="submit" variant="contained" disabled={isSubmitting}>Save Sales Order</Button><Button onClick={() => window.print()} startIcon={<PrintIcon />}>Print Sales Order</Button></Stack>
+
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="flex-end">
+            <Button onClick={() => setOpen(false)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+            <Button onClick={() => window.print()} startIcon={<PrintIcon />} variant="outlined" sx={{ borderRadius: 2 }}>Print</Button>
+            <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ borderRadius: 2 }}>
+              {isSubmitting ? 'Saving…' : 'Save Order'}
+            </Button>
+          </Stack>
         </Stack>
       </Modal>
     </Stack>

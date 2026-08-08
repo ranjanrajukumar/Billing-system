@@ -1,5 +1,7 @@
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
+import fs from 'fs';
+import path from 'path';
 
 const money = (n) => Number(n || 0).toFixed(2);
 
@@ -151,9 +153,17 @@ export async function buildInvoicePdf(invoice, company, template = 'standard', t
       doc.rect(0, 0, 595, 140).fill(primaryColor);
       
       // Header Text
-      doc.fillColor('#ffffff').fontSize(26).text(company?.name || 'Billing System', 40, 40);
-      doc.fontSize(9).text(company?.address || '', 40, 75);
-      doc.text(`GSTIN: ${company?.gstNumber || '-'}`, 40, 105);
+      let headerX = 40;
+      if (company?.logoPath) {
+        const logoFile = path.join(process.cwd(), company.logoPath);
+        if (fs.existsSync(logoFile)) {
+          doc.image(logoFile, 40, 35, { width: 50 });
+          headerX = 100;
+        }
+      }
+      doc.fillColor('#ffffff').fontSize(26).text(company?.name || 'Billing System', headerX, 40);
+      doc.fontSize(9).text(company?.address || '', headerX, 75);
+      doc.text(`GSTIN: ${company?.gstNumber || '-'}`, headerX, 105);
 
       doc.fontSize(32).text(title, 350, 40, { width: 200, align: 'right' });
       doc.fontSize(10).text(`Ref No. ${invoice.invoiceNumber}`, 350, 80, { width: 200, align: 'right' });
@@ -221,8 +231,16 @@ export async function buildInvoicePdf(invoice, company, template = 'standard', t
       }
     } else if (template === 'modern') {
       doc.rect(0, 0, 595, 120).fill('#2196f3');
-      doc.fillColor('#ffffff').fontSize(24).text(company?.name || 'Billing System', 40, 40);
-      doc.fontSize(10).text(company?.address || '', 40, 70);
+      let headerX = 40;
+      if (company?.logoPath) {
+        const logoFile = path.join(process.cwd(), company.logoPath);
+        if (fs.existsSync(logoFile)) {
+          doc.image(logoFile, 40, 35, { width: 50 });
+          headerX = 100;
+        }
+      }
+      doc.fillColor('#ffffff').fontSize(24).text(company?.name || 'Billing System', headerX, 40);
+      doc.fontSize(10).text(company?.address || '', headerX, 70);
       doc.fontSize(28).text(title, 350, 40, { width: 200, align: 'right' });
       
       doc.fillColor('#333333');
@@ -269,6 +287,13 @@ export async function buildInvoicePdf(invoice, company, template = 'standard', t
         doc.text('Authorized Signatory', 400, y + 100, { align: 'right' });
       }
     } else if (template === 'compact') {
+      if (company?.logoPath) {
+        const logoFile = path.join(process.cwd(), company.logoPath);
+        if (fs.existsSync(logoFile)) {
+          doc.image(logoFile, 20, 20, { width: 30 });
+          doc.moveDown(1.5);
+        }
+      }
       doc.fontSize(14).text(company?.name || 'Billing System');
       doc.fontSize(8).text(company?.address || '');
       doc.moveDown().fontSize(12).text(title, { underline: true });
@@ -301,6 +326,13 @@ export async function buildInvoicePdf(invoice, company, template = 'standard', t
       doc.text(invoice.amountInWords);
       doc.image(qr, 20, doc.y + 10, { width: 50 });
     } else {
+      if (company?.logoPath) {
+        const logoFile = path.join(process.cwd(), company.logoPath);
+        if (fs.existsSync(logoFile)) {
+          doc.image(logoFile, 267, 30, { width: 60, align: 'center' });
+          doc.moveDown(3);
+        }
+      }
       doc.fontSize(20).text(company?.name || 'Billing System', { align: 'center' });
       doc.fontSize(10).text(company?.address || '', { align: 'center' });
       doc.moveDown().fontSize(16).text(title, { align: 'center' });

@@ -1,7 +1,22 @@
 import { Op } from 'sequelize';
 import { sequelize, Product, StockMovement, User } from '../models/index.js';
+import { buildInventorySummary } from '../services/product.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { getPagination, paged } from '../utils/pagination.js';
+
+export const getSummary = asyncHandler(async (_req, res) => {
+  const products = await Product.findAll({
+    where: { detstatus: false, isActive: true },
+    order: [['stock', 'ASC']]
+  });
+
+  const summary = buildInventorySummary(products);
+  const criticalProducts = products
+    .filter((product) => Number(product.stock || 0) <= Number(product.lowStockThreshold || 0))
+    .slice(0, 8);
+
+  res.json({ ...summary, criticalProducts });
+});
 
 export const getMovements = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);

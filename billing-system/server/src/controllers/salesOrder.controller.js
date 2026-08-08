@@ -2,10 +2,11 @@ import { Op } from 'sequelize';
 import { SalesOrder, SalesOrderItem, Customer, Product, User } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { sequelize } from '../models/index.js';
+import { getPagination, paged } from '../utils/pagination.js';
 
 export const getAll = asyncHandler(async (req, res) => {
-  const { search, page = 1, limit = 10 } = req.query;
-  const offset = (page - 1) * limit;
+  const { search } = req.query;
+  const { page, limit, offset } = getPagination(req.query);
   let where = { detstatus: false };
   if (search) {
     where['orderNumber'] = { [Op.like]: `%${search}%` };
@@ -17,12 +18,12 @@ export const getAll = asyncHandler(async (req, res) => {
       { model: Customer, attributes: ['customerName', 'mobileNumber'] },
       { model: User, as: 'creator', attributes: ['name'] }
     ],
-    limit: parseInt(limit),
-    offset: parseInt(offset),
+    limit,
+    offset,
     order: [['addondt', 'DESC']]
   });
 
-  res.json({ data: rows, total: count, page: parseInt(page), pages: Math.ceil(count / limit) });
+  res.json(paged(rows, count, page, limit));
 });
 
 export const getOne = asyncHandler(async (req, res) => {
@@ -37,11 +38,33 @@ export const getOne = asyncHandler(async (req, res) => {
   res.json(item);
 });
 
+async function nextOrderNumber(transaction) {
+  const year = new Date().getFullYear();
+  const count = await SalesOrder.count({ where: { orderNumber: { [Op.like]: `SO-${year}-%` } }, transaction });
+  return `SO-${year}-${String(count + 1).padStart(5, '0')}`;
+}
+
 export const create = asyncHandler(async (req, res) => {
   const { items, ...data } = req.body;
   data.authadd = req.user.id;
 
   const result = await sequelize.transaction(async (t) => {
+    if (!data.orderNumber) {
+      data.orderNumber = await nextOrderNumber(t);
+    }
+    if (!data.orderDate) {
+      data.orderDate = new Date().toISOString().slice(0, 10);
+    }
+    if (!data.totalAmount && items && items.length > 0) {
+      data.totalAmount = items.reduce((sum, it) => {
+        const qty = Number(it.quantity || 0);
+        const rate = Number(it.rate || 0);
+        const disc = Number(it.discount || 0);
+        const gst = Number(it.gstPercent || 0);
+        const taxable = Math.max(qty * rate - disc, 0);
+        return sum + Math.round(taxable + (taxable * gst / 100));
+      }, 0);
+    }
     const parent = await SalesOrder.create(data, { transaction: t });
     if (items && items.length > 0) {
       const parentIdField = 'orderId';
