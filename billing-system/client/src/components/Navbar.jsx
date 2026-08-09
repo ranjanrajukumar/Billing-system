@@ -1,3 +1,5 @@
+import CalculateIcon from '@mui/icons-material/Calculate';
+import NotificationsIcon from '@mui/icons-material/Notifications';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -20,9 +22,13 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import { mediaUrl } from '../utils/formatters.js';
+import CalculatorDialog from './CalculatorDialog.jsx';
+import DailyBriefing, { shouldShowBriefing } from './DailyBriefing.jsx';
+import BranchSwitcher from './BranchSwitcher.jsx';
 
 export default function Navbar({ onMenu, mode, onToggleMode }) {
   const { user, logout } = useAuth();
@@ -30,11 +36,13 @@ export default function Navbar({ onMenu, mode, onToggleMode }) {
   const isDark = theme.palette.mode === 'dark';
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
+  const [briefingOpen, setBriefingOpen] = useState(false);
 
-  const getImageUrl = (path) =>
-    path
-      ? (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '') + path
-      : '';
+  // Opens by itself the first time this user loads the app on a given day.
+  useEffect(() => {
+    if (user?.id && shouldShowBriefing(user.id)) setBriefingOpen(true);
+  }, [user?.id]);
 
   const initials = user?.name
     ? user.name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -93,6 +101,48 @@ export default function Navbar({ onMenu, mode, onToggleMode }) {
 
         {/* Right section */}
         <Stack direction="row" alignItems="center" spacing={0.5}>
+          <Box sx={{ display: { xs: 'none', sm: 'block' }, mr: 0.5 }}>
+            <BranchSwitcher />
+          </Box>
+
+          {/* Daily summary */}
+          <Tooltip title="Daily summary">
+            <IconButton
+              onClick={() => setBriefingOpen(true)}
+              size="small"
+              sx={{
+                color: 'text.secondary',
+                bgcolor: alpha(theme.palette.primary.main, 0.06),
+                borderRadius: 2,
+                width: 34,
+                height: 34,
+                transition: 'all 0.2s',
+                '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.12) },
+              }}
+            >
+              <NotificationsIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+
+          {/* Calculator */}
+          <Tooltip title="Calculator">
+            <IconButton
+              onClick={() => setCalculatorOpen(true)}
+              size="small"
+              sx={{
+                color: 'text.secondary',
+                bgcolor: alpha(theme.palette.primary.main, 0.06),
+                borderRadius: 2,
+                width: 34,
+                height: 34,
+                transition: 'all 0.2s',
+                '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.12) },
+              }}
+            >
+              <CalculateIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+
           {/* Theme toggle */}
           <Tooltip title={mode === 'dark' ? 'Light mode' : 'Dark mode'}>
             <IconButton
@@ -138,7 +188,7 @@ export default function Navbar({ onMenu, mode, onToggleMode }) {
               }}
             >
               <Avatar
-                src={getImageUrl(user?.profileImagePath)}
+                src={mediaUrl(user?.profileImageUrl)}
                 alt={user?.name}
                 sx={{
                   width: 32,
@@ -229,6 +279,9 @@ export default function Navbar({ onMenu, mode, onToggleMode }) {
           Logout
         </MenuItem>
       </Menu>
+
+      <CalculatorDialog open={calculatorOpen} onClose={() => setCalculatorOpen(false)} />
+      <DailyBriefing open={briefingOpen} onClose={() => setBriefingOpen(false)} />
     </AppBar>
   );
 }

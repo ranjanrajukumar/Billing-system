@@ -31,6 +31,15 @@ import DeliveryChallanItemModel from './deliveryChallanItem.model.js';
 import SalesReturnModel from './salesReturn.model.js';
 import SalesReturnItemModel from './salesReturnItem.model.js';
 import InvoiceTemplateModel from './invoiceTemplate.model.js';
+import AuditLogModel from './auditLog.model.js';
+import KhataEntryModel from './khataEntry.model.js';
+import BranchModel from './branch.model.js';
+import BranchStockModel from './branchStock.model.js';
+import CouponModel from './coupon.model.js';
+import CouponUsageModel from './couponUsage.model.js';
+import LoyaltyTransactionModel from './loyaltyTransaction.model.js';
+import ProductBatchModel from './productBatch.model.js';
+import { installAuditHooks } from '../services/audit.service.js';
 export const Role = RoleModel(sequelize);
 export const User = UserModel(sequelize);
 export const Customer = CustomerModel(sequelize);
@@ -63,6 +72,14 @@ export const DeliveryChallanItem = DeliveryChallanItemModel(sequelize);
 export const SalesReturn = SalesReturnModel(sequelize);
 export const SalesReturnItem = SalesReturnItemModel(sequelize);
 export const InvoiceTemplate = InvoiceTemplateModel(sequelize);
+export const AuditLog = AuditLogModel(sequelize);
+export const KhataEntry = KhataEntryModel(sequelize);
+export const Branch = BranchModel(sequelize);
+export const BranchStock = BranchStockModel(sequelize);
+export const Coupon = CouponModel(sequelize);
+export const CouponUsage = CouponUsageModel(sequelize);
+export const LoyaltyTransaction = LoyaltyTransactionModel(sequelize);
+export const ProductBatch = ProductBatchModel(sequelize);
 Role.hasMany(User, { foreignKey: 'roleId' });
 User.belongsTo(Role, { foreignKey: 'roleId' });
 
@@ -133,5 +150,39 @@ SalesReturn.hasMany(SalesReturnItem, { foreignKey: 'returnId', onDelete: 'CASCAD
 SalesReturnItem.belongsTo(SalesReturn, { foreignKey: 'returnId' });
 Product.hasMany(SalesReturnItem, { foreignKey: 'productId' });
 SalesReturnItem.belongsTo(Product, { foreignKey: 'productId' });
+
+// Branch scoping: transactions happen at a location, masters are shared.
+Branch.hasMany(User, { foreignKey: 'branchId' });
+User.belongsTo(Branch, { foreignKey: 'branchId' });
+
+Branch.hasMany(BranchStock, { foreignKey: 'branchId' });
+BranchStock.belongsTo(Branch, { foreignKey: 'branchId' });
+Product.hasMany(BranchStock, { foreignKey: 'productId' });
+BranchStock.belongsTo(Product, { foreignKey: 'productId' });
+
+for (const model of [Invoice, Purchase, SalesOrder, Quotation, DeliveryChallan, SalesReturn, StockMovement]) {
+  Branch.hasMany(model, { foreignKey: 'branchId' });
+  model.belongsTo(Branch, { foreignKey: 'branchId' });
+}
+
+Coupon.hasMany(CouponUsage, { foreignKey: 'couponId' });
+CouponUsage.belongsTo(Coupon, { foreignKey: 'couponId' });
+Customer.hasMany(CouponUsage, { foreignKey: 'customerId' });
+CouponUsage.belongsTo(Customer, { foreignKey: 'customerId' });
+
+Customer.hasMany(LoyaltyTransaction, { foreignKey: 'customerId' });
+LoyaltyTransaction.belongsTo(Customer, { foreignKey: 'customerId' });
+
+// Seed lots: held per product per branch, and referenced by the lines that sell
+// them so a bill can be traced back to the lot it came out of.
+Product.hasMany(ProductBatch, { foreignKey: 'productId' });
+ProductBatch.belongsTo(Product, { foreignKey: 'productId' });
+Branch.hasMany(ProductBatch, { foreignKey: 'branchId' });
+ProductBatch.belongsTo(Branch, { foreignKey: 'branchId' });
+ProductBatch.hasMany(InvoiceItem, { foreignKey: 'batchId' });
+InvoiceItem.belongsTo(ProductBatch, { foreignKey: 'batchId' });
+
+// Registered once all models exist so every write is captured.
+installAuditHooks(sequelize, AuditLog);
 
 export { sequelize };

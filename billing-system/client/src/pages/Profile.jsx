@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import api from '../services/api.js';
+import { mediaUrl } from '../utils/formatters.js';
 
 function SectionCard({ title, icon, children }) {
   const theme = useTheme();
@@ -39,9 +40,6 @@ export default function Profile() {
   useEffect(() => {
     if (user) reset({ name: user.name || '', email: user.email || '', mobile: user.mobile || '', password: '' });
   }, [user, reset]);
-
-  const getImageUrl = (path) =>
-    path ? (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '') + path : '';
 
   const initials = user?.name ? user.name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) : '?';
 
@@ -74,7 +72,7 @@ export default function Profile() {
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} alignItems={{ xs: 'center', sm: 'flex-start' }}>
             <Box sx={{ position: 'relative', flexShrink: 0 }}>
               <Avatar
-                src={getImageUrl(user?.profileImagePath)}
+                src={mediaUrl(user?.profileImageUrl)}
                 sx={{
                   width: 96, height: 96,
                   fontSize: '2rem', fontWeight: 700,

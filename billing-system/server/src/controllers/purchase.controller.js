@@ -1,7 +1,9 @@
 import { Op } from 'sequelize';
 import { sequelize, Product, Purchase, PurchaseItem, StockMovement, Supplier } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { scopedWhere } from '../middleware/branchContext.js';
 import { getPagination, paged } from '../utils/pagination.js';
+import { adjustStock, assertAvailable } from '../services/stock.service.js';
 
 async function nextPurchaseNumber(transaction) {
   const year = new Date().getFullYear();
@@ -25,7 +27,8 @@ function calculateItems(items) {
 
 export const listPurchases = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  const where = {};
+  // In multi-branch mode a user only sees their own branch's records.
+  const where = scopedWhere(req, { detstatus: false });
   if (req.query.from || req.query.to) where.purchaseDate = {};
   if (req.query.from) where.purchaseDate[Op.gte] = req.query.from;
   if (req.query.to) where.purchaseDate[Op.lte] = req.query.to;
@@ -61,6 +64,7 @@ export const createPurchase = asyncHandler(async (req, res) => {
     const purchase = await Purchase.create({
       purchaseNumber: req.body.purchaseNumber || await nextPurchaseNumber(transaction),
       purchaseDate: req.body.purchaseDate,
+      branchId: req.branchId,
       supplierId: supplier.id,
       createdBy: req.user.id,
       subtotal: totals.subtotal,
@@ -83,7 +87,15 @@ export const createPurchase = asyncHandler(async (req, res) => {
     })), { transaction });
 
     if (purchase.status === 'Received') {
-      await Promise.all(totals.items.map((item) => Product.increment('stock', { by: item.quantity, where: { id: item.productId }, transaction })));
+      for (const item of totals.items) {
+        await adjustStock({
+          productId: item.productId,
+          branchId: req.branchId,
+          delta: Number(item.quantity),
+          transaction,
+          userId: req.user.id,
+        });
+      }
       await StockMovement.bulkCreate(totals.items.map((item) => ({
         productId: item.productId,
         createdBy: req.user.id,
@@ -100,4 +112,51 @@ export const createPurchase = asyncHandler(async (req, res) => {
 
   const purchase = await Purchase.findOne({ where: { id: created.id}, include: [Supplier, { model: PurchaseItem, include: Product }] });
   res.status(201).json(purchase);
+});
+
+export const removePurchase = asyncHandler(async (req, res) => {
+  await sequelize.transaction(async (transaction) => {
+    const purchase = await Purchase.findOne({
+      where: { id: req.params.id, detstatus: false },
+      include: [PurchaseItem],
+      transaction
+    });
+    if (!purchase) throw Object.assign(new Error('Purchase not found'), { status: 404 });
+
+    // Only received stock was added, so only received stock comes back out.
+    if (purchase.status === 'Received') {
+      const branchId = purchase.branchId || req.branchId;
+      // Refuses rather than driving the branch negative if the goods were sold on.
+      await assertAvailable(purchase.PurchaseItems, branchId, transaction);
+      for (const item of purchase.PurchaseItems) {
+        await adjustStock({
+          productId: item.productId,
+          branchId,
+          delta: -Number(item.quantity),
+          transaction,
+          userId: req.user.id,
+        });
+      }
+
+      await StockMovement.bulkCreate(purchase.PurchaseItems.map((item) => ({
+        productId: item.productId,
+        createdBy: req.user.id,
+        movementType: 'Adjustment Out',
+        quantity: -item.quantity,
+        referenceType: 'Purchase Cancellation',
+        referenceId: purchase.id,
+        notes: `Reversed via cancelled purchase ${purchase.purchaseNumber}`,
+        authadd: req.user.id
+      })), { transaction });
+    }
+
+    await purchase.update({
+      detstatus: true,
+      status: 'Cancelled',
+      authdel: req.user.id,
+      delondt: new Date()
+    }, { transaction });
+  });
+
+  res.json({ message: 'Purchase cancelled and stock reversed' });
 });

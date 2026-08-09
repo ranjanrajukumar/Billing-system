@@ -23,7 +23,7 @@ import SearchBox from '../components/SearchBox.jsx';
 import StatsCard from '../components/StatsCard.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { productsApi } from '../services/resource.service.js';
-import { currency } from '../utils/formatters.js';
+import { currency, mediaUrl } from '../utils/formatters.js';
 
 const empty = {
   productName: '', categoryId: '', hsnCode: '', purchasePrice: 0,
@@ -32,9 +32,7 @@ const empty = {
 };
 
 function ProductImage({ row }) {
-  const url = row.imagePath
-    ? (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '') + row.imagePath
-    : '';
+  const url = mediaUrl(row.imageUrl);
   const theme = useTheme();
   return url ? (
     <img src={url} alt={row.productName} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 8 }} />
@@ -108,7 +106,7 @@ export default function Products() {
     const fd = new FormData();
     Object.keys(values).forEach((k) => {
       if (k === 'image' && values[k]?.[0]) fd.append('image', values[k][0]);
-      else if (k !== 'image' && k !== 'imagePath') fd.append(k, values[k] ?? '');
+      else if (!['image', 'imagePath', 'imageUrl', 'imageMimeType'].includes(k)) fd.append(k, values[k] ?? '');
     });
     editing.id ? await api.put(`/products/${editing.id}`, fd) : await api.post('/products', fd);
     showToast('Product saved');
@@ -190,6 +188,7 @@ export default function Products() {
               )},
             ]}
             rows={rows}
+            meta={meta}
           />
           <Pagination meta={meta} onChangePage={(p) => setQuery({ ...query, page: p })} onChangeLimit={(l) => setQuery({ ...query, limit: l })} />
         </>
@@ -201,7 +200,7 @@ export default function Products() {
           {/* Image upload + margin chip */}
           <Grid item xs={12}>
             <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
-              {editing?.imagePath && <ProductImage row={editing} />}
+              {editing?.imageUrl && <ProductImage row={editing} />}
               <Button variant="outlined" component="label" sx={{ borderRadius: 2 }}>
                 Upload Image
                 <input type="file" hidden accept="image/*" {...register('image')} />

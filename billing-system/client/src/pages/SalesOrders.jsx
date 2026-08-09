@@ -20,6 +20,7 @@ import StatsCard from '../components/StatsCard.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { customersApi, salesOrdersApi, productsApi } from '../services/resource.service.js';
 import { currency, date } from '../utils/formatters.js';
+import { printDocument, printPdfBlob } from '../utils/print.js';
 
 const blankItem = { productId: '', quantity: 1, rate: 0, discount: 0, gstPercent: 18 };
 
@@ -85,9 +86,62 @@ export default function SalesOrders() {
     } catch (err) { showToast(err.response?.data?.message || 'Error saving order', 'error'); }
   };
 
+  const orderPdf = (id) => api.get(`/sales-orders/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data);
+
   const download = async (id) => {
-    const blob = await api.get(`/sales-orders/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data);
-    window.open(URL.createObjectURL(blob), '_blank');
+    try {
+      window.open(URL.createObjectURL(await orderPdf(id)), '_blank');
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Unable to download PDF', 'error');
+    }
+  };
+
+  // Print the generated order PDF rather than the surrounding page.
+  const printOrder = async (id) => {
+    try {
+      printPdfBlob(await orderPdf(id));
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Unable to print order', 'error');
+    }
+  };
+
+  const share = (order) => {
+    const text = `Hello ${order.Customer?.customerName || ''}, here is Sales Order ${order.orderNumber} for ${currency(order.totalAmount)}.`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  // The order being composed has no PDF yet, so print its line items directly.
+  const printDraft = () => {
+    const selected = items.filter((it) => it.productId && Number(it.quantity) > 0);
+    if (!selected.length) {
+      showToast('Add at least one product before printing', 'error');
+      return;
+    }
+    const productName = (id) => products.find((p) => String(p.id) === String(id))?.productName || '—';
+    const amount = (it) => {
+      const taxable = Math.max(Number(it.quantity || 0) * Number(it.rate || 0) - Number(it.discount || 0), 0);
+      return taxable + taxable * Number(it.gstPercent || 0) / 100;
+    };
+    printDocument({
+      title: 'Sales Order Draft',
+      subtitle: `Prepared ${date(new Date())}`,
+      columns: [
+        { header: 'Product', value: (it) => productName(it.productId) },
+        { header: 'Qty', value: (it) => it.quantity, numeric: true },
+        { header: 'Rate', value: (it) => currency(it.rate), numeric: true },
+        { header: 'Discount', value: (it) => currency(it.discount), numeric: true },
+        { header: 'GST %', value: (it) => `${Number(it.gstPercent || 0)}%`, numeric: true },
+        { header: 'Amount', value: (it) => currency(amount(it)), numeric: true },
+      ],
+      rows: selected,
+      summary: [
+        { label: 'Subtotal', value: currency(totals.subtotal) },
+        { label: 'CGST', value: currency(totals.cgst) },
+        { label: 'SGST', value: currency(totals.sgst) },
+        { label: 'Round Off', value: currency(totals.roundOff) },
+        { label: 'Grand Total', value: currency(totals.grand), total: true },
+      ],
+    });
   };
 
   const stats = useMemo(() => ({
@@ -140,12 +194,13 @@ export default function SalesOrders() {
               { field: 'actions', headerName: 'Actions', render: (r) => (
                 <Stack direction="row" spacing={0.25}>
                   <Tooltip title="Download PDF"><IconButton size="small" onClick={() => download(r.id)} sx={{ borderRadius: 1.5 }}><DownloadIcon fontSize="small" /></IconButton></Tooltip>
-                  <Tooltip title="Print"><IconButton size="small" onClick={() => window.print()} sx={{ borderRadius: 1.5 }}><PrintIcon fontSize="small" /></IconButton></Tooltip>
-                  <Tooltip title="Share"><IconButton size="small" sx={{ borderRadius: 1.5 }}><ShareIcon fontSize="small" /></IconButton></Tooltip>
+                  <Tooltip title="Print"><IconButton size="small" onClick={() => printOrder(r.id)} sx={{ borderRadius: 1.5 }}><PrintIcon fontSize="small" /></IconButton></Tooltip>
+                  <Tooltip title="Share on WhatsApp"><IconButton size="small" onClick={() => share(r)} sx={{ borderRadius: 1.5 }}><ShareIcon fontSize="small" /></IconButton></Tooltip>
                 </Stack>
               )},
             ]}
             rows={rows}
+            meta={meta}
           />
           <Pagination meta={meta} onChangePage={(p) => setQuery({ ...query, page: p })} onChangeLimit={(l) => setQuery({ ...query, limit: l })} />
         </>
@@ -232,7 +287,7 @@ export default function SalesOrders() {
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="flex-end">
             <Button onClick={() => setOpen(false)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
-            <Button onClick={() => window.print()} startIcon={<PrintIcon />} variant="outlined" sx={{ borderRadius: 2 }}>Print</Button>
+            <Button onClick={printDraft} startIcon={<PrintIcon />} variant="outlined" sx={{ borderRadius: 2 }}>Print</Button>
             <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ borderRadius: 2 }}>
               {isSubmitting ? 'Saving…' : 'Save Order'}
             </Button>

@@ -1,7 +1,7 @@
 import { DataTypes } from 'sequelize';
 import { enumType, unsignedInteger } from './types.js';
 
-const movementTypes = ['Purchase', 'Sale', 'Adjustment In', 'Adjustment Out'];
+const movementTypes = ['Purchase', 'Sale', 'Sale Return', 'Adjustment In', 'Adjustment Out', 'Opening Stock'];
 
 export default (sequelize) => sequelize.define('StockMovement', {
   id: { type: unsignedInteger(sequelize), autoIncrement: true, primaryKey: true },

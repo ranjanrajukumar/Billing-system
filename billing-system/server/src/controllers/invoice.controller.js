@@ -1,9 +1,31 @@
 import { Op } from 'sequelize';
 import { sequelize, Customer, Invoice, InvoiceItem, Product, Company, Payment, StockMovement, InvoiceTemplate } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { scopedWhere } from '../middleware/branchContext.js';
 import { calculateInvoice } from '../utils/invoiceMath.js';
 import { getPagination, paged } from '../utils/pagination.js';
 import { buildInvoicePdf } from '../services/pdf.service.js';
+import { renderInvoiceHtml } from '../services/invoiceHtml.service.js';
+import { adjustStock, assertAvailable } from '../services/stock.service.js';
+import { recordCouponUse, releaseCouponUse, validateCoupon } from '../services/coupon.service.js';
+import { allocate, consume, restoreFromItems } from '../services/batch.service.js';
+import {
+  loyaltyConfig, movePoints, pointsForAmount, reverseInvoicePoints, validateRedemption,
+} from '../services/loyalty.service.js';
+
+// Optional fields a bill of supply prints; all default to blank or zero.
+const DOCUMENT_FIELDS = [
+  'orderNumber', 'orderDate', 'dmNumber', 'dmDate', 'manualDm', 'manualDmDate',
+  'transporter', 'vehicleNo', 'lrNumber', 'totalBags', 'remark',
+  'quantityDiscount', 'cashDiscount', 'specialDiscount',
+  'freightDeducted', 'packingCharge', 'freightCharge', 'otherCharges', 'cess',
+];
+
+// The subset of the above that changes what the invoice is worth.
+const CHARGE_FIELDS = [
+  'quantityDiscount', 'cashDiscount', 'specialDiscount', 'freightDeducted',
+  'packingCharge', 'freightCharge', 'otherCharges', 'cess',
+];
 
 async function nextInvoiceNumber(transaction) {
   const year = new Date().getFullYear();
@@ -13,7 +35,8 @@ async function nextInvoiceNumber(transaction) {
 
 export const listInvoices = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  const where = { detstatus: false };
+  // In multi-branch mode a user only sees their own branch's records.
+  const where = scopedWhere(req, { detstatus: false });
   if (req.query.from || req.query.to) where.invoiceDate = {};
   if (req.query.from) where.invoiceDate[Op.gte] = req.query.from;
   if (req.query.to) where.invoiceDate[Op.lte] = req.query.to;
@@ -46,14 +69,49 @@ export const createInvoice = asyncHandler(async (req, res) => {
     const items = req.body.items.map((item) => {
       const product = byId.get(Number(item.productId));
       if (!product) throw Object.assign(new Error(`Product ${item.productId} not found`), { status: 404 });
-      if (Number(product.stock) < Number(item.quantity)) throw Object.assign(new Error(`Insufficient stock for ${product.productName}`), { status: 409 });
       return { ...item, rate: item.rate ?? product.sellingPrice, gstPercent: item.gstPercent ?? product.gstPercent };
     });
 
-    const totals = calculateInvoice(items, customer.state, companyState);
+    // Availability is judged at the branch making the sale, not company-wide.
+    await assertAvailable(items, req.branchId, transaction);
+
+    // Coupon and points both reduce the taxable value before GST is worked out.
+    const grossTaxable = items.reduce(
+      (sum, item) => sum + Math.max(Number(item.quantity) * Number(item.rate) - Number(item.discount || 0), 0),
+      0,
+    );
+
+    let couponDiscount = 0;
+    let appliedCoupon = null;
+    if (req.body.couponCode) {
+      const result = await validateCoupon({
+        code: req.body.couponCode,
+        customerId: customer.id,
+        orderValue: grossTaxable,
+        transaction,
+      });
+      appliedCoupon = result.coupon;
+      couponDiscount = result.discount;
+    }
+
+    const config = loyaltyConfig(company);
+    const redemption = await validateRedemption({
+      customer,
+      points: req.body.redeemPoints,
+      // Points can only be spent on what is left after the coupon.
+      orderValue: grossTaxable - couponDiscount,
+      config,
+    });
+
+    const totals = calculateInvoice(items, customer.state, companyState, {
+      couponDiscount,
+      pointsDiscount: redemption.amount,
+      charges: CHARGE_FIELDS.reduce((acc, field) => ({ ...acc, [field]: req.body[field] }), {}),
+    });
     const invoice = await Invoice.create({
       invoiceNumber: req.body.invoiceNumber || await nextInvoiceNumber(transaction),
       invoiceDate: req.body.invoiceDate,
+      branchId: req.branchId,
       customerId: customer.id,
       paymentMethod: req.body.paymentMethod,
       createdBy: req.user.id,
@@ -64,25 +122,73 @@ export const createInvoice = asyncHandler(async (req, res) => {
       grandTotal: totals.grandTotal,
       roundOff: totals.roundOff,
       amountInWords: totals.amountInWords,
-      notes: req.body.notes
+      couponId: appliedCoupon?.id || null,
+      couponCode: appliedCoupon?.code || null,
+      couponDiscount,
+      pointsRedeemed: redemption.points,
+      pointsDiscount: redemption.amount,
+      notes: req.body.notes,
+      // Document references, dispatch details and the printed charge boxes.
+      ...Object.fromEntries(DOCUMENT_FIELDS
+        .filter((field) => req.body[field] !== undefined && req.body[field] !== '')
+        .map((field) => [field, req.body[field]])),
     }, { transaction });
 
-    await InvoiceItem.bulkCreate(totals.items.map((item) => ({
-      invoiceId: invoice.id,
-      productId: item.productId,
-      quantity: item.quantity,
-      rate: item.rate,
-      discount: item.discount,
-      gstPercent: item.gstPercent,
-      gstAmount: item.gstAmount,
-      amount: item.amount
-    })), { transaction });
+    // A line is split into one row per seed lot it draws from, so the bill can
+    // be traced back to the bags that left the shelf. Products with no lots
+    // recorded produce a single row exactly as before.
+    const rows = [];
+    for (const item of totals.items) {
+      const allocations = await allocate({
+        productId: item.productId,
+        branchId: req.branchId,
+        quantity: item.quantity,
+        batchId: item.batchId,
+        transaction,
+      });
 
-    await Promise.all(totals.items.map((item) => Product.decrement('stock', {
-      by: item.quantity,
-      where: { id: item.productId },
-      transaction
-    })));
+      if (!allocations.length) {
+        rows.push({ item, quantity: Number(item.quantity), batch: null });
+        continue;
+      }
+
+      await consume(allocations, { transaction, userId: req.user.id });
+      for (const allocation of allocations) {
+        rows.push({ item, quantity: allocation.quantity, batch: allocation.batch });
+      }
+    }
+
+    await InvoiceItem.bulkCreate(rows.map(({ item, quantity, batch }) => {
+      // Money follows the quantity, so a split line still sums to the original.
+      const share = Number(item.quantity) > 0 ? quantity / Number(item.quantity) : 1;
+      return {
+        invoiceId: invoice.id,
+        productId: item.productId,
+        quantity,
+        rate: item.rate,
+        discount: Number(item.discount || 0) * share,
+        gstPercent: item.gstPercent,
+        gstAmount: Number(item.gstAmount) * share,
+        amount: Number(item.amount) * share,
+        packing: item.packing || null,
+        um: item.um || null,
+        batchId: batch?.id || null,
+        // Copied, not just linked, so a reprint survives the lot being edited.
+        batchNumber: batch?.batchNumber || null,
+        germinationPercent: batch?.germinationPercent ?? null,
+        expiryDate: batch?.expiryDate || null,
+      };
+    }), { transaction });
+
+    for (const item of totals.items) {
+      await adjustStock({
+        productId: item.productId,
+        branchId: req.branchId,
+        delta: -Number(item.quantity),
+        transaction,
+        userId: req.user.id,
+      });
+    }
 
     await StockMovement.bulkCreate(totals.items.map((item) => ({
       productId: item.productId,
@@ -95,7 +201,51 @@ export const createInvoice = asyncHandler(async (req, res) => {
       authadd: req.user.id
     })), { transaction });
 
-    await Payment.create({ invoiceId: invoice.id, amount: totals.grandTotal, paymentMethod: req.body.paymentMethod }, { transaction });
+    // Spend the points, log the coupon, then award points on what was paid.
+    if (appliedCoupon) {
+      await recordCouponUse({
+        coupon: appliedCoupon, customerId: customer.id, invoiceId: invoice.id,
+        discount: couponDiscount, userId: req.user.id, transaction,
+      });
+    }
+    if (redemption.points > 0) {
+      await movePoints({
+        customerId: customer.id, points: -redemption.points, entryType: 'Redeemed',
+        invoiceId: invoice.id, notes: `Redeemed against ${invoice.invoiceNumber}`,
+        userId: req.user.id, transaction,
+      });
+    }
+    const earned = pointsForAmount(totals.grandTotal, config);
+    if (earned > 0) {
+      await movePoints({
+        customerId: customer.id, points: earned, entryType: 'Earned',
+        invoiceId: invoice.id, notes: `Earned on ${invoice.invoiceNumber}`,
+        userId: req.user.id, transaction,
+      });
+      await invoice.update({ pointsEarned: earned }, { transaction });
+    }
+
+    // A credit sale is unpaid until money is actually recorded against it,
+    // and carries a due date so the outstanding amount can be aged.
+    if (req.body.paymentMethod === 'Credit') {
+      const creditDays = Number(company?.creditDays ?? 30);
+      const due = new Date(invoice.invoiceDate);
+      due.setDate(due.getDate() + creditDays);
+      await invoice.update({
+        status: 'Unpaid',
+        dueDate: req.body.dueDate || due.toISOString().slice(0, 10),
+      }, { transaction });
+    } else {
+      await Payment.create({
+        invoiceId: invoice.id,
+        amount: totals.grandTotal,
+        paymentMethod: req.body.paymentMethod,
+        // An immediate payment happens on the sale date, which matters when an
+        // invoice is back-dated; otherwise day-based reports miss it.
+        paidAt: invoice.invoiceDate,
+        authadd: req.user.id
+      }, { transaction });
+    }
     return invoice;
   });
   const invoice = await Invoice.findOne({ where: { id: created.id}, include: [{ model: Customer }, { model: InvoiceItem, include: Product }, Payment] });
@@ -108,12 +258,32 @@ export const removeInvoice = asyncHandler(async (req, res) => {
     if (!invoice) throw Object.assign(new Error('Invoice not found'), { status: 404 });
     
     // Soft delete invoice
-    await Invoice.update({ detstatus: true, authdel: req.user.id, delondt: new Date() }, { where: { id: invoice.id }, transaction });
+    await Invoice.update({ detstatus: true, authdel: req.user.id, delondt: new Date(), status: 'Cancelled' }, { where: { id: invoice.id }, transaction });
+
+    // Give back redeemed points, take back awarded ones, free the coupon.
+    await reverseInvoicePoints({ invoiceId: invoice.id, userId: req.user.id, transaction });
+    await releaseCouponUse({ invoiceId: invoice.id, userId: req.user.id, transaction });
+
+    // Payments belong to the cancelled invoice, so retire them too.
+    await Payment.update(
+      { detstatus: true, authdel: req.user.id, delondt: new Date() },
+      { where: { invoiceId: invoice.id, detstatus: false }, transaction }
+    );
     
-    // Reverse stock
+    // Reverse stock at the branch that made the sale.
     for (const item of invoice.InvoiceItems) {
-      await Product.increment('stock', { by: item.quantity, where: { id: item.productId }, transaction });
+      await adjustStock({
+        productId: item.productId,
+        branchId: invoice.branchId || req.branchId,
+        delta: Number(item.quantity),
+        transaction,
+        userId: req.user.id,
+      });
     }
+
+    // Seed lots go back to the exact batches the sale drew from, so a cancelled
+    // bill cannot quietly move stock between lots.
+    await restoreFromItems(invoice.InvoiceItems, { transaction, userId: req.user.id });
     
     // Create stock movement logs for cancellation
     await StockMovement.bulkCreate(invoice.InvoiceItems.map((item) => ({
@@ -131,18 +301,49 @@ export const removeInvoice = asyncHandler(async (req, res) => {
   res.json({ message: 'Invoice cancelled and stock reversed' });
 });
 
+// Renders a real invoice through the drag-and-drop HTML layout.
+export const invoiceHtml = asyncHandler(async (req, res) => {
+  const invoice = await Invoice.findOne({
+    where: { id: req.params.id, detstatus: false },
+    include: [{ model: Customer }, { model: InvoiceItem, include: Product }]
+  });
+  if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+
+  const company = await Company.findOne();
+  const selected = req.query.template || company?.defaultInvoiceTemplate || '';
+  let template = {};
+  if (String(selected).startsWith('template:')) {
+    const saved = await InvoiceTemplate.findOne({
+      where: { id: String(selected).replace('template:', ''), detstatus: false, isActive: true }
+    });
+    if (saved) template = saved.toJSON();
+  }
+
+  res.type('html').send(await renderInvoiceHtml({
+    invoice,
+    company,
+    template,
+    mediaBase: `${req.protocol}://${req.get('host')}`,
+  }));
+});
+
 export const downloadInvoicePdf = asyncHandler(async (req, res) => {
   const invoice = await Invoice.findOne({ where: { id: req.params.id, detstatus: false }, include: [{ model: Customer }, { model: InvoiceItem, include: Product }] });
   if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
-  const company = await Company.findOne();
+  // Unscoped so the logo bytes come along for rendering.
+  const company = await Company.unscoped().findOne();
   const selectedTemplate = req.query.template || company?.defaultInvoiceTemplate || 'standard';
   let template = selectedTemplate;
 
   if (String(selectedTemplate).startsWith('template:')) {
     const templateId = String(selectedTemplate).replace('template:', '');
     const savedTemplate = await InvoiceTemplate.findOne({ where: { id: templateId, detstatus: false, isActive: true } });
-    if (!savedTemplate) return res.status(404).json({ message: 'Invoice template not found' });
-    template = savedTemplate.toJSON();
+    // An explicit request for a missing template is an error, but a stale
+    // company default must not take every invoice PDF down with it.
+    if (!savedTemplate && req.query.template) {
+      return res.status(404).json({ message: 'Invoice template not found' });
+    }
+    template = savedTemplate ? savedTemplate.toJSON() : 'standard';
   }
 
   const buffer = await buildInvoicePdf(invoice, company, template, template.invoiceTitle || 'TAX INVOICE');

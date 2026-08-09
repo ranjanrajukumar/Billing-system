@@ -6,15 +6,17 @@ import { getPagination, paged } from '../utils/pagination.js';
 export const listSuppliers = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
   const q = req.query.search || '';
-  const where = q ? {
-    [Op.or]: [
+  // Deleted suppliers must not be listed, or opening one 404s.
+  const where = { detstatus: false };
+  if (q) {
+    where[Op.or] = [
       { supplierName: { [Op.like]: `%${q}%` } },
       { contactPerson: { [Op.like]: `%${q}%` } },
       { mobileNumber: { [Op.like]: `%${q}%` } },
       { email: { [Op.like]: `%${q}%` } },
       { gstNumber: { [Op.like]: `%${q}%` } }
-    ]
-  } : {};
+    ];
+  }
   const { rows, count } = await Supplier.findAndCountAll({ where, limit, offset, order: [['addondt', 'DESC']] });
   res.json(paged(rows, count, page, limit));
 });

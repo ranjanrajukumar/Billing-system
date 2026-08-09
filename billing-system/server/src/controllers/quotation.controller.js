@@ -1,12 +1,23 @@
 import { Op } from 'sequelize';
 import { Quotation, QuotationItem, Customer, Product, User } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { scopedWhere } from '../middleware/branchContext.js';
 import { sequelize } from '../models/index.js';
+import { itemsTotal, normalizeOrderItems } from '../utils/lineItems.js';
+import { documentOutputHandlers } from './documentOutput.js';
+
+const loadQuotation = (req) => Quotation.findOne({
+  where: { id: req.params.id, detstatus: false },
+  include: [{ model: Customer }, { model: QuotationItem, include: [Product] }]
+});
+
+export const { downloadPdf, html } = documentOutputHandlers('quotation', loadQuotation);
 
 export const getAll = asyncHandler(async (req, res) => {
   const { search, page = 1, limit = 10 } = req.query;
   const offset = (page - 1) * limit;
-  let where = { detstatus: false };
+  // In multi-branch mode a user only sees their own branch's records.
+  let where = scopedWhere(req, { detstatus: false });
   if (search) {
     where['quotationNumber'] = { [Op.like]: `%${search}%` };
   }
@@ -55,19 +66,11 @@ export const create = asyncHandler(async (req, res) => {
       data.quotationDate = new Date().toISOString().slice(0, 10);
     }
     if (!data.totalAmount && items && items.length > 0) {
-      data.totalAmount = items.reduce((sum, it) => {
-        const qty = Number(it.quantity || 0);
-        const rate = Number(it.rate || 0);
-        const disc = Number(it.discount || 0);
-        const gst = Number(it.gstPercent || 0);
-        const taxable = Math.max(qty * rate - disc, 0);
-        return sum + Math.round(taxable + (taxable * gst / 100));
-      }, 0);
+      data.totalAmount = itemsTotal(items);
     }
     const parent = await Quotation.create(data, { transaction: t });
     if (items && items.length > 0) {
-      const parentIdField = 'quotationId';
-      const itemsData = items.map(item => ({ ...item, [parentIdField]: parent.id, authadd: req.user.id }));
+      const itemsData = normalizeOrderItems(items).map(item => ({ ...item, quotationId: parent.id, authadd: req.user.id }));
       await QuotationItem.bulkCreate(itemsData, { transaction: t });
     }
     return parent;
@@ -85,9 +88,8 @@ export const update = asyncHandler(async (req, res) => {
     await Quotation.update(data, { where: { id: req.params.id }, transaction: t });
 
     if (items) {
-      const parentIdField = 'quotationId';
-      await QuotationItem.destroy({ where: { [parentIdField]: req.params.id }, transaction: t });
-      const itemsData = items.map(item => ({ ...item, [parentIdField]: req.params.id, authadd: req.user.id }));
+      await QuotationItem.destroy({ where: { quotationId: req.params.id }, transaction: t });
+      const itemsData = normalizeOrderItems(items).map(item => ({ ...item, quotationId: req.params.id, authadd: req.user.id }));
       await QuotationItem.bulkCreate(itemsData, { transaction: t });
     }
   });

@@ -10,7 +10,16 @@ export default (sequelize) => sequelize.define('User', {
   resetToken: { type: DataTypes.STRING(255) },
   resetTokenExpiresAt: { type: DataTypes.DATE },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
-  profileImagePath: { type: DataTypes.STRING(255) }
+  // Branch this user works at. Admins are not restricted by it.
+  // Must match Branch.id exactly (unsigned) or MySQL rejects the foreign key.
+  branchId: { type: unsignedInteger(sequelize) },
+  profileImagePath: { type: DataTypes.STRING(255) },
+  profileImageData: { type: DataTypes.BLOB('long') },
+  profileImageMimeType: { type: DataTypes.STRING(100) },
+  profileImageUrl: {
+    type: DataTypes.VIRTUAL,
+    get() { return this.profileImageMimeType ? `/media/users/${this.id}` : (this.profileImagePath || null); }
+  }
 ,
   authadd: { type: DataTypes.INTEGER, allowNull: true },
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },
@@ -22,5 +31,7 @@ export default (sequelize) => sequelize.define('User', {
   createdAt: 'addondt',
   updatedAt: 'editondt',
   tableName: 'users',
+  // Avatar bytes are only needed by the media endpoint, which uses .unscoped().
+  defaultScope: { attributes: { exclude: ['profileImageData'] } },
   indexes: [{ fields: ['email'] }]
 });

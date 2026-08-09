@@ -5,9 +5,15 @@ const api = axios.create({
   timeout: 20000
 });
 
+export const ACTIVE_BRANCH_KEY = 'activeBranchId';
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+
+  // Admins can act on another branch; the server ignores this for other roles.
+  const branch = localStorage.getItem(ACTIVE_BRANCH_KEY);
+  if (branch) config.headers['X-Branch-Id'] = branch;
   return config;
 });
 

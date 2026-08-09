@@ -6,14 +6,17 @@ import { getPagination, paged } from '../utils/pagination.js';
 export const listCustomers = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
   const q = req.query.search || '';
-  const where = q ? {
-    [Op.or]: [
+  // Deleted customers must not appear in the list; every other endpoint
+  // filters them out, so listing them made View/Edit fail with a 404.
+  const where = { detstatus: false };
+  if (q) {
+    where[Op.or] = [
       { customerName: { [Op.like]: `%${q}%` } },
       { mobileNumber: { [Op.like]: `%${q}%` } },
       { email: { [Op.like]: `%${q}%` } },
       { gstNumber: { [Op.like]: `%${q}%` } }
-    ]
-  } : {};
+    ];
+  }
   const { rows, count } = await Customer.findAndCountAll({ where, limit, offset, order: [['addondt', 'DESC']] });
   res.json(paged(rows, count, page, limit));
 });

@@ -12,7 +12,14 @@ export default (sequelize) => sequelize.define('Product', {
   barcode: { type: DataTypes.STRING(80), unique: true },
   lowStockThreshold: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 5 },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
-  imagePath: { type: DataTypes.STRING(255) }
+  imagePath: { type: DataTypes.STRING(255) },
+  imageData: { type: DataTypes.BLOB('long') },
+  imageMimeType: { type: DataTypes.STRING(100) },
+  // Where clients should fetch the image; falls back to the legacy disk path.
+  imageUrl: {
+    type: DataTypes.VIRTUAL,
+    get() { return this.imageMimeType ? `/media/products/${this.id}` : (this.imagePath || null); }
+  }
 ,
   authadd: { type: DataTypes.INTEGER, allowNull: true },
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },
@@ -24,5 +31,7 @@ export default (sequelize) => sequelize.define('Product', {
   createdAt: 'addondt',
   updatedAt: 'editondt',
   tableName: 'products',
+  // Image bytes are only ever needed by the media endpoint, so keep them out of every other query.
+  defaultScope: { attributes: { exclude: ['imageData'] } },
   indexes: [{ fields: ['product_name'] }, { fields: ['barcode'] }, { fields: ['hsn_code'] }]
 });

@@ -29,7 +29,14 @@ export const inventoryApi = {
 
 export const invoiceTemplatesApi = {
   ...makeResource('/invoice-templates'),
-  preview: (id) => api.get(`/invoice-templates/${id}/preview`).then((r) => r.data),
+  preview: (id) => api.get(`/invoice-templates/${id}/preview`, { responseType: 'blob' }).then((r) => r.data),
+};
+
+export const paymentsApi = {
+  list:      (params) => api.get('/payments', { params }).then((r) => r.data ?? { data: [], meta: {} }),
+  forInvoice:(invoiceId) => api.get(`/payments/invoice/${invoiceId}`).then((r) => r.data),
+  create:    (payload) => api.post('/payments', payload).then((r) => r.data ?? {}),
+  remove:    (id) => api.delete(`/payments/${id}`).then((r) => r.data ?? {}),
 };
 
 export const usersApi = {
@@ -44,6 +51,8 @@ export const usersApi = {
 
 export const dashboardApi = {
   get: () => api.get('/dashboard').then((r) => r.data ?? {}),
+  productPerformance: (params) =>
+    api.get('/dashboard/product-performance', { params }).then((r) => r.data ?? {}),
 };
 
 export const reportsApi = {

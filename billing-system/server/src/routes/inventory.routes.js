@@ -1,10 +1,9 @@
 import express from 'express';
 import * as controller from '../controllers/inventory.controller.js';
-import { authenticate as protect } from '../middleware/authMiddleware.js';
+// Authentication and branch context are applied by the parent router.
 
 const router = express.Router();
 
-router.use(protect);
 
 router.get('/summary', controller.getSummary);
 router.get('/movements', controller.getMovements);

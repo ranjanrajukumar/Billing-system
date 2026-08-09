@@ -1,10 +1,24 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import ProtectedRoute from '../components/ProtectedRoute.jsx';
+import RoleRoute from '../components/RoleRoute.jsx';
 import AppLayout from '../layouts/AppLayout.jsx';
+import AuditLogs from '../pages/AuditLogs.jsx';
+import Branches from '../pages/Branches.jsx';
+import Batches from '../pages/Batches.jsx';
+import TaxReports from '../pages/TaxReports.jsx';
+import Coupons from '../pages/Coupons.jsx';
 import Customers from '../pages/Customers.jsx';
 import Dashboard from '../pages/Dashboard.jsx';
+import DeliveryChallans from '../pages/DeliveryChallans.jsx';
+import InvoiceDesigner from '../pages/InvoiceDesigner.jsx';
 import Invoices from '../pages/Invoices.jsx';
+import Khata from '../pages/Khata.jsx';
+import Purchases from '../pages/Purchases.jsx';
+import Quotations from '../pages/Quotations.jsx';
 import SalesOrders from '../pages/SalesOrders.jsx';
+import SalesReturns from '../pages/SalesReturns.jsx';
+import Suppliers from '../pages/Suppliers.jsx';
+import Udhar from '../pages/Udhar.jsx';
 import Inventory from '../pages/Inventory.jsx';
 import InvoiceTemplateSetup from '../pages/InvoiceTemplateSetup.jsx';
 import Login from '../pages/Login.jsx';
@@ -30,11 +44,24 @@ export default function AppRoutes({ mode, onToggleMode }) {
           <Route path="products" element={<Products />} />
           <Route path="invoices" element={<Invoices />} />
           <Route path="sales-orders" element={<SalesOrders />} />
+          <Route path="quotations" element={<Quotations />} />
+          <Route path="delivery-challans" element={<DeliveryChallans />} />
+          <Route path="sales-returns" element={<SalesReturns />} />
+          <Route path="udhar" element={<Udhar />} />
+          <Route path="khata" element={<Khata />} />
+          <Route path="coupons" element={<Coupons />} />
+          <Route path="batches" element={<Batches />} />
+          <Route path="suppliers" element={<Suppliers />} />
+          <Route path="purchases" element={<Purchases />} />
           <Route path="inventory" element={<Inventory />} />
-          <Route path="reports" element={<Reports />} />
-          <Route path="users" element={<Users />} />
+          <Route path="reports" element={<RoleRoute><Reports /></RoleRoute>} />
+          <Route path="tax-reports" element={<RoleRoute><TaxReports /></RoleRoute>} />
+          <Route path="users" element={<RoleRoute><Users /></RoleRoute>} />
           <Route path="settings" element={<Settings />} />
+          <Route path="branches" element={<Branches />} />
+          <Route path="audit-logs" element={<RoleRoute><AuditLogs /></RoleRoute>} />
           <Route path="invoice-templates" element={<InvoiceTemplateSetup />} />
+          <Route path="invoice-templates/:id/design" element={<InvoiceDesigner />} />
           <Route path="profile" element={<Profile />} />
         </Route>
       </Route>

@@ -18,10 +18,12 @@ export default function AppLayout({ mode, onToggleMode }) {
         component="main"
         sx={{
           flexGrow: 1,
+          // minWidth:0 stops a wide child stretching the flex column. Do NOT add
+          // overflow:hidden here — it makes this a scroll container, which breaks
+          // the Navbar's position:sticky and lets the header scroll away.
           minWidth: 0,
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden',
         }}
       >
         <Navbar

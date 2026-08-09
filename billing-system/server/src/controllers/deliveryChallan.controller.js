@@ -1,12 +1,22 @@
 import { Op } from 'sequelize';
 import { DeliveryChallan, DeliveryChallanItem, Customer, Product, User, StockMovement } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { scopedWhere } from '../middleware/branchContext.js';
 import { sequelize } from '../models/index.js';
+import { documentOutputHandlers } from './documentOutput.js';
+
+const loadChallan = (req) => DeliveryChallan.findOne({
+  where: { id: req.params.id, detstatus: false },
+  include: [{ model: Customer }, { model: DeliveryChallanItem, include: [Product] }]
+});
+
+export const { downloadPdf, html } = documentOutputHandlers('deliveryChallan', loadChallan);
 
 export const getAll = asyncHandler(async (req, res) => {
   const { search, page = 1, limit = 10 } = req.query;
   const offset = (page - 1) * limit;
-  let where = { detstatus: false };
+  // In multi-branch mode a user only sees their own branch's records.
+  let where = scopedWhere(req, { detstatus: false });
   if (search) {
     where['challanNumber'] = { [Op.like]: `%${search}%` };
   }

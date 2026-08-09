@@ -1,6 +1,9 @@
 import bcrypt from 'bcrypt';
-import { Sequelize } from 'sequelize';
-import { sequelize, Role, User, Company, Category } from '../models/index.js';
+import fs from 'fs';
+import path from 'path';
+import { Op, Sequelize } from 'sequelize';
+import { sequelize, Role, User, Company, Category, Product, Branch, BranchStock, InvoiceTemplate } from '../models/index.js';
+import { DEFAULT_TEMPLATES } from './defaultTemplates.js';
 import { assertSupportedAuth, getConnectionOptions, getDbSettings } from './dbSettings.js';
 
 const settings = getDbSettings();
@@ -130,6 +133,118 @@ async function dropDuplicateIndexes() {
   }
 }
 
+/**
+ * Everything that existed before branches belongs to one default branch, and
+ * each product's stock becomes that branch's stock. Idempotent: rows that are
+ * already assigned are left alone.
+ */
+async function migrateToDefaultBranch() {
+  const [branch] = await Branch.findOrCreate({
+    where: { branchCode: 'MAIN' },
+    defaults: {
+      branchName: 'Main Branch',
+      branchCode: 'MAIN',
+      isDefault: true,
+      isActive: true,
+    },
+  });
+
+  // Users without a branch work at the default one.
+  await User.update({ branchId: branch.id }, { where: { branchId: null } });
+
+  // Back-fill per-branch stock from the existing single figure.
+  const products = await Product.findAll({ attributes: ['id', 'stock'] });
+  for (const product of products) {
+    const [row, created] = await BranchStock.findOrCreate({
+      where: { branchId: branch.id, productId: product.id },
+      defaults: { branchId: branch.id, productId: product.id, stock: product.stock || 0 },
+    });
+    if (!created && row.stock === 0 && Number(product.stock) > 0) {
+      await row.update({ stock: product.stock });
+    }
+  }
+
+  // Existing transactions are attributed to the default branch.
+  const tables = [
+    'invoices', 'purchases', 'sales_orders', 'quotations',
+    'delivery_challans', 'sales_returns', 'stock_movements',
+  ];
+  for (const table of tables) {
+    try {
+      await sequelize.query(
+        `UPDATE \`${table}\` SET branch_id = :branchId WHERE branch_id IS NULL`,
+        { replacements: { branchId: branch.id } },
+      );
+    } catch (error) {
+      console.warn(`Branch back-fill skipped for ${table}: ${error.message}`);
+    }
+  }
+
+  return branch;
+}
+
+/**
+ * Seeds the ready-made invoice layouts. Matched by name, so a template the user
+ * has edited is never overwritten and re-running is harmless.
+ */
+async function seedInvoiceTemplates() {
+  let added = 0;
+  for (const template of DEFAULT_TEMPLATES) {
+    const [, created] = await InvoiceTemplate.findOrCreate({
+      where: { templateName: template.templateName },
+      defaults: { ...template, isActive: true, isDefault: false },
+    });
+    if (created) added += 1;
+  }
+  if (added > 0) console.log(`Seeded ${added} invoice template(s).`);
+}
+
+const MIME_BY_EXTENSION = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml'
+};
+
+// Moves images that predate database storage off the filesystem and into their
+// BLOB column. Clearing the path column makes this a no-op on later boots.
+async function migrateImagesToDatabase() {
+  const targets = [
+    { model: Product, pathField: 'imagePath', dataField: 'imageData', mimeField: 'imageMimeType' },
+    { model: Company, pathField: 'logoPath', dataField: 'logoData', mimeField: 'logoMimeType' },
+    { model: User, pathField: 'profileImagePath', dataField: 'profileImageData', mimeField: 'profileImageMimeType' }
+  ];
+
+  let moved = 0;
+  for (const { model, pathField, dataField, mimeField } of targets) {
+    const rows = await model.unscoped().findAll({
+      where: { [pathField]: { [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: '' }] } }
+    });
+
+    for (const row of rows) {
+      const storedPath = row[pathField];
+      const file = path.join(process.cwd(), storedPath);
+      if (!fs.existsSync(file)) {
+        console.warn(`Image missing on disk, clearing reference: ${storedPath}`);
+        await row.update({ [pathField]: null });
+        continue;
+      }
+
+      await row.update({
+        [dataField]: fs.readFileSync(file),
+        [mimeField]: MIME_BY_EXTENSION[path.extname(file).toLowerCase()] || 'application/octet-stream',
+        [pathField]: null
+      });
+      moved += 1;
+    }
+  }
+
+  if (moved > 0) console.log(`Moved ${moved} image(s) from disk into the database.`);
+}
+
 export async function migrateDatabase() {
   await ensureDatabase();
   await sequelize.authenticate();
@@ -140,4 +255,7 @@ export async function migrateDatabase() {
 
   await sequelize.sync({ alter: process.env.DB_SYNC_ALTER !== 'false' });
   await seedDefaults();
+  await migrateToDefaultBranch();
+  await seedInvoiceTemplates();
+  await migrateImagesToDatabase();
 }

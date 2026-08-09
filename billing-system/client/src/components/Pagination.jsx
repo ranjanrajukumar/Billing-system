@@ -6,7 +6,13 @@ export default function Pagination({ meta, onChangePage, onChangeLimit }) {
   const theme = useTheme();
   if (!meta || !meta.total) return null;
 
-  const { page = 1, limit = 10, total = 0, totalPages = 1 } = meta;
+  const { page = 1, limit = 10, total = 0 } = meta;
+  // The API returns this as `pages`; accept `totalPages` too, and fall back to
+  // deriving it so a missing field can never collapse the control to one page.
+  const totalPages = Math.max(
+    Number(meta.totalPages ?? meta.pages ?? Math.ceil(total / limit)) || 1,
+    1,
+  );
   const from = (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
 

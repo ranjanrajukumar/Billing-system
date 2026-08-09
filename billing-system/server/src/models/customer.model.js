@@ -12,6 +12,9 @@ export default (sequelize) => sequelize.define('Customer', {
   state: { type: DataTypes.STRING(80), allowNull: true },
   pincode: { type: DataTypes.STRING(10), allowNull: true }
 ,
+  // Running loyalty balance; the ledger of changes lives in loyalty_transactions.
+  loyaltyPoints: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+
   authadd: { type: DataTypes.INTEGER, allowNull: true },
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },
   authdel: { type: DataTypes.INTEGER, allowNull: true },

@@ -4,7 +4,7 @@ import ShieldIcon from '@mui/icons-material/Shield';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import {
-  alpha, Avatar, Box, Button, Checkbox, Chip, FormControlLabel,
+  Alert, alpha, Avatar, Box, Button, Checkbox, Chip, FormControlLabel,
   MenuItem, Paper, Stack, Switch, Tab, Tabs, TextField,
   Tooltip, Typography, useTheme,
 } from '@mui/material';
@@ -18,8 +18,32 @@ import PageHeader from '../components/PageHeader.jsx';
 import Pagination from '../components/Pagination.jsx';
 import SearchBox from '../components/SearchBox.jsx';
 import { useToast } from '../context/ToastContext.jsx';
+import MenuOpenIcon from '@mui/icons-material/MenuOpen';
+import MenuRights from '../components/MenuRights.jsx';
+import api from '../services/api.js';
 import { useFetch } from '../hooks/useFetch.js';
 import { usersApi } from '../services/resource.service.js';
+import { mediaUrl } from '../utils/formatters.js';
+
+/**
+ * Shown instead of an empty table when the API refuses the request, so a
+ * permission problem reads as one rather than looking like there is no data.
+ */
+function AccessNotice({ error, what }) {
+  const denied = /forbidden|insufficient/i.test(String(error));
+  return (
+    <Alert severity={denied ? 'warning' : 'error'} sx={{ borderRadius: 2 }}>
+      {denied ? (
+        <>
+          <strong>Your role cannot manage {what}.</strong> Users, roles and audit logs are
+          Admin-only. Sign in with an Admin account to see this page.
+        </>
+      ) : (
+        <>Could not load {what}: {String(error)}</>
+      )}
+    </Alert>
+  );
+}
 
 const MODULES = [
   { id: 'users', label: 'User Management' },
@@ -36,7 +60,7 @@ const ACTIONS = ['view', 'create', 'edit', 'delete'];
 
 /* ──────────────────── ROLE MANAGER ──────────────────── */
 function RoleManager() {
-  const { data, loading, mutate } = useFetch(() => usersApi.roles.list(), []);
+  const { data, loading, mutate, error } = useFetch(() => usersApi.roles.list(), []);
   const roles = Array.isArray(data) ? data : (data?.data || []);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -69,6 +93,7 @@ function RoleManager() {
   };
 
   if (loading) return <Loader />;
+  if (error) return <AccessNotice error={error} what="roles" />;
 
   return (
     <Stack spacing={2}>
@@ -163,8 +188,10 @@ function RoleManager() {
 /* ──────────────────── USER MANAGER ──────────────────── */
 function UserManager() {
   const [params, setParams] = useState({ page: 1, limit: 10, search: '' });
-  const { data, loading, mutate } = useFetch(() => usersApi.list(params), [params]);
+  const { data, loading, mutate, error } = useFetch(() => usersApi.list(params), [params]);
   const { data: rolesRes } = useFetch(() => usersApi.roles.list(), []);
+  const { data: branchRes } = useFetch(() => api.get('/branches', { params: { limit: 100 } }).then((r) => r.data), []);
+  const branches = branchRes?.data || [];
   const roles = Array.isArray(rolesRes) ? rolesRes : (rolesRes?.data || []);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -173,12 +200,13 @@ function UserManager() {
   const theme = useTheme();
   const { register, handleSubmit, formState: { errors }, reset } = useForm();
 
-  const getImageUrl = (path) => path ? (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '') + path : '';
   const initials = (name) => name ? name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) : '?';
 
   const handleOpen = (user = null) => {
     setEditing(user);
-    reset(user || { isActive: true, roleId: roles[0]?.id || '' });
+    reset(user
+      ? { ...user, branchId: user.branchId || '' }
+      : { isActive: true, roleId: roles[0]?.id || '', branchId: '' });
     setOpen(true);
   };
   const handleClose = () => { setOpen(false); setEditing(null); reset(); };
@@ -199,6 +227,7 @@ function UserManager() {
   };
 
   if (loading) return <Loader />;
+  if (error) return <AccessNotice error={error} what="users" />;
 
   return (
     <Stack spacing={2}>
@@ -216,7 +245,7 @@ function UserManager() {
         mobileKeyField="name"
         columns={[
           { field: 'photo', headerName: '', render: (r) => (
-            <Avatar src={getImageUrl(r.profileImagePath)} sx={{ width: 34, height: 34, fontSize: '0.8rem', fontWeight: 700, background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}>
+            <Avatar src={mediaUrl(r.profileImageUrl)} sx={{ width: 34, height: 34, fontSize: '0.8rem', fontWeight: 700, background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}>
               {initials(r.name)}
             </Avatar>
           )},
@@ -232,6 +261,7 @@ function UserManager() {
           )},
         ]}
         rows={data?.data || []}
+        meta={data?.meta}
       />
       <Pagination meta={data?.meta} onChangePage={(p) => setParams((pr) => ({ ...pr, page: p }))} onChangeLimit={(l) => setParams((pr) => ({ ...pr, limit: l, page: 1 }))} />
 
@@ -245,6 +275,16 @@ function UserManager() {
             <TextField select label="Role" fullWidth {...register('roleId', { required: 'Required' })} error={Boolean(errors.roleId)} helperText={errors.roleId?.message} defaultValue="">
               {roles.map((r) => <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>)}
             </TextField>
+            {branches.length > 0 && (
+              <TextField
+                select label="Branch" fullWidth defaultValue=""
+                helperText="Which location this user works at"
+                {...register('branchId')} InputLabelProps={{ shrink: true }}
+              >
+                <MenuItem value=""><em>Unassigned</em></MenuItem>
+                {branches.map((b) => <MenuItem key={b.id} value={b.id}>{b.branchName}</MenuItem>)}
+              </TextField>
+            )}
             <FormControlLabel control={<Switch {...register('isActive')} defaultChecked />} label="Active User" />
             <Stack direction="row" spacing={1} justifyContent="flex-end">
               <Button onClick={handleClose} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
@@ -281,10 +321,12 @@ export default function Users() {
         >
           <Tab icon={<GroupIcon fontSize="small" />} iconPosition="start" label="Users" />
           <Tab icon={<ShieldIcon fontSize="small" />} iconPosition="start" label="Roles & Permissions" />
+          <Tab icon={<MenuOpenIcon fontSize="small" />} iconPosition="start" label="Menu Rights" />
         </Tabs>
         <Box sx={{ p: { xs: 1.5, sm: 2.5 } }}>
           {tab === 0 && <UserManager />}
           {tab === 1 && <RoleManager />}
+          {tab === 2 && <MenuRights />}
         </Box>
       </Paper>
     </Stack>

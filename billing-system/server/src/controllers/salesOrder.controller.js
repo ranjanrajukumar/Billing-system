@@ -1,13 +1,17 @@
 import { Op } from 'sequelize';
-import { SalesOrder, SalesOrderItem, Customer, Product, User } from '../models/index.js';
+import { SalesOrder, SalesOrderItem, Customer, Company, Product, User } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { scopedWhere } from '../middleware/branchContext.js';
 import { sequelize } from '../models/index.js';
 import { getPagination, paged } from '../utils/pagination.js';
+import { itemsTotal, normalizeOrderItems } from '../utils/lineItems.js';
+import { documentOutputHandlers } from './documentOutput.js';
 
 export const getAll = asyncHandler(async (req, res) => {
   const { search } = req.query;
   const { page, limit, offset } = getPagination(req.query);
-  let where = { detstatus: false };
+  // In multi-branch mode a user only sees their own branch's records.
+  let where = scopedWhere(req, { detstatus: false });
   if (search) {
     where['orderNumber'] = { [Op.like]: `%${search}%` };
   }
@@ -56,19 +60,11 @@ export const create = asyncHandler(async (req, res) => {
       data.orderDate = new Date().toISOString().slice(0, 10);
     }
     if (!data.totalAmount && items && items.length > 0) {
-      data.totalAmount = items.reduce((sum, it) => {
-        const qty = Number(it.quantity || 0);
-        const rate = Number(it.rate || 0);
-        const disc = Number(it.discount || 0);
-        const gst = Number(it.gstPercent || 0);
-        const taxable = Math.max(qty * rate - disc, 0);
-        return sum + Math.round(taxable + (taxable * gst / 100));
-      }, 0);
+      data.totalAmount = itemsTotal(items);
     }
     const parent = await SalesOrder.create(data, { transaction: t });
     if (items && items.length > 0) {
-      const parentIdField = 'orderId';
-      const itemsData = items.map(item => ({ ...item, [parentIdField]: parent.id, authadd: req.user.id }));
+      const itemsData = normalizeOrderItems(items).map(item => ({ ...item, orderId: parent.id, authadd: req.user.id }));
       await SalesOrderItem.bulkCreate(itemsData, { transaction: t });
     }
     return parent;
@@ -86,9 +82,8 @@ export const update = asyncHandler(async (req, res) => {
     await SalesOrder.update(data, { where: { id: req.params.id }, transaction: t });
 
     if (items) {
-      const parentIdField = 'orderId';
-      await SalesOrderItem.destroy({ where: { [parentIdField]: req.params.id }, transaction: t });
-      const itemsData = items.map(item => ({ ...item, [parentIdField]: req.params.id, authadd: req.user.id }));
+      await SalesOrderItem.destroy({ where: { orderId: req.params.id }, transaction: t });
+      const itemsData = normalizeOrderItems(items).map(item => ({ ...item, orderId: req.params.id, authadd: req.user.id }));
       await SalesOrderItem.bulkCreate(itemsData, { transaction: t });
     }
   });
@@ -103,3 +98,10 @@ export const remove = asyncHandler(async (req, res) => {
   );
   res.json({ message: 'Deleted successfully' });
 });
+
+const loadOrder = (req) => SalesOrder.findOne({
+  where: { id: req.params.id, detstatus: false },
+  include: [{ model: Customer }, { model: SalesOrderItem, include: [Product] }]
+});
+
+export const { downloadPdf, html } = documentOutputHandlers('salesOrder', loadOrder);

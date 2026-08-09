@@ -205,6 +205,7 @@ export default function Inventory() {
                     )},
                   ]}
                   rows={movements}
+                  meta={meta}
                 />
                 <Pagination meta={meta} onChangePage={(p) => setQuery({ ...query, page: p })} onChangeLimit={(l) => setQuery({ ...query, limit: l })} />
               </Stack>

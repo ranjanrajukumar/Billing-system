@@ -1,5 +1,6 @@
 import { Op } from 'sequelize';
 import { Company, InvoiceTemplate } from '../models/index.js';
+import { BLOCK_TYPES, defaultLayout, renderInvoiceHtml, sampleInvoice } from '../services/invoiceHtml.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { buildInvoicePdf } from '../services/pdf.service.js';
 
@@ -57,6 +58,13 @@ export const remove = asyncHandler(async (req, res) => {
   }
 
   await template.update({ detstatus: true, delondt: new Date() });
+
+  // Never leave the company pointing at a template that no longer exists.
+  const company = await Company.findOne();
+  if (company?.defaultInvoiceTemplate === `template:${template.id}`) {
+    await company.update({ defaultInvoiceTemplate: 'standard' });
+  }
+
   res.json({ message: 'Template deleted successfully' });
 });
 
@@ -87,10 +95,8 @@ export const setDefault = asyncHandler(async (req, res) => {
   res.json(template);
 });
 
-// Used for live preview
-export const generateSample = asyncHandler(async (req, res) => {
-  const templateConfig = req.body;
-  
+// Renders a specimen invoice so a template can be previewed without real data.
+async function buildSamplePdf(templateConfig) {
   const dummyInvoice = {
     invoiceNumber: `${templateConfig.invoicePrefix || 'INV-'}0001${templateConfig.invoiceSuffix || ''}`,
     invoiceDate: new Date().toISOString().split('T')[0],
@@ -132,13 +138,44 @@ export const generateSample = asyncHandler(async (req, res) => {
     signatureUrl: templateConfig.authorizedSignatory ? 'dummy' : null 
   };
 
-  // We need to pass the templateConfig to buildInvoicePdf
-  const pdfBuffer = await buildInvoicePdf(dummyInvoice, dummyCompany, templateConfig, templateConfig.invoiceTitle || 'TAX INVOICE');
-  
+  return buildInvoicePdf(dummyInvoice, dummyCompany, templateConfig, templateConfig.invoiceTitle || 'TAX INVOICE');
+}
+
+function sendPdf(res, pdfBuffer, filename) {
   res.set({
     'Content-Type': 'application/pdf',
-    'Content-Disposition': 'inline; filename=sample.pdf',
+    'Content-Disposition': `inline; filename=${filename}`,
     'Content-Length': pdfBuffer.length,
   });
   res.send(pdfBuffer);
+}
+
+// Live preview of a template configuration that has not been saved yet.
+export const generateSample = asyncHandler(async (req, res) => {
+  sendPdf(res, await buildSamplePdf(req.body), 'sample.pdf');
+});
+
+// Block palette for the drag-and-drop designer, so the client never has to
+// keep its own copy of what the renderer supports.
+export const listBlockTypes = asyncHandler(async (_req, res) => {
+  res.json({ blocks: BLOCK_TYPES, defaultLayout: defaultLayout() });
+});
+
+// Live preview while designing: renders the posted layout against sample data.
+export const htmlPreview = asyncHandler(async (req, res) => {
+  const company = await Company.findOne();
+  const html = await renderInvoiceHtml({
+    invoice: sampleInvoice(),
+    company,
+    template: req.body || {},
+    mediaBase: `${req.protocol}://${req.get('host')}`,
+  });
+  res.type('html').send(html);
+});
+
+// Preview a template that is already saved.
+export const previewTemplate = asyncHandler(async (req, res) => {
+  const template = await InvoiceTemplate.findOne({ where: { id: req.params.id, detstatus: false } });
+  if (!template) return res.status(404).json({ message: 'Template not found' });
+  sendPdf(res, await buildSamplePdf(template.toJSON()), `template-${template.id}.pdf`);
 });

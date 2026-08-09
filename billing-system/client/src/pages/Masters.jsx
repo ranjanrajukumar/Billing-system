@@ -277,7 +277,7 @@ function MasterTable({ masterKey, config }) {
         </Stack>
       </Stack>
 
-      {loading ? <Loader /> : <DataTable columns={columns} rows={rows} />}
+      {loading ? <Loader /> : <DataTable columns={columns} rows={rows} meta={meta} />}
       <Pagination meta={meta} onChangePage={(p) => setQuery({ ...query, page: p })} onChangeLimit={(l) => setQuery({ ...query, limit: l })} />
 
       <Modal open={Boolean(editing)} title={editing?.id ? `Update ${config.title}` : `Add ${config.title}`} onClose={() => setEditing(null)}>

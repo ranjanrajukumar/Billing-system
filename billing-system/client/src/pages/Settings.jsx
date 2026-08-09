@@ -2,18 +2,22 @@ import SaveIcon from '@mui/icons-material/Save';
 import ImageIcon from '@mui/icons-material/Image';
 import BusinessIcon from '@mui/icons-material/Business';
 import ReceiptIcon from '@mui/icons-material/Receipt';
+import LoyaltyIcon from '@mui/icons-material/Loyalty';
+import StoreIcon from '@mui/icons-material/Store';
 import {
-  alpha, Box, Button, Divider, Grid, MenuItem, Paper,
-  Stack, TextField, Typography, useTheme,
+  alpha, Box, Button, Divider, FormControlLabel, Grid, MenuItem, Paper,
+  Stack, Switch, TextField, Typography, useTheme,
 } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import Loader from '../components/Loader.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { settingsApi } from '../services/resource.service.js';
 import { useFetch } from '../hooks/useFetch.js';
 import api from '../services/api.js';
+import { mediaUrl } from '../utils/formatters.js';
 
 function SectionCard({ title, icon, children }) {
   const theme = useTheme();
@@ -45,11 +49,12 @@ function SectionCard({ title, icon, children }) {
 
 export default function Settings() {
   const { data, loading, reload } = useFetch(() => settingsApi.get(), []);
-  const { register, handleSubmit, reset, watch, formState: { isSubmitting } } = useForm();
+  const { register, handleSubmit, reset, watch, control, formState: { isSubmitting } } = useForm();
   const [logoPreview, setLogoPreview] = useState('');
   const [templates, setTemplates] = useState([]);
   const { showToast } = useToast();
   const theme = useTheme();
+  const navigate = useNavigate();
 
   useEffect(() => { if (data?.company) reset(data.company); }, [data, reset]);
   useEffect(() => {
@@ -59,10 +64,7 @@ export default function Settings() {
   }, []);
 
   const selectedLogo = watch('logo');
-  const savedLogoUrl = useMemo(() => {
-    const path = data?.company?.logoPath;
-    return path ? (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '') + path : '';
-  }, [data?.company?.logoPath]);
+  const savedLogoUrl = useMemo(() => mediaUrl(data?.company?.logoUrl), [data?.company?.logoUrl]);
 
   useEffect(() => {
     const file = selectedLogo?.[0];
@@ -76,11 +78,20 @@ export default function Settings() {
     const fd = new FormData();
     Object.keys(values).forEach((k) => {
       if (k === 'logo' && values[k]?.[0]) fd.append('logo', values[k][0]);
-      else if (k !== 'logo' && k !== 'logoPath') fd.append(k, values[k] ?? '');
+      else if (!['logo', 'logoPath', 'logoUrl', 'logoMimeType'].includes(k)) fd.append(k, values[k] ?? '');
     });
-    await settingsApi.saveCompany(fd);
-    showToast('Settings saved successfully');
-    reload();
+    try {
+      await settingsApi.saveCompany(fd);
+      showToast('Settings saved successfully');
+      reload();
+    } catch (err) {
+      // A rejected save used to disappear silently, so the form simply looked
+      // like it had reverted on the next reload.
+      const message = err.response?.status === 403
+        ? 'Your role cannot change company settings. Sign in as an Admin or Accountant.'
+        : err.response?.data?.message || 'Failed to save settings';
+      showToast(message, 'error');
+    }
   };
 
   if (loading) return <Loader />;
@@ -184,6 +195,106 @@ export default function Settings() {
             </TextField>
           </Grid>
         </Grid>
+      </SectionCard>
+
+      {/* Branch / operating mode */}
+      <SectionCard title="Branch Setup" icon={<StoreIcon fontSize="small" />}>
+        <Stack spacing={2}>
+          <FormControlLabel
+            control={
+              // Controlled by react-hook-form: `defaultChecked` only applies on
+              // first mount, so it lost the saved value once reset() ran and the
+              // next save wrote that `false` straight back to the database.
+              <Controller
+                name="multiBranchEnabled"
+                control={control}
+                defaultValue={false}
+                render={({ field }) => (
+                  <Switch
+                    checked={Boolean(field.value)}
+                    onChange={(e) => field.onChange(e.target.checked)}
+                  />
+                )}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant="body2" fontWeight={700}>Enable multiple branches</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Off: the whole business runs as one location, exactly as it does today.
+                  On: stock is tracked per branch, staff see only their own branch, and Admins can switch between them.
+                </Typography>
+              </Box>
+            }
+          />
+
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth type="number" label="Credit (udhar) days"
+                inputProps={{ min: 0 }}
+                helperText="Days before a credit sale is treated as overdue"
+                {...register('creditDays')}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} sx={{ display: 'flex', alignItems: 'center' }}>
+              <Button
+                variant="outlined" startIcon={<StoreIcon />}
+                onClick={() => navigate('/branches')}
+                sx={{ borderRadius: 2 }}
+              >
+                Manage Branches
+              </Button>
+            </Grid>
+          </Grid>
+        </Stack>
+      </SectionCard>
+
+      {/* Loyalty */}
+      <SectionCard title="Loyalty Points" icon={<LoyaltyIcon fontSize="small" />}>
+        <Stack spacing={2}>
+          <Controller
+            name="loyaltyEnabled"
+            control={control}
+            defaultValue={Boolean(data?.company?.loyaltyEnabled)}
+            render={({ field }) => (
+              <FormControlLabel
+                control={<Switch checked={Boolean(field.value)} onChange={(e) => field.onChange(e.target.checked)} />}
+                label={
+                  <Box>
+                    <Typography variant="body2" fontWeight={700}>Award loyalty points</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Customers earn points on every bill and can redeem them against a future one.
+                      Redeemed points reduce the taxable value, so GST is charged on the lower figure.
+                    </Typography>
+                  </Box>
+                }
+              />
+            )}
+          />
+
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth type="number" label="Points per ₹100 spent"
+                inputProps={{ min: 0 }} {...register('loyaltyPointsPer100')} InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth type="number" label="Value of 1 point (₹)"
+                inputProps={{ min: 0, step: 'any' }} {...register('loyaltyRedeemValue')} InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth type="number" label="Minimum points to redeem"
+                inputProps={{ min: 0 }} {...register('loyaltyMinRedeem')} InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+          </Grid>
+        </Stack>
       </SectionCard>
 
       {/* Mobile save button */}

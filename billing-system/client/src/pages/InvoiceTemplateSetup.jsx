@@ -6,11 +6,14 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import FileCopyIcon from '@mui/icons-material/FileCopy';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
+import ViewQuiltIcon from '@mui/icons-material/ViewQuilt';
+import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 import TemplateFormModal from '../components/TemplateFormModal';
 import Pagination from '../components/Pagination';
+import { confirmAction } from '../utils/alerts.js';
 
 export default function InvoiceTemplateSetup() {
   const [data, setData] = useState({ data: [], total: 0 });
@@ -18,6 +21,7 @@ export default function InvoiceTemplateSetup() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState(null);
   const { showToast } = useToast();
+  const navigate = useNavigate();
 
   const loadData = async () => {
     try {
@@ -40,7 +44,12 @@ export default function InvoiceTemplateSetup() {
   useEffect(() => { loadData(); }, [params]);
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this template?')) return;
+    const confirmed = await confirmAction({
+      title: 'Delete this template?',
+      text: 'Invoices already created keep their layout; only future ones are affected.',
+      confirmText: 'Yes, delete it',
+    });
+    if (!confirmed) return;
     try {
       await api.delete(`/invoice-templates/${id}`);
       showToast('Template deleted', 'success');
@@ -97,6 +106,11 @@ export default function InvoiceTemplateSetup() {
                       {row.isDefault ? <StarIcon /> : <StarBorderIcon />}
                     </IconButton>
                   </Tooltip>
+                  <Tooltip title="Design layout">
+                    <IconButton size="small" color="primary" onClick={() => navigate(`/invoice-templates/${row.id}/design`)}>
+                      <ViewQuiltIcon />
+                    </IconButton>
+                  </Tooltip>
                   <Tooltip title="Edit">
                     <IconButton size="small" color="primary" onClick={() => { setEditingTemplate(row); setModalOpen(true); }}>
                       <EditIcon />
@@ -117,6 +131,7 @@ export default function InvoiceTemplateSetup() {
             }
           ]}
           rows={data.data}
+          meta={data.meta}
         />
         <Stack sx={{ mt: 2 }}>
           <Pagination

@@ -1,13 +1,29 @@
 import { Op } from 'sequelize';
 import { SalesReturn, SalesReturnItem, Customer, Product, User, StockMovement, Company } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { scopedWhere } from '../middleware/branchContext.js';
 import { sequelize } from '../models/index.js';
-import { buildInvoicePdf } from '../services/pdf.service.js';
+import { documentOutputHandlers } from './documentOutput.js';
+import { adjustStock } from '../services/stock.service.js';
+
+// The client posts items as quantity/rate; the model stores a refund amount.
+function normalizeReturnItems(items = []) {
+  return items.map((item) => {
+    const quantity = Number(item.quantity || 0);
+    const refundAmount = item.refundAmount !== undefined
+      ? Number(item.refundAmount)
+      : quantity * Number(item.rate || 0);
+    return { productId: item.productId, quantity, refundAmount };
+  });
+}
+
+const refundTotal = (items) => normalizeReturnItems(items).reduce((sum, item) => sum + item.refundAmount, 0);
 
 export const getAll = asyncHandler(async (req, res) => {
   const { search, page = 1, limit = 10 } = req.query;
   const offset = (page - 1) * limit;
-  let where = { detstatus: false };
+  // In multi-branch mode a user only sees their own branch's records.
+  let where = scopedWhere(req, { detstatus: false });
   if (search) {
     where['returnNumber'] = { [Op.like]: `%${search}%` };
   }
@@ -55,13 +71,23 @@ export const create = asyncHandler(async (req, res) => {
     if (!data.returnDate) {
       data.returnDate = new Date().toISOString().slice(0, 10);
     }
+    if (!data.totalRefund && items && items.length > 0) {
+      data.totalRefund = refundTotal(items);
+    }
     const parent = await SalesReturn.create(data, { transaction: t });
     if (items && items.length > 0) {
-      const parentIdField = 'returnId';
-      const itemsData = items.map(item => ({ ...item, [parentIdField]: parent.id, authadd: req.user.id }));
+      const itemsData = normalizeReturnItems(items).map(item => ({ ...item, returnId: parent.id, authadd: req.user.id }));
       await SalesReturnItem.bulkCreate(itemsData, { transaction: t });
 
-      await Promise.all(items.map((item) => Product.increment('stock', { by: item.quantity, where: { id: item.productId }, transaction: t })));
+      for (const item of normalizeReturnItems(items)) {
+        await adjustStock({
+          productId: item.productId,
+          branchId: req.branchId,
+          delta: Number(item.quantity),
+          transaction: t,
+          userId: req.user.id,
+        });
+      }
       
       await StockMovement.bulkCreate(items.map((item) => ({
         productId: item.productId,
@@ -89,9 +115,8 @@ export const update = asyncHandler(async (req, res) => {
     await SalesReturn.update(data, { where: { id: req.params.id }, transaction: t });
 
     if (items) {
-      const parentIdField = 'returnId';
-      await SalesReturnItem.destroy({ where: { [parentIdField]: req.params.id }, transaction: t });
-      const itemsData = items.map(item => ({ ...item, [parentIdField]: req.params.id, authadd: req.user.id }));
+      await SalesReturnItem.destroy({ where: { returnId: req.params.id }, transaction: t });
+      const itemsData = normalizeReturnItems(items).map(item => ({ ...item, returnId: req.params.id, authadd: req.user.id }));
       await SalesReturnItem.bulkCreate(itemsData, { transaction: t });
     }
   });
@@ -107,37 +132,9 @@ export const remove = asyncHandler(async (req, res) => {
   res.json({ message: 'Deleted successfully' });
 });
 
-export const downloadPdf = asyncHandler(async (req, res) => {
-  const salesReturn = await SalesReturn.findOne({
-    where: { id: req.params.id, detstatus: false },
-    include: [{ model: Customer }, { model: SalesReturnItem, include: [Product] }]
-  });
-  if (!salesReturn) return res.status(404).json({ message: 'Not found' });
-  
-  // Transform SalesReturn format into what buildInvoicePdf expects
-  const invoiceMock = {
-    invoiceNumber: salesReturn.returnNumber,
-    invoiceDate: salesReturn.returnDate,
-    Customer: salesReturn.Customer,
-    grandTotal: salesReturn.totalRefund,
-    subtotal: salesReturn.totalRefund, // simplified
-    cgst: 0, sgst: 0, igst: 0, roundOff: 0,
-    amountInWords: '', // Could use a words library
-    InvoiceItems: salesReturn.SalesReturnItems.map(item => ({
-      Product: item.Product,
-      quantity: item.quantity,
-      rate: item.refundAmount / item.quantity,
-      discount: 0,
-      gstPercent: 0,
-      amount: item.refundAmount
-    }))
-  };
-
-  const company = await Company.findOne();
-  const template = req.query.template || 'standard';
-  const buffer = await buildInvoicePdf(invoiceMock, company, template, 'CREDIT NOTE');
-  
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="${salesReturn.returnNumber}.pdf"`);
-  res.send(buffer);
+const loadReturn = (req) => SalesReturn.findOne({
+  where: { id: req.params.id, detstatus: false },
+  include: [{ model: Customer }, { model: SalesReturnItem, include: [Product] }]
 });
+
+export const { downloadPdf, html } = documentOutputHandlers('salesReturn', loadReturn);

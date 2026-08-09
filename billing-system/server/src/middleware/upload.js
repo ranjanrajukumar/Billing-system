@@ -1,19 +1,14 @@
 import multer from 'multer';
-import path from 'path';
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, 'uploads/'),
-  filename: (_req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${unique}${path.extname(file.originalname)}`);
-  }
-});
-
+// Images are persisted as BLOBs in the database, so uploads stay in memory
+// and never touch the filesystem.
 export const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 2 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (!file.mimetype.startsWith('image/')) return cb(new Error('Only image uploads are allowed'));
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(Object.assign(new Error('Only image uploads are allowed'), { status: 400 }));
+    }
     cb(null, true);
   }
 });

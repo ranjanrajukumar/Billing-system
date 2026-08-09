@@ -14,6 +14,7 @@ import DataTable from '../components/DataTable.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import { reportsApi } from '../services/resource.service.js';
 import { currency, date } from '../utils/formatters.js';
+import { printDocument } from '../utils/print.js';
 
 const REPORT_TYPES = [
   { key: 'sales', label: 'Sales', icon: <ReceiptIcon fontSize="small" />, color: 'primary' },
@@ -23,21 +24,22 @@ const REPORT_TYPES = [
   { key: 'inventory', label: 'Inventory', icon: <Inventory2Icon fontSize="small" />, color: 'secondary' },
 ];
 
+// `render` draws the on-screen cell; `text` is the plain value used when printing.
 const COLUMNS_MAP = {
   sales: [
     { field: 'invoiceNumber', headerName: 'Invoice #', render: (r) => <Typography fontWeight={700} color="primary.main">{r.invoiceNumber}</Typography> },
-    { field: 'invoiceDate', headerName: 'Date', render: (r) => date(r.invoiceDate) },
-    { field: 'subtotal', headerName: 'Subtotal', render: (r) => currency(r.subtotal) },
-    { field: 'gst', headerName: 'Total GST', render: (r) => currency(Number(r.cgst || 0) + Number(r.sgst || 0) + Number(r.igst || 0)) },
-    { field: 'grandTotal', headerName: 'Grand Total', render: (r) => <Typography fontWeight={700} color="success.main">{currency(r.grandTotal)}</Typography> },
+    { field: 'invoiceDate', headerName: 'Date', render: (r) => date(r.invoiceDate), text: (r) => date(r.invoiceDate) },
+    { field: 'subtotal', headerName: 'Subtotal', numeric: true, render: (r) => currency(r.subtotal), text: (r) => currency(r.subtotal) },
+    { field: 'gst', headerName: 'Total GST', numeric: true, render: (r) => currency(Number(r.cgst || 0) + Number(r.sgst || 0) + Number(r.igst || 0)), text: (r) => currency(Number(r.cgst || 0) + Number(r.sgst || 0) + Number(r.igst || 0)) },
+    { field: 'grandTotal', headerName: 'Grand Total', numeric: true, render: (r) => <Typography fontWeight={700} color="success.main">{currency(r.grandTotal)}</Typography>, text: (r) => currency(r.grandTotal) },
   ],
   gst: [
     { field: 'invoiceNumber', headerName: 'Invoice #' },
-    { field: 'invoiceDate', headerName: 'Date', render: (r) => date(r.invoiceDate) },
-    { field: 'cgst', headerName: 'CGST', render: (r) => currency(r.cgst) },
-    { field: 'sgst', headerName: 'SGST', render: (r) => currency(r.sgst) },
-    { field: 'igst', headerName: 'IGST', render: (r) => currency(r.igst) },
-    { field: 'grandTotal', headerName: 'Total', render: (r) => currency(r.grandTotal) },
+    { field: 'invoiceDate', headerName: 'Date', render: (r) => date(r.invoiceDate), text: (r) => date(r.invoiceDate) },
+    { field: 'cgst', headerName: 'CGST', numeric: true, render: (r) => currency(r.cgst), text: (r) => currency(r.cgst) },
+    { field: 'sgst', headerName: 'SGST', numeric: true, render: (r) => currency(r.sgst), text: (r) => currency(r.sgst) },
+    { field: 'igst', headerName: 'IGST', numeric: true, render: (r) => currency(r.igst), text: (r) => currency(r.igst) },
+    { field: 'grandTotal', headerName: 'Total', numeric: true, render: (r) => currency(r.grandTotal), text: (r) => currency(r.grandTotal) },
   ],
   customers: [
     { field: 'customerName', headerName: 'Customer' },
@@ -47,14 +49,14 @@ const COLUMNS_MAP = {
   ],
   products: [
     { field: 'productName', headerName: 'Product' },
-    { field: 'stock', headerName: 'Stock' },
-    { field: 'sellingPrice', headerName: 'Price', render: (r) => currency(r.sellingPrice) },
+    { field: 'stock', headerName: 'Stock', numeric: true },
+    { field: 'sellingPrice', headerName: 'Price', numeric: true, render: (r) => currency(r.sellingPrice), text: (r) => currency(r.sellingPrice) },
   ],
   inventory: [
     { field: 'productName', headerName: 'Product' },
-    { field: 'stock', headerName: 'Stock' },
-    { field: 'sellingPrice', headerName: 'Unit Price', render: (r) => currency(r.sellingPrice) },
-    { field: 'value', headerName: 'Stock Value', render: (r) => currency(Number(r.stock || 0) * Number(r.sellingPrice || 0)) },
+    { field: 'stock', headerName: 'Stock', numeric: true },
+    { field: 'sellingPrice', headerName: 'Unit Price', numeric: true, render: (r) => currency(r.sellingPrice), text: (r) => currency(r.sellingPrice) },
+    { field: 'value', headerName: 'Stock Value', numeric: true, render: (r) => currency(Number(r.stock || 0) * Number(r.sellingPrice || 0)), text: (r) => currency(Number(r.stock || 0) * Number(r.sellingPrice || 0)) },
   ],
 };
 
@@ -86,6 +88,27 @@ export default function Reports() {
   const exportExcel = async () => {
     const blob = await reportsApi.export(currentType.key);
     window.open(URL.createObjectURL(blob), '_blank');
+  };
+
+  // Print the report rows on their own, without the surrounding app chrome.
+  const printReport = () => {
+    const period = filters.from || filters.to
+      ? `Period: ${filters.from || 'beginning'} to ${filters.to || 'today'}`
+      : 'All records';
+    const salesTotal = rows.reduce((sum, r) => sum + Number(r.grandTotal || 0), 0);
+    printDocument({
+      title: `${currentType.label} Report`,
+      subtitle: `${period}  •  ${rows.length} records`,
+      columns: (COLUMNS_MAP[currentType.key] || []).map((column) => ({
+        header: column.headerName,
+        numeric: column.numeric,
+        value: (row) => (column.text ? column.text(row) : row[column.field] ?? ''),
+      })),
+      rows,
+      summary: currentType.key === 'sales'
+        ? [{ label: 'Total', value: currency(salesTotal), total: true }]
+        : [],
+    });
   };
 
   return (
@@ -198,7 +221,7 @@ export default function Reports() {
                 <Button
                   size="small"
                   startIcon={<PictureAsPdfIcon />}
-                  onClick={() => window.print()}
+                  onClick={printReport}
                   variant="outlined"
                   sx={{ borderRadius: 2 }}
                 >

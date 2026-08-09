@@ -9,7 +9,9 @@ import { LineChart } from '@mui/x-charts';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import Loader from '../components/Loader.jsx';
+import ExpiryAlerts from '../components/ExpiryAlerts.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import ProductPerformance from '../components/ProductPerformance.jsx';
 import StatsCard from '../components/StatsCard.jsx';
 import { dashboardApi } from '../services/resource.service.js';
 import { currency, date } from '../utils/formatters.js';
@@ -50,6 +52,9 @@ export default function Dashboard() {
         title="Dashboard"
         subtitle="Welcome back! Here's what's happening today."
       />
+
+      {/* Seed lots past or near their sowing validity */}
+      <ExpiryAlerts />
 
       {/* KPI Cards */}
       <Grid container spacing={2} className="stagger-children">
@@ -202,6 +207,9 @@ export default function Dashboard() {
           </Paper>
         </Grid>
       </Grid>
+
+      {/* Best and worst sellers, by month or year */}
+      <ProductPerformance />
 
       {/* Recent Invoices */}
       <Paper variant="outlined" sx={{ borderRadius: 3, p: 2.5 }}>

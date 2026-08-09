@@ -6,6 +6,8 @@ export default (sequelize) => sequelize.define('SalesOrderItem', {
 
   quantity: { type: DataTypes.FLOAT, allowNull: false },
   unitPrice: { type: DataTypes.FLOAT, allowNull: false },
+  discount: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
+  gstPercent: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
   totalPrice: { type: DataTypes.FLOAT, allowNull: false },
   authadd: { type: DataTypes.INTEGER, allowNull: true },
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },

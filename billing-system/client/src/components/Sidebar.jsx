@@ -1,4 +1,6 @@
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import ScienceIcon from '@mui/icons-material/Science';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import InventoryIcon from '@mui/icons-material/Inventory2';
 import CategoryIcon from '@mui/icons-material/Category';
@@ -12,6 +14,15 @@ import GroupIcon from '@mui/icons-material/Group';
 import ArticleIcon from '@mui/icons-material/Article';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import KeyboardReturnIcon from '@mui/icons-material/KeyboardReturn';
+import ShoppingBasketIcon from '@mui/icons-material/ShoppingBasket';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import StoreIcon from '@mui/icons-material/Store';
+import HistoryIcon from '@mui/icons-material/History';
+import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import {
   alpha,
   Box,
@@ -27,6 +38,8 @@ import {
   useTheme,
 } from '@mui/material';
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext.jsx';
+import { canOpen } from '../utils/access.js';
 
 const DRAWER_WIDTH = 256;
 
@@ -42,8 +55,15 @@ const navGroups = [
     items: [
       { label: 'Invoices', path: '/invoices', icon: <ReceiptIcon fontSize="small" /> },
       { label: 'Sales Orders', path: '/sales-orders', icon: <ShoppingCartIcon fontSize="small" /> },
+      { label: 'Quotations', path: '/quotations', icon: <RequestQuoteIcon fontSize="small" /> },
+      { label: 'Delivery Challans', path: '/delivery-challans', icon: <LocalShippingIcon fontSize="small" /> },
+      { label: 'Sales Returns', path: '/sales-returns', icon: <KeyboardReturnIcon fontSize="small" /> },
       { label: 'Customers', path: '/customers', icon: <PeopleIcon fontSize="small" /> },
+      { label: 'Udhar (Credit)', path: '/udhar', icon: <AccountBalanceWalletIcon fontSize="small" /> },
+      { label: 'Khata Book', path: '/khata', icon: <MenuBookIcon fontSize="small" /> },
+      { label: 'Coupons', path: '/coupons', icon: <LocalOfferIcon fontSize="small" /> },
       { label: 'Reports', path: '/reports', icon: <AssessmentIcon fontSize="small" /> },
+      { label: 'GST & Receivables', path: '/tax-reports', icon: <AccountBalanceIcon fontSize="small" /> },
     ],
   },
   {
@@ -51,6 +71,9 @@ const navGroups = [
     items: [
       { label: 'Products', path: '/products', icon: <CategoryIcon fontSize="small" /> },
       { label: 'Inventory', path: '/inventory', icon: <InventoryIcon fontSize="small" /> },
+      { label: 'Seed Batches', path: '/batches', icon: <ScienceIcon fontSize="small" /> },
+      { label: 'Purchases', path: '/purchases', icon: <ShoppingBasketIcon fontSize="small" /> },
+      { label: 'Suppliers', path: '/suppliers', icon: <StorefrontIcon fontSize="small" /> },
       { label: 'Masters', path: '/masters', icon: <ListAltIcon fontSize="small" /> },
     ],
   },
@@ -58,6 +81,8 @@ const navGroups = [
     label: 'Administration',
     items: [
       { label: 'Users & Roles', path: '/users', icon: <GroupIcon fontSize="small" /> },
+      { label: 'Branches', path: '/branches', icon: <StoreIcon fontSize="small" /> },
+      { label: 'Audit Logs', path: '/audit-logs', icon: <HistoryIcon fontSize="small" /> },
       { label: 'Invoice Templates', path: '/invoice-templates', icon: <ArticleIcon fontSize="small" /> },
       { label: 'Settings', path: '/settings', icon: <SettingsIcon fontSize="small" /> },
       { label: 'Profile', path: '/profile', icon: <PersonIcon fontSize="small" /> },
@@ -121,6 +146,13 @@ function NavItem({ label, path, icon, onClose }) {
 function SidebarContent({ onClose }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+  const { user } = useAuth();
+
+  // Hide what this role cannot open, so the menu never offers a page that
+  // answers with "Forbidden". The server still enforces the real rules.
+  const visibleGroups = navGroups
+    .map((group) => ({ ...group, items: group.items.filter((item) => canOpen(item.path, user?.role, user?.menus)) }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <Box sx={{ width: DRAWER_WIDTH, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -128,7 +160,9 @@ function SidebarContent({ onClose }) {
       <Box
         sx={{
           px: 2.5,
-          py: 2.5,
+          // Matches the Navbar toolbar height so the brand block and the header
+          // share a baseline and their bottom borders line up.
+          height: { xs: 56, sm: 64 },
           display: 'flex',
           alignItems: 'center',
           gap: 1.5,
@@ -174,7 +208,7 @@ function SidebarContent({ onClose }) {
 
       {/* Nav Groups */}
       <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', px: 1.5, py: 1.5 }}>
-        {navGroups.map((group, gi) => (
+        {visibleGroups.map((group, gi) => (
           <Box key={group.label} sx={{ mb: 1.5 }}>
             <Typography
               variant="caption"

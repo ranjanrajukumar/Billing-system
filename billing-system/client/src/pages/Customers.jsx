@@ -80,7 +80,14 @@ export default function Customers() {
       showToast(details ? `${msg}: ${details}` : msg, 'error');
     }
   };
-  const viewDetails = async (row) => { const c = await customersApi.get(row.id); setViewing(c); };
+  const viewDetails = async (row) => {
+    try {
+      setViewing(await customersApi.get(row.id));
+    } catch (err) {
+      // Without this the click silently did nothing when the request failed.
+      showToast(err.response?.data?.message || 'Unable to load customer details', 'error');
+    }
+  };
   const remove = async () => {
     await customersApi.remove(deleting.id);
     showToast('Customer deleted');
@@ -176,6 +183,7 @@ export default function Customers() {
               )},
             ]}
             rows={rows}
+            meta={meta}
           />
           <Pagination meta={meta} onChangePage={(p) => setQuery({ ...query, page: p })} onChangeLimit={(l) => setQuery({ ...query, limit: l })} />
         </>

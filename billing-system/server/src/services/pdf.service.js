@@ -5,6 +5,17 @@ import path from 'path';
 
 const money = (n) => Number(n || 0).toFixed(2);
 
+// Logos live in the database as bytes. PDFKit accepts a Buffer directly; the
+// disk fallback keeps company records that predate the migration rendering.
+function companyLogo(company) {
+  if (company?.logoData) return company.logoData;
+  if (company?.logoPath) {
+    const logoFile = path.join(process.cwd(), company.logoPath);
+    if (fs.existsSync(logoFile)) return logoFile;
+  }
+  return null;
+}
+
 export async function buildInvoicePdf(invoice, company, template = 'standard', title = 'TAX INVOICE') {
   const qr = await QRCode.toBuffer(`${invoice.invoiceNumber}|${invoice.grandTotal}`);
   
@@ -154,12 +165,10 @@ export async function buildInvoicePdf(invoice, company, template = 'standard', t
       
       // Header Text
       let headerX = 40;
-      if (company?.logoPath) {
-        const logoFile = path.join(process.cwd(), company.logoPath);
-        if (fs.existsSync(logoFile)) {
-          doc.image(logoFile, 40, 35, { width: 50 });
-          headerX = 100;
-        }
+      const logo = companyLogo(company);
+      if (logo) {
+        doc.image(logo, 40, 35, { width: 50 });
+        headerX = 100;
       }
       doc.fillColor('#ffffff').fontSize(26).text(company?.name || 'Billing System', headerX, 40);
       doc.fontSize(9).text(company?.address || '', headerX, 75);
@@ -232,12 +241,10 @@ export async function buildInvoicePdf(invoice, company, template = 'standard', t
     } else if (template === 'modern') {
       doc.rect(0, 0, 595, 120).fill('#2196f3');
       let headerX = 40;
-      if (company?.logoPath) {
-        const logoFile = path.join(process.cwd(), company.logoPath);
-        if (fs.existsSync(logoFile)) {
-          doc.image(logoFile, 40, 35, { width: 50 });
-          headerX = 100;
-        }
+      const logo = companyLogo(company);
+      if (logo) {
+        doc.image(logo, 40, 35, { width: 50 });
+        headerX = 100;
       }
       doc.fillColor('#ffffff').fontSize(24).text(company?.name || 'Billing System', headerX, 40);
       doc.fontSize(10).text(company?.address || '', headerX, 70);
@@ -287,12 +294,10 @@ export async function buildInvoicePdf(invoice, company, template = 'standard', t
         doc.text('Authorized Signatory', 400, y + 100, { align: 'right' });
       }
     } else if (template === 'compact') {
-      if (company?.logoPath) {
-        const logoFile = path.join(process.cwd(), company.logoPath);
-        if (fs.existsSync(logoFile)) {
-          doc.image(logoFile, 20, 20, { width: 30 });
-          doc.moveDown(1.5);
-        }
+      const logo = companyLogo(company);
+      if (logo) {
+        doc.image(logo, 20, 20, { width: 30 });
+        doc.moveDown(1.5);
       }
       doc.fontSize(14).text(company?.name || 'Billing System');
       doc.fontSize(8).text(company?.address || '');
@@ -326,12 +331,10 @@ export async function buildInvoicePdf(invoice, company, template = 'standard', t
       doc.text(invoice.amountInWords);
       doc.image(qr, 20, doc.y + 10, { width: 50 });
     } else {
-      if (company?.logoPath) {
-        const logoFile = path.join(process.cwd(), company.logoPath);
-        if (fs.existsSync(logoFile)) {
-          doc.image(logoFile, 267, 30, { width: 60, align: 'center' });
-          doc.moveDown(3);
-        }
+      const logo = companyLogo(company);
+      if (logo) {
+        doc.image(logo, 267, 30, { width: 60, align: 'center' });
+        doc.moveDown(3);
       }
       doc.fontSize(20).text(company?.name || 'Billing System', { align: 'center' });
       doc.fontSize(10).text(company?.address || '', { align: 'center' });

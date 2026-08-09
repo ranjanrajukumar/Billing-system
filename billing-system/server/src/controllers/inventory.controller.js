@@ -3,6 +3,7 @@ import { sequelize, Product, StockMovement, User } from '../models/index.js';
 import { buildInventorySummary } from '../services/product.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { getPagination, paged } from '../utils/pagination.js';
+import { adjustStock as applyStockChange } from '../services/stock.service.js';
 
 export const getSummary = asyncHandler(async (_req, res) => {
   const products = await Product.findAll({
@@ -50,15 +51,14 @@ export const adjustStock = asyncHandler(async (req, res) => {
     if (!product) throw Object.assign(new Error('Product not found'), { status: 404 });
 
     const qty = Number(quantity);
-    if (type === 'Adjustment Out' && Number(product.stock) < qty) {
-      throw Object.assign(new Error(`Insufficient stock for ${product.productName}`), { status: 409 });
-    }
-
-    if (type === 'Adjustment In' || type === 'Opening Stock') {
-      await product.increment('stock', { by: qty, transaction: t });
-    } else {
-      await product.decrement('stock', { by: qty, transaction: t });
-    }
+    const adding = type === 'Adjustment In' || type === 'Opening Stock';
+    await applyStockChange({
+      productId: product.id,
+      branchId: req.branchId,
+      delta: adding ? qty : -qty,
+      transaction: t,
+      userId: req.user.id,
+    });
 
     const movement = await StockMovement.create({
       productId: product.id,
