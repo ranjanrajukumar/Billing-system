@@ -9,7 +9,10 @@ export default (sequelize) => sequelize.define('Product', {
   sellingPrice: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
   gstPercent: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 0 },
   stock: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
-  barcode: { type: DataTypes.STRING(80), unique: true },
+  // Not unique in the database: products are soft deleted, and a unique index
+  // would keep a removed product's barcode locked forever. Uniqueness among
+  // live products is enforced in the controller instead.
+  barcode: { type: DataTypes.STRING(80) },
   lowStockThreshold: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 5 },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
   imagePath: { type: DataTypes.STRING(255) },

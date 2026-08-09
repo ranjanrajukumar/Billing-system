@@ -1,6 +1,7 @@
 import { Customer, Invoice, Payment, sequelize } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { getPagination, paged } from '../utils/pagination.js';
+import { withDateTimeRange } from '../utils/dateRange.js';
 
 const round2 = (value) => Math.round(Number(value || 0) * 100) / 100;
 
@@ -23,7 +24,7 @@ export async function syncInvoiceStatus(invoice, transaction) {
 
 export const listPayments = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  const where = { detstatus: false };
+  let where = withDateTimeRange({ detstatus: false }, req.query, 'paidAt');
   if (req.query.invoiceId) where.invoiceId = req.query.invoiceId;
 
   const { rows, count } = await Payment.findAndCountAll({

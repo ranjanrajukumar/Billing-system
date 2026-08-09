@@ -10,6 +10,7 @@ export const MENU_CATALOGUE = [
     { key: 'dashboard', label: 'Dashboard', path: '/' },
   ]},
   { group: 'Sales', items: [
+    { key: 'quickBill', label: 'Quick Bill', path: '/quick-bill' },
     { key: 'invoices', label: 'Invoices', path: '/invoices' },
     { key: 'salesOrders', label: 'Sales Orders', path: '/sales-orders' },
     { key: 'quotations', label: 'Quotations', path: '/quotations' },
@@ -34,6 +35,7 @@ export const MENU_CATALOGUE = [
     { key: 'users', label: 'Users & Roles', path: '/users' },
     { key: 'branches', label: 'Branches', path: '/branches' },
     { key: 'auditLogs', label: 'Audit Logs', path: '/audit-logs' },
+    { key: 'backups', label: 'Backup & Restore', path: '/backups' },
     { key: 'invoiceTemplates', label: 'Invoice Templates', path: '/invoice-templates' },
     { key: 'settings', label: 'Settings', path: '/settings' },
     { key: 'profile', label: 'Profile', path: '/profile' },
@@ -50,7 +52,7 @@ export const DEFAULT_MENUS_BY_ROLE = {
   Admin: ALL_MENU_KEYS,
   Accountant: ALL_MENU_KEYS.filter((key) => key !== 'users'),
   Sales: [
-    'dashboard', 'invoices', 'salesOrders', 'quotations', 'deliveryChallans',
+    'dashboard', 'quickBill', 'invoices', 'salesOrders', 'quotations', 'deliveryChallans',
     'salesReturns', 'customers', 'udhar', 'khata',
     // Counter staff need to see lots to pick one while billing.
     'products', 'inventory', 'batches', 'profile',

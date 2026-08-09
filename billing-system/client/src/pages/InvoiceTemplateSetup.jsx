@@ -26,14 +26,16 @@ export default function InvoiceTemplateSetup() {
   const loadData = async () => {
     try {
       const res = await api.get('/invoice-templates', { params });
+      // Every list endpoint answers { data, meta } — read it the same way here.
+      const meta = res.data.meta || {};
       setData({
         data: res.data.data || [],
-        total: res.data.total || 0,
+        total: meta.total || 0,
         meta: {
-          page: res.data.page || 1,
-          limit: res.data.limit || 10,
-          total: res.data.total || 0,
-          pages: res.data.pages || 1
+          page: meta.page || 1,
+          limit: meta.limit || 10,
+          total: meta.total || 0,
+          pages: meta.pages || 1
         }
       });
     } catch (error) {

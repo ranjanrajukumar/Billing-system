@@ -4,6 +4,8 @@ import RoleRoute from '../components/RoleRoute.jsx';
 import AppLayout from '../layouts/AppLayout.jsx';
 import AuditLogs from '../pages/AuditLogs.jsx';
 import Branches from '../pages/Branches.jsx';
+import Backups from '../pages/Backups.jsx';
+import QuickBill from '../pages/QuickBill.jsx';
 import Batches from '../pages/Batches.jsx';
 import TaxReports from '../pages/TaxReports.jsx';
 import Coupons from '../pages/Coupons.jsx';
@@ -49,6 +51,7 @@ export default function AppRoutes({ mode, onToggleMode }) {
           <Route path="sales-returns" element={<SalesReturns />} />
           <Route path="udhar" element={<Udhar />} />
           <Route path="khata" element={<Khata />} />
+          <Route path="quick-bill" element={<QuickBill />} />
           <Route path="coupons" element={<Coupons />} />
           <Route path="batches" element={<Batches />} />
           <Route path="suppliers" element={<Suppliers />} />
@@ -60,6 +63,7 @@ export default function AppRoutes({ mode, onToggleMode }) {
           <Route path="settings" element={<Settings />} />
           <Route path="branches" element={<Branches />} />
           <Route path="audit-logs" element={<RoleRoute><AuditLogs /></RoleRoute>} />
+          <Route path="backups" element={<RoleRoute><Backups /></RoleRoute>} />
           <Route path="invoice-templates" element={<InvoiceTemplateSetup />} />
           <Route path="invoice-templates/:id/design" element={<InvoiceDesigner />} />
           <Route path="profile" element={<Profile />} />

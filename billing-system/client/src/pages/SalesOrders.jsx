@@ -16,6 +16,7 @@ import Loader from '../components/Loader.jsx';
 import Modal from '../components/Modal.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import Pagination from '../components/Pagination.jsx';
+import PeriodFilter from '../components/PeriodFilter.jsx';
 import StatsCard from '../components/StatsCard.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { customersApi, salesOrdersApi, productsApi } from '../services/resource.service.js';
@@ -39,7 +40,7 @@ const STATUS_COLORS = { Pending: 'warning', Approved: 'info', Shipped: 'primary'
 export default function SalesOrders() {
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({});
-  const [query, setQuery] = useState({ page: 1, limit: 10 });
+  const [query, setQuery] = useState({ page: 1, limit: 10 , period: 'all', from: '', to: '', month: '' });
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [customers, setCustomers] = useState([]);
@@ -164,6 +165,11 @@ export default function SalesOrders() {
         }
       />
 
+      <PeriodFilter
+        value={query}
+        onChange={(range) => setQuery({ ...query, ...range, page: 1 })}
+      />
+
       {/* Stats */}
       <Grid container spacing={2}>
         <Grid item xs={6} md={3}>
@@ -181,7 +187,8 @@ export default function SalesOrders() {
       </Grid>
 
       {/* Table */}
-      {loading ? <Loader /> : (
+      {loading && rows.length === 0 ? <Loader /> : (
+        <Box sx={{ opacity: loading ? 0.55 : 1, transition: 'opacity 0.15s' }}>
         <>
           <DataTable
             mobileKeyField="orderNumber"
@@ -204,6 +211,7 @@ export default function SalesOrders() {
           />
           <Pagination meta={meta} onChangePage={(p) => setQuery({ ...query, page: p })} onChangeLimit={(l) => setQuery({ ...query, limit: l })} />
         </>
+        </Box>
       )}
 
       {/* Create Modal */}
@@ -249,7 +257,7 @@ export default function SalesOrders() {
                       </Grid>
                     ))}
                     <Grid item xs={6} sm={3} md={0.5}>
-                      <IconButton size="small" color="error" onClick={() => setItems(items.filter((_, idx) => idx !== i))} disabled={items.length === 1}>
+                      <IconButton type="button" size="small" color="error" onClick={() => setItems(items.filter((_, idx) => idx !== i))} disabled={items.length === 1}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </Grid>
@@ -257,7 +265,7 @@ export default function SalesOrders() {
                   {i < items.length - 1 && <Divider sx={{ mt: 1.5 }} />}
                 </Box>
               ))}
-              <Button startIcon={<AddIcon />} onClick={() => setItems([...items, blankItem])} sx={{ alignSelf: 'flex-start' }}>Add Product</Button>
+              <Button type="button" startIcon={<AddIcon />} onClick={() => setItems([...items, blankItem])} sx={{ alignSelf: 'flex-start' }}>Add Product</Button>
             </Stack>
           </Paper>
 
@@ -286,8 +294,8 @@ export default function SalesOrders() {
           </Grid>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="flex-end">
-            <Button onClick={() => setOpen(false)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
-            <Button onClick={printDraft} startIcon={<PrintIcon />} variant="outlined" sx={{ borderRadius: 2 }}>Print</Button>
+            <Button type="button" onClick={() => setOpen(false)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+            <Button type="button" onClick={printDraft} startIcon={<PrintIcon />} variant="outlined" sx={{ borderRadius: 2 }}>Print</Button>
             <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ borderRadius: 2 }}>
               {isSubmitting ? 'Saving…' : 'Save Order'}
             </Button>

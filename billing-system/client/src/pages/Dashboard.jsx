@@ -4,8 +4,9 @@ import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import { alpha, Box, Button, Chip, Grid, Paper, Stack, Typography, useTheme } from '@mui/material';
+import { alpha, Box, Button, Chip, Grid, LinearProgress, Paper, Stack, Typography, useTheme } from '@mui/material';
 import { LineChart } from '@mui/x-charts';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import Loader from '../components/Loader.jsx';
@@ -16,6 +17,7 @@ import StatsCard from '../components/StatsCard.jsx';
 import { dashboardApi } from '../services/resource.service.js';
 import { currency, date } from '../utils/formatters.js';
 import { useFetch } from '../hooks/useFetch.js';
+import PeriodFilter from '../components/PeriodFilter.jsx';
 
 function statusChip(row) {
   const status = row.paymentMethod === 'Credit' ? 'Pending' : 'Paid';
@@ -31,7 +33,8 @@ function statusChip(row) {
 }
 
 export default function Dashboard() {
-  const { data, loading, error } = useFetch(() => dashboardApi.get(), []);
+  const [period, setPeriod] = useState({ period: 'all', from: '', to: '' , month: '' });
+  const { data, loading, refreshing, error } = useFetch(() => dashboardApi.get(period), [period]);
   const theme = useTheme();
   const navigate = useNavigate();
 
@@ -102,16 +105,40 @@ export default function Dashboard() {
         <Grid item xs={12} lg={8}>
           <Paper
             variant="outlined"
-            sx={{ borderRadius: 3, p: 2.5, height: '100%' }}
+            sx={{ borderRadius: 3, p: 2.5, height: '100%', position: 'relative', overflow: 'hidden' }}
           >
-            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+            {/* Changing the period reloads only this card. A thin bar along the
+                top says so without the chart jumping or the page blanking. */}
+            {refreshing && (
+              <LinearProgress
+                sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2 }}
+              />
+            )}
+            {/* The period control lives here rather than at the top of the
+                page, because it governs this chart alone — the cards above are
+                today's and this month's figures whatever is selected. */}
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }} spacing={1}
+              justifyContent="space-between" alignItems={{ sm: 'center' }} mb={2}
+            >
               <Box>
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>Revenue Trend</Typography>
-                <Typography variant="caption" color="text.secondary">Last 30 days sales</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {/* Say what is actually plotted rather than a fixed claim. */}
+                  {data.period?.from || data.period?.to
+                    ? `${data.period.from || 'the beginning'} to ${data.period.to || 'today'}`
+                    : 'All recorded sales'}
+                </Typography>
               </Box>
-              <Chip label="Monthly" size="small" color="primary" variant="outlined" />
+              <PeriodFilter
+                disableContainer
+                value={period}
+                onChange={(next) => setPeriod({ ...period, ...next })}
+              />
             </Stack>
             {chart.length > 0 ? (
+              // Dimmed rather than removed, so the axes hold their place.
+              <Box sx={{ opacity: refreshing ? 0.55 : 1, transition: 'opacity 0.15s' }}>
               <LineChart
                 height={260}
                 dataset={chart}
@@ -128,6 +155,7 @@ export default function Dashboard() {
                   '& .MuiLineElement-root': { strokeWidth: 2.5 },
                 }}
               />
+              </Box>
             ) : (
               <Box sx={{ textAlign: 'center', py: 5, color: 'text.secondary' }}>
                 <TrendingUpIcon sx={{ fontSize: 40, opacity: 0.3 }} />

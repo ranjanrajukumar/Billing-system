@@ -241,7 +241,7 @@ export default function Inventory() {
           <TextField fullWidth type="number" label="Quantity" inputProps={{ min: 1 }} {...register('quantity', { required: true, min: 1 })} />
           <TextField fullWidth multiline minRows={2} label="Notes / Reason" {...register('notes', { required: true })} />
           <Stack direction="row" spacing={1} justifyContent="flex-end">
-            <Button onClick={() => setOpen(false)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+            <Button type="button" onClick={() => setOpen(false)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
             <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ borderRadius: 2 }}>
               {isSubmitting ? 'Saving…' : 'Save Adjustment'}
             </Button>

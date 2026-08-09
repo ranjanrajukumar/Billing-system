@@ -4,7 +4,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import ScienceIcon from '@mui/icons-material/Science';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import {
-  Alert, Button, Chip, Grid, IconButton, MenuItem, Stack, Tab, Tabs,
+  Alert, Box, Button, Chip, Grid, IconButton, MenuItem, Stack, Tab, Tabs,
   TextField, Tooltip, Typography,
 } from '@mui/material';
 import { useEffect, useState } from 'react';
@@ -156,7 +156,8 @@ export default function Batches() {
         {TABS.map((t) => <Tab key={t.key} value={t.key} label={t.label} />)}
       </Tabs>
 
-      {loading ? <Loader /> : (
+      {loading && rows.length === 0 ? <Loader /> : (
+        <Box sx={{ opacity: loading ? 0.55 : 1, transition: 'opacity 0.15s' }}>
         <>
           <DataTable
             mobileKeyField="batchNumber"
@@ -215,6 +216,7 @@ export default function Batches() {
             onChangeLimit={(l) => setQuery({ ...query, limit: l, page: 1 })}
           />
         </>
+        </Box>
       )}
 
       <Modal
@@ -289,7 +291,7 @@ export default function Batches() {
           </Grid>
           <Grid item xs={12}>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="flex-end">
-              <Button onClick={() => setEditing(null)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+              <Button type="button" onClick={() => setEditing(null)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
               <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ borderRadius: 2 }}>
                 {isSubmitting ? 'Saving…' : editing?.id ? 'Update Batch' : 'Add Batch'}
               </Button>

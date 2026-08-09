@@ -9,9 +9,11 @@ import {
   alpha, Box, Button, Chip, CircularProgress, Divider,
   Grid, Paper, Stack, Tab, Tabs, TextField, Typography, useTheme,
 } from '@mui/material';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import PeriodFilter, { periodLabel } from '../components/PeriodFilter.jsx';
+import api from '../services/api.js';
 import { reportsApi } from '../services/resource.service.js';
 import { currency, date } from '../utils/formatters.js';
 import { printDocument } from '../utils/print.js';
@@ -60,15 +62,72 @@ const COLUMNS_MAP = {
   ],
 };
 
+const sum = (rows, field) => rows.reduce((total, row) => total + Number(row[field] || 0), 0);
+const taxOf = (row) => Number(row.cgst || 0) + Number(row.sgst || 0) + Number(row.igst || 0);
+
+/**
+ * The figures worth reading at the top of each report. A page of rows with no
+ * totals makes the reader add up columns by hand, which is what turns a report
+ * into a data dump.
+ */
+function summarise(key, rows) {
+  if (!rows.length) return [];
+  switch (key) {
+    case 'sales':
+      return [
+        ['Invoices', String(rows.length)],
+        ['Taxable Value', currency(sum(rows, 'subtotal'))],
+        ['Total GST', currency(rows.reduce((t, r) => t + taxOf(r), 0))],
+        ['Total Billed', currency(sum(rows, 'grandTotal'))],
+      ];
+    case 'gst':
+      return [
+        ['Invoices', String(rows.length)],
+        ['CGST', currency(sum(rows, 'cgst'))],
+        ['SGST', currency(sum(rows, 'sgst'))],
+        ['IGST', currency(sum(rows, 'igst'))],
+      ];
+    case 'customers':
+      return [
+        ['Customers', String(rows.length)],
+        ['With GSTIN', String(rows.filter((r) => r.gstNumber).length)],
+        ['Cities', String(new Set(rows.map((r) => r.city).filter(Boolean)).size)],
+      ];
+    case 'products':
+      return [
+        ['Products', String(rows.length)],
+        ['Units in Stock', String(sum(rows, 'stock'))],
+        ['Out of Stock', String(rows.filter((r) => Number(r.stock || 0) <= 0).length)],
+      ];
+    case 'inventory':
+      return [
+        ['Products', String(rows.length)],
+        ['Units in Stock', String(sum(rows, 'stock'))],
+        ['Stock Value', currency(rows.reduce((t, r) => t + Number(r.stock || 0) * Number(r.sellingPrice || 0), 0))],
+      ];
+    default:
+      return [['Records', String(rows.length)]];
+  }
+}
+
 export default function Reports() {
   const theme = useTheme();
   const [tab, setTab] = useState(0);
-  const [filters, setFilters] = useState({ from: '', to: '' });
+  const [filters, setFilters] = useState({ from: '', to: '', period: 'all' , month: '' });
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [company, setCompany] = useState(null);
 
   const currentType = REPORT_TYPES[tab];
+  const stats = summarise(currentType.key, rows);
+
+  // Only for the printed header; a failure here must not stop reports working.
+  useEffect(() => {
+    api.get('/settings')
+      .then((r) => setCompany(r.data?.company || null))
+      .catch(() => setCompany(null));
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -86,28 +145,45 @@ export default function Reports() {
   };
 
   const exportExcel = async () => {
-    const blob = await reportsApi.export(currentType.key);
-    window.open(URL.createObjectURL(blob), '_blank');
+    // Same filters as the screen, or the file will not match the report.
+    const blob = await reportsApi.export(currentType.key, filters);
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = `${currentType.key}-report.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(href);
   };
 
   // Print the report rows on their own, without the surrounding app chrome.
   const printReport = () => {
-    const period = filters.from || filters.to
-      ? `Period: ${filters.from || 'beginning'} to ${filters.to || 'today'}`
-      : 'All records';
-    const salesTotal = rows.reduce((sum, r) => sum + Number(r.grandTotal || 0), 0);
+    const period = periodLabel(filters);
+    const generated = new Date().toLocaleString('en-IN');
+
+    // The printed sheet has to stand on its own once it leaves the screen, so
+    // it carries who produced it, for what period, and when.
+    const stats = summarise(currentType.key, rows);
     printDocument({
       title: `${currentType.label} Report`,
-      subtitle: `${period}  •  ${rows.length} records`,
+      subtitle: [
+        company?.name,
+        `Period: ${period}`,
+        `${rows.length} records`,
+        `Generated ${generated}`,
+      ].filter(Boolean).join('  •  '),
       columns: (COLUMNS_MAP[currentType.key] || []).map((column) => ({
         header: column.headerName,
         numeric: column.numeric,
         value: (row) => (column.text ? column.text(row) : row[column.field] ?? ''),
       })),
       rows,
-      summary: currentType.key === 'sales'
-        ? [{ label: 'Total', value: currency(salesTotal), total: true }]
-        : [],
+      summary: stats.map(([label, value], i) => ({
+        label,
+        value,
+        total: i === stats.length - 1,
+      })),
     });
   };
 
@@ -156,23 +232,8 @@ export default function Reports() {
               Filter Options
             </Typography>
             <Grid container spacing={2} alignItems="flex-end">
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth type="date" label="From Date"
-                  InputLabelProps={{ shrink: true }}
-                  value={filters.from}
-                  onChange={(e) => setFilters({ ...filters, from: e.target.value })}
-                  size="small"
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth type="date" label="To Date"
-                  InputLabelProps={{ shrink: true }}
-                  value={filters.to}
-                  onChange={(e) => setFilters({ ...filters, to: e.target.value })}
-                  size="small"
-                />
+              <Grid item xs={12}>
+                <PeriodFilter disableContainer value={filters} onChange={(range) => setFilters({ ...filters, ...range })} />
               </Grid>
               <Grid item xs={12} sm={4}>
                 <Button
@@ -191,24 +252,42 @@ export default function Reports() {
 
           {/* Summary if loaded */}
           {loaded && rows.length > 0 && (
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mb={2.5} alignItems={{ xs: 'stretch', sm: 'center' }} justifyContent="space-between">
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Chip
-                  label={`${rows.length} records`}
-                  color="primary"
-                  variant="outlined"
-                  sx={{ fontWeight: 700 }}
-                />
-                {currentType.key === 'sales' && (
-                  <Chip
-                    label={`Total: ${currency(rows.reduce((s, r) => s + Number(r.grandTotal || 0), 0))}`}
-                    color="success"
-                    variant="filled"
-                    sx={{ fontWeight: 700 }}
-                  />
-                )}
-              </Stack>
-              <Stack direction="row" spacing={1}>
+            <Stack spacing={2} mb={2.5}>
+              {/* The figures that matter for this report, so nobody has to add
+                  up a column of rows by hand. */}
+              <Grid container spacing={1.5}>
+                {stats.map(([label, value], i) => (
+                  <Grid item xs={6} md={3} key={label}>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        borderRadius: 2.5,
+                        px: 2,
+                        py: 1.5,
+                        height: '100%',
+                        // The last figure is the headline one for each report.
+                        bgcolor: i === stats.length - 1
+                          ? alpha(theme.palette.primary.main, 0.06)
+                          : 'transparent',
+                      }}
+                    >
+                      <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                        {label}
+                      </Typography>
+                      <Typography
+                        variant="h6"
+                        fontWeight={800}
+                        color={i === stats.length - 1 ? 'primary.main' : 'text.primary'}
+                        sx={{ lineHeight: 1.3 }}
+                      >
+                        {value}
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                ))}
+              </Grid>
+
+              <Stack direction="row" spacing={1} justifyContent="flex-end">
                 <Button
                   size="small"
                   startIcon={<DownloadIcon />}

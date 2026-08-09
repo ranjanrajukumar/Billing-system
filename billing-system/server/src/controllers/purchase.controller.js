@@ -2,6 +2,7 @@ import { Op } from 'sequelize';
 import { sequelize, Product, Purchase, PurchaseItem, StockMovement, Supplier } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { scopedWhere } from '../middleware/branchContext.js';
+import { withDateRange } from '../utils/dateRange.js';
 import { getPagination, paged } from '../utils/pagination.js';
 import { adjustStock, assertAvailable } from '../services/stock.service.js';
 
@@ -28,10 +29,7 @@ function calculateItems(items) {
 export const listPurchases = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
   // In multi-branch mode a user only sees their own branch's records.
-  const where = scopedWhere(req, { detstatus: false });
-  if (req.query.from || req.query.to) where.purchaseDate = {};
-  if (req.query.from) where.purchaseDate[Op.gte] = req.query.from;
-  if (req.query.to) where.purchaseDate[Op.lte] = req.query.to;
+  const where = withDateRange(scopedWhere(req, { detstatus: false }), req.query, 'purchaseDate');
   const { rows, count } = await Purchase.findAndCountAll({
     where,
     include: [Supplier, { model: PurchaseItem, include: Product }],

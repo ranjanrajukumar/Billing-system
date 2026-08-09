@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import { useEffect, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
+import PeriodFilter from '../components/PeriodFilter.jsx';
 import Loader from '../components/Loader.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import StatsCard from '../components/StatsCard.jsx';
@@ -14,9 +15,6 @@ import { useToast } from '../context/ToastContext.jsx';
 import api from '../services/api.js';
 import { currency, date } from '../utils/formatters.js';
 
-const pad2 = (n) => String(n).padStart(2, '0');
-const monthStart = (d = new Date()) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-01`;
-const monthEnd = (d = new Date()) => new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10);
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
 /** Downloads a workbook without navigating away from the page. */
@@ -37,7 +35,9 @@ async function downloadWorkbook(url, filename, onError) {
 }
 
 function Gstr1Panel() {
-  const [range, setRange] = useState({ from: monthStart(), to: monthEnd() });
+  // Opens on the named period rather than a date pair, so the filter shows
+  // "This month" instead of an equivalent-looking custom range.
+  const [range, setRange] = useState({ period: 'thisMonth', from: '', to: '', month: '' });
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [section, setSection] = useState('b2b');
@@ -54,7 +54,7 @@ function Gstr1Panel() {
     }
     setLoading(false);
   };
-  useEffect(() => { load(); }, [range.from, range.to]);
+  useEffect(() => { load(); }, [range.from, range.to, range.period, range.month]);
 
   const t = data?.totals;
   const sections = {
@@ -100,22 +100,28 @@ function Gstr1Panel() {
 
   return (
     <Stack spacing={2}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
-        <TextField
-          size="small" type="date" label="From" value={range.from}
-          onChange={(e) => setRange({ ...range, from: e.target.value })}
-          InputLabelProps={{ shrink: true }}
-        />
-        <TextField
-          size="small" type="date" label="To" value={range.to}
-          onChange={(e) => setRange({ ...range, to: e.target.value })}
-          InputLabelProps={{ shrink: true }}
-        />
+      {/* One place to choose the period — the filter carries its own custom
+          date boxes, so a second pair here would only be a way to disagree. */}
+      <Stack
+        direction={{ xs: 'column', md: 'row' }} spacing={1.5}
+        alignItems={{ md: 'center' }} justifyContent="space-between"
+      >
+        <Box sx={{ flex: 1 }}>
+          <PeriodFilter value={range} onChange={(next) => setRange({ ...range, ...next })} />
+        </Box>
         <Button
           variant="contained" startIcon={<DownloadIcon />}
+          // The export must use whatever the filter resolved to, whether that
+          // came from a preset or the date boxes.
           onClick={() => downloadWorkbook(
-            `/reports/gstr1/export?from=${range.from}&to=${range.to}`,
-            `GSTR1-${range.from}-to-${range.to}.xlsx`,
+            `/reports/gstr1/export?${new URLSearchParams(
+              range.from || range.to
+                ? { from: range.from || '', to: range.to || '' }
+                : range.period === 'month' && range.month
+                  ? { period: 'month', month: range.month }
+                  : { period: range.period || 'thisMonth' },
+            )}`,
+            `GSTR1-${data?.period?.from || range.from}-to-${data?.period?.to || range.to}.xlsx`,
             (m) => showToast(m, 'error'),
           )}
         >

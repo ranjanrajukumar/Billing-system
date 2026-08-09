@@ -2,7 +2,7 @@ import InventoryIcon from '@mui/icons-material/Inventory2';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import {
-  alpha, Box, Chip, Grid, MenuItem, Paper, Stack, TextField,
+  alpha, Box, Chip, Grid, LinearProgress, MenuItem, Paper, Stack, TextField,
   ToggleButton, ToggleButtonGroup, Tooltip, Typography, useTheme,
 } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
@@ -125,11 +125,12 @@ export default function ProductPerformance() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // Switching between month and year needs a matching value, not last one used.
+  // Switching between month, quarter and year needs a matching value, not the
+  // last one used, which would belong to the wrong vocabulary.
   const changePeriod = (next) => {
     if (!next || next === period) return;
     setPeriod(next);
-    setValue(next === 'month' ? months[0].value : years[0]);
+    setValue(next === 'year' ? years[0] : months[0].value);
   };
 
   useEffect(() => {
@@ -152,11 +153,16 @@ export default function ProductPerformance() {
         alignItems={{ xs: 'stretch', sm: 'center' }}
         justifyContent="space-between"
       >
-        <Box>
+        <Box sx={{ minWidth: 0 }}>
           <Typography variant="h6" fontWeight={700}>Product Performance</Typography>
+          {/* The panels below stay put while a new period loads, so the caption
+              carries the fact that it is changing rather than a blank screen. */}
           <Typography variant="caption" color="text.secondary">
-            {loading ? 'Loading…' : `What sold, and what did not, in ${data?.label || ''}`}
+            {loading && !data
+              ? 'Loading…'
+              : `What sold, and what did not, in ${data?.label || ''}`}
           </Typography>
+          {loading && <LinearProgress sx={{ height: 2, borderRadius: 1, mt: 0.5 }} />}
         </Box>
         <Stack direction="row" spacing={1}>
           <ToggleButtonGroup
@@ -166,15 +172,20 @@ export default function ProductPerformance() {
             onChange={(_e, next) => changePeriod(next)}
           >
             <ToggleButton value="month" sx={{ px: 2 }}>Month</ToggleButton>
+            <ToggleButton value="quarter" sx={{ px: 2 }}>3 Months</ToggleButton>
             <ToggleButton value="year" sx={{ px: 2 }}>Year</ToggleButton>
           </ToggleButtonGroup>
           <TextField
             select size="small" value={value} onChange={(e) => setValue(e.target.value)}
             sx={{ minWidth: 160 }}
           >
-            {period === 'month'
-              ? months.map((m) => <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>)
-              : years.map((y) => <MenuItem key={y} value={y}>{y}</MenuItem>)}
+            {period === 'year'
+              ? years.map((y) => <MenuItem key={y} value={y}>{y}</MenuItem>)
+              : months.map((m) => (
+                <MenuItem key={m.value} value={m.value}>
+                  {period === 'quarter' ? `3 months to ${m.label}` : m.label}
+                </MenuItem>
+              ))}
           </TextField>
         </Stack>
       </Stack>

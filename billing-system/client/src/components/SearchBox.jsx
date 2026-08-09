@@ -36,7 +36,7 @@ export default function SearchBox({ value, onChange, placeholder = 'Search…' }
           ),
           endAdornment: value ? (
             <InputAdornment position="end">
-              <IconButton size="small" onClick={handleClear} sx={{ p: 0.5 }}>
+              <IconButton type="button" size="small" onClick={handleClear} sx={{ p: 0.5 }}>
                 <CloseIcon sx={{ fontSize: 16 }} />
               </IconButton>
             </InputAdornment>

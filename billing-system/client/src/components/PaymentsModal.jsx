@@ -173,7 +173,7 @@ export default function PaymentsModal({ invoice, onClose, onChanged }) {
                 </Typography>
               </Box>
               <Tooltip title="Remove payment">
-                <IconButton size="small" color="error" onClick={() => removePayment(payment.id)}>
+                <IconButton type="button" size="small" color="error" onClick={() => removePayment(payment.id)}>
                   <DeleteIcon fontSize="small" />
                 </IconButton>
               </Tooltip>

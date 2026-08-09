@@ -24,6 +24,7 @@ const BACKUP_DIR = process.env.BACKUP_DIR
   || path.join(process.cwd(), 'backups');
 
 const BLOB_PREFIX = 'base64:';
+const DATE_PREFIX = 'date:';
 
 /** Tables are dumped in dependency order so a restore can insert them as-is. */
 async function tableNames() {
@@ -38,12 +39,18 @@ export async function ensureBackupDir() {
 
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 
-/** Buffers cannot survive JSON, so they are tagged and base64 encoded. */
+/**
+ * Buffers and Dates cannot survive JSON as themselves, so both are tagged.
+ *
+ * Dates are deliberately restored as Date objects rather than ISO strings:
+ * MySQL rejects '2026-08-09T10:59:08.000Z' for a DATETIME column, but the
+ * driver formats a real Date correctly, exactly as it does for a normal write.
+ */
 function encodeRow(row) {
   const out = {};
   for (const [key, value] of Object.entries(row)) {
     if (Buffer.isBuffer(value)) out[key] = `${BLOB_PREFIX}${value.toString('base64')}`;
-    else if (value instanceof Date) out[key] = value.toISOString();
+    else if (value instanceof Date) out[key] = `${DATE_PREFIX}${value.toISOString()}`;
     else out[key] = value;
   }
   return out;
@@ -52,9 +59,18 @@ function encodeRow(row) {
 function decodeRow(row) {
   const out = {};
   for (const [key, value] of Object.entries(row)) {
-    out[key] = typeof value === 'string' && value.startsWith(BLOB_PREFIX)
-      ? Buffer.from(value.slice(BLOB_PREFIX.length), 'base64')
-      : value;
+    if (typeof value === 'string' && value.startsWith(BLOB_PREFIX)) {
+      out[key] = Buffer.from(value.slice(BLOB_PREFIX.length), 'base64');
+    } else if (typeof value === 'string' && value.startsWith(DATE_PREFIX)) {
+      out[key] = new Date(value.slice(DATE_PREFIX.length));
+    } else if (value !== null && typeof value === 'object') {
+      // JSON columns (the audit log payload, role permissions, template
+      // layouts) come back from MySQL already parsed. They have to go back in
+      // as text, or the driver has no idea what to do with the object.
+      out[key] = JSON.stringify(value);
+    } else {
+      out[key] = value;
+    }
   }
   return out;
 }

@@ -192,7 +192,7 @@ export default function Suppliers() {
           ))}
           <Grid item xs={12}>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="flex-end">
-              <Button onClick={() => setEditing(null)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+              <Button type="button" onClick={() => setEditing(null)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
               <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ borderRadius: 2 }}>
                 {isSubmitting ? 'Saving…' : editing?.id ? 'Update Supplier' : 'Add Supplier'}
               </Button>

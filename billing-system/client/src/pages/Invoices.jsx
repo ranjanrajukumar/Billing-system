@@ -1,6 +1,7 @@
 import AddIcon from '@mui/icons-material/Add';
 import CancelIcon from '@mui/icons-material/Cancel';
 import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
 import DownloadIcon from '@mui/icons-material/Download';
 import EmailIcon from '@mui/icons-material/Email';
 import PaymentsIcon from '@mui/icons-material/Payments';
@@ -23,6 +24,7 @@ import Loader from '../components/Loader.jsx';
 import Modal from '../components/Modal.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import Pagination from '../components/Pagination.jsx';
+import PeriodFilter from '../components/PeriodFilter.jsx';
 import PaymentsModal from '../components/PaymentsModal.jsx';
 import StatsCard from '../components/StatsCard.jsx';
 import { useToast } from '../context/ToastContext.jsx';
@@ -30,6 +32,8 @@ import { customersApi, invoicesApi, productsApi } from '../services/resource.ser
 import { currency, date } from '../utils/formatters.js';
 import { printDocument, printHtml, printPdfBlob } from '../utils/print.js';
 import { confirmAction } from '../utils/alerts.js';
+import { can } from '../utils/access.js';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const blankItem = { productId: '', quantity: 1, rate: 0, discount: 0, gstPercent: 18, packing: '', um: '', batchId: '' };
 
@@ -44,6 +48,10 @@ const CHARGE_FIELDS = [
   ['freightCharge', 'Freight (+)'],
   ['otherCharges', 'Other Charges (+)'],
   ['cess', 'Cess (after GST)'],
+];
+const DOCUMENT_TEXT_FIELDS = [
+  'orderNumber', 'orderDate', 'dmNumber', 'dmDate', 'manualDm', 'manualDmDate',
+  'transporter', 'vehicleNo', 'lrNumber', 'totalBags', 'remark',
 ];
 const DEDUCTION_FIELDS = ['quantityDiscount', 'cashDiscount', 'specialDiscount', 'freightDeducted'];
 const ADDITION_FIELDS = ['packingCharge', 'freightCharge', 'otherCharges'];
@@ -117,9 +125,10 @@ function ShareMenu({ row }) {
 export default function Invoices() {
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({});
-  const [query, setQuery] = useState({ page: 1, limit: 10 });
+  const [query, setQuery] = useState({ page: 1, limit: 10 , period: 'all', from: '', to: '', month: '' });
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
   const [items, setItems] = useState([blankItem]);
@@ -129,6 +138,8 @@ export default function Invoices() {
   const [redeemPoints, setRedeemPoints] = useState('');
   const [loyalty, setLoyalty] = useState(null);
   const { showToast } = useToast();
+  const { user } = useAuth();
+  const canEditInvoice = can('editInvoice', user?.role);
   const theme = useTheme();
   const { register, handleSubmit, reset, watch, formState: { isSubmitting } } = useForm({
     defaultValues: {
@@ -275,27 +286,78 @@ export default function Invoices() {
     }
   };
 
+  const closeForm = () => {
+    setOpen(false); setEditing(null); setItems([blankItem]); reset();
+    setApplied(null); setCouponCode(''); setRedeemPoints('');
+  };
+
+  /** Loads an existing invoice back into the form for correction. */
+  const openEdit = async (row) => {
+    try {
+      const invoice = await invoicesApi.get(row.id);
+      setEditing(invoice);
+      setItems((invoice.InvoiceItems || []).map((line) => ({
+        productId: line.productId,
+        quantity: Number(line.quantity),
+        rate: Number(line.rate),
+        discount: Number(line.discount),
+        gstPercent: Number(line.gstPercent),
+        packing: line.packing || '',
+        um: line.um || '',
+        // The lot is deliberately not carried over: the edit re-allocates from
+        // whatever is on the shelf now, exactly as a fresh sale would.
+        batchId: '',
+      })));
+      reset({
+        invoiceDate: invoice.invoiceDate,
+        customerId: invoice.customerId,
+        paymentMethod: invoice.paymentMethod,
+        notes: invoice.notes || '',
+        ...Object.fromEntries(DOCUMENT_TEXT_FIELDS.map((f) => [f, invoice[f] ?? ''])),
+        ...Object.fromEntries(CHARGE_FIELDS.map(([name]) => [name, invoice[name] ?? ''])),
+      });
+      setCouponCode(invoice.couponCode || '');
+      setApplied(invoice.couponCode
+        ? { code: invoice.couponCode, discount: Number(invoice.couponDiscount || 0) }
+        : null);
+      setRedeemPoints(Number(invoice.pointsRedeemed) || '');
+      setOpen(true);
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Unable to open that invoice', 'error');
+    }
+  };
+
   const submit = async (values) => {
     const selected = items.filter((it) => it.productId && Number(it.quantity) > 0);
     if (!selected.length) { showToast('Add at least one product', 'error'); return; }
-    const oversold = selected.find((it) => {
-      const p = products.find((p) => p.id === Number(it.productId));
-      return p && Number(it.quantity) > Number(p.stock || 0);
-    });
-    if (oversold) {
-      const p = products.find((p) => p.id === Number(oversold.productId));
-      showToast(`${p.productName} only has ${p.stock} in stock`, 'error'); return;
+    // An edit gives its own stock back first, so the on-screen check would
+    // wrongly refuse simply moving a line around. The server is the authority.
+    if (!editing) {
+      const oversold = selected.find((it) => {
+        const p = products.find((p) => p.id === Number(it.productId));
+        return p && Number(it.quantity) > Number(p.stock || 0);
+      });
+      if (oversold) {
+        const p = products.find((p) => p.id === Number(oversold.productId));
+        showToast(`${p.productName} only has ${p.stock} in stock`, 'error'); return;
+      }
     }
     try {
-      await invoicesApi.create({
+      const payload = {
         ...values,
         items: selected,
         couponCode: applied?.code || undefined,
         redeemPoints: Number(redeemPoints) || undefined,
-      });
-      showToast('Invoice saved');
-      setOpen(false); setItems([blankItem]); reset(); load();
-      setApplied(null); setCouponCode(''); setRedeemPoints('');
+      };
+      if (editing) {
+        await invoicesApi.update(editing.id, payload);
+        showToast(`${editing.invoiceNumber} updated`);
+      } else {
+        await invoicesApi.create(payload);
+        showToast('Invoice saved');
+      }
+      closeForm();
+      load();
     } catch (err) { showToast(err.response?.data?.message || 'Failed to save invoice', 'error'); }
   };
 
@@ -343,10 +405,15 @@ export default function Invoices() {
         subtitle="Create and manage GST billing invoices"
         icon={<ReceiptIcon />}
         action={
-          <Button startIcon={<AddIcon />} variant="contained" onClick={() => setOpen(true)}>
+          <Button startIcon={<AddIcon />} variant="contained" onClick={() => { closeForm(); setOpen(true); }}>
             New Invoice
           </Button>
         }
+      />
+
+      <PeriodFilter
+        value={query}
+        onChange={(range) => setQuery({ ...query, ...range, page: 1 })}
       />
 
       {/* Stats */}
@@ -366,7 +433,8 @@ export default function Invoices() {
       </Grid>
 
       {/* Table */}
-      {loading ? <Loader /> : (
+      {loading && rows.length === 0 ? <Loader /> : (
+        <Box sx={{ opacity: loading ? 0.55 : 1, transition: 'opacity 0.15s' }}>
         <>
           <DataTable
             mobileKeyField="invoiceNumber"
@@ -392,6 +460,14 @@ export default function Invoices() {
                   <Tooltip title="Print"><IconButton size="small" onClick={() => printInvoiceHtml(row.id)} sx={{ borderRadius: 1.5 }}><PrintIcon fontSize="small" /></IconButton></Tooltip>
                   <Tooltip title="Print classic PDF layout"><IconButton size="small" onClick={() => printInvoice(row.id)} sx={{ borderRadius: 1.5 }}><ViewQuiltIcon fontSize="small" /></IconButton></Tooltip>
                   <Tooltip title="Payments"><IconButton size="small" onClick={() => setPayingFor(row)} sx={{ borderRadius: 1.5 }}><PaymentsIcon fontSize="small" /></IconButton></Tooltip>
+                  {/* Only shown to roles that may edit; the API enforces it too. */}
+                  {canEditInvoice && (
+                    <Tooltip title="Edit Invoice">
+                      <IconButton type="button" size="small" color="primary" onClick={() => openEdit(row)} sx={{ borderRadius: 1.5 }}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                   <ShareMenu row={row} />
                   <Tooltip title="Cancel Invoice"><IconButton size="small" color="error" onClick={() => cancelInvoice(row.id)} sx={{ borderRadius: 1.5 }}><CancelIcon fontSize="small" /></IconButton></Tooltip>
                 </Stack>
@@ -402,12 +478,18 @@ export default function Invoices() {
           />
           <Pagination meta={meta} onChangePage={(p) => setQuery({ ...query, page: p })} onChangeLimit={(l) => setQuery({ ...query, limit: l })} />
         </>
+        </Box>
       )}
 
       <PaymentsModal invoice={payingFor} onClose={() => setPayingFor(null)} onChanged={load} />
 
       {/* Create Invoice Modal */}
-      <Modal open={open} title="Create New Invoice" onClose={() => setOpen(false)} maxWidth="lg">
+      <Modal
+        open={open}
+        title={editing ? `Edit Invoice ${editing.invoiceNumber}` : 'Create New Invoice'}
+        onClose={closeForm}
+        maxWidth="lg"
+      >
         <Stack spacing={3} component="form" onSubmit={handleSubmit(submit)}>
           {/* Header fields */}
           <Grid container spacing={2}>
@@ -466,7 +548,10 @@ export default function Invoices() {
                       </Box>
                     </Grid>
                     <Grid item xs={6} sm={3} md={0.5}>
-                      <IconButton size="small" color="error" onClick={() => setItems(items.filter((_, i) => i !== index))} disabled={items.length === 1}>
+                      {/* Every control in this form needs type="button": the
+                          HTML default is "submit", which would save the invoice
+                          instead of doing what the button says. */}
+                      <IconButton type="button" size="small" color="error" onClick={() => setItems(items.filter((_, i) => i !== index))} disabled={items.length === 1}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </Grid>
@@ -505,7 +590,7 @@ export default function Invoices() {
                   {index < items.length - 1 && <Divider sx={{ mt: 1.5 }} />}
                 </Box>
               ))}
-              <Button startIcon={<AddIcon />} onClick={() => setItems([...items, blankItem])} sx={{ alignSelf: 'flex-start' }}>
+              <Button type="button" startIcon={<AddIcon />} onClick={() => setItems([...items, blankItem])} sx={{ alignSelf: 'flex-start' }}>
                 Add Product
               </Button>
             </Stack>
@@ -519,11 +604,15 @@ export default function Invoices() {
                   fullWidth size="small" label="Coupon code"
                   value={couponCode}
                   onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setApplied(null); }}
+                  // Enter inside a form submits it, which would save the
+                  // invoice before the code had been applied.
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyCoupon(); } }}
                   InputLabelProps={{ shrink: true }}
                 />
               </Grid>
               <Grid item xs={6} sm={2}>
                 <Button
+                  type="button"
                   fullWidth variant={applied ? 'contained' : 'outlined'} color={applied ? 'success' : 'primary'}
                   sx={{ borderRadius: 2, height: 40 }}
                   disabled={!couponCode.trim()}
@@ -668,10 +757,10 @@ export default function Invoices() {
 
           {/* Actions */}
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="flex-end">
-            <Button onClick={() => setOpen(false)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
-            <Button onClick={printDraft} startIcon={<PrintIcon />} variant="outlined" sx={{ borderRadius: 2 }}>Print</Button>
+            <Button type="button" onClick={closeForm} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+            <Button type="button" onClick={printDraft} startIcon={<PrintIcon />} variant="outlined" sx={{ borderRadius: 2 }}>Print</Button>
             <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ borderRadius: 2, minWidth: 140 }}>
-              {isSubmitting ? 'Saving…' : 'Save Invoice'}
+              {isSubmitting ? 'Saving…' : editing ? 'Update Invoice' : 'Save Invoice'}
             </Button>
           </Stack>
         </Stack>

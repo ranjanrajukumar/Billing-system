@@ -1,6 +1,9 @@
 import { Op, fn, col, literal } from 'sequelize';
 import { Customer, Invoice, Product, InvoiceItem } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+// Aliased: this file already has its own resolvePeriod for the month/year
+// product-performance contract, which is a different vocabulary.
+import { resolvePeriod as resolveNamedPeriod, withDateRange } from '../utils/dateRange.js';
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const lastDayOf = (year, month) => new Date(year, month, 0).getDate();
@@ -12,7 +15,7 @@ const lastDayOf = (year, month) => new Date(year, month, 0).getDate();
  */
 function resolvePeriod(query) {
   const now = new Date();
-  const period = query.period === 'year' ? 'year' : 'month';
+  const period = ['year', 'quarter'].includes(query.period) ? query.period : 'month';
 
   if (period === 'year') {
     const year = /^\d{4}$/.test(String(query.value)) ? Number(query.value) : now.getFullYear();
@@ -25,8 +28,19 @@ function resolvePeriod(query) {
     ? Number(match[2])
     : now.getMonth() + 1;
   const value = `${year}-${pad2(month)}`;
-  const label = new Date(year, month - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-  return { period, value, label, from: `${value}-01`, to: `${value}-${pad2(lastDayOf(year, month))}` };
+  const endLabel = new Date(year, month - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  const to = `${value}-${pad2(lastDayOf(year, month))}`;
+
+  if (period === 'quarter') {
+    // The three months ending with the chosen one, so "3 months to August"
+    // covers June, July and August.
+    const start = new Date(year, month - 3, 1);
+    const from = `${start.getFullYear()}-${pad2(start.getMonth() + 1)}-01`;
+    const startLabel = start.toLocaleDateString('en-IN', { month: 'short' });
+    return { period, value, label: `${startLabel} – ${endLabel}`, from, to };
+  }
+
+  return { period, value, label: endLabel, from: `${value}-01`, to };
 }
 
 /**
@@ -102,7 +116,7 @@ export const productPerformance = asyncHandler(async (req, res) => {
   });
 });
 
-export const dashboard = asyncHandler(async (_req, res) => {
+export const dashboard = asyncHandler(async (req, res) => {
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
   // Cancelled invoices must not count towards sales, revenue or the chart.
@@ -116,11 +130,13 @@ export const dashboard = asyncHandler(async (_req, res) => {
     Invoice.findAll({ where: live, include: Customer, order: [['addondt', 'DESC']], limit: 5 }),
     Product.findAll({ where: { ...live, stock: { [Op.lte]: col('low_stock_threshold') } }, limit: 10, order: [['stock', 'ASC']] }),
     Invoice.findAll({
-      where: live,
+      // The trend follows whatever period the dashboard is showing.
+      where: withDateRange(live, req.query, 'invoiceDate'),
       attributes: ['invoiceDate', [fn('SUM', col('grand_total')), 'total']],
       group: ['invoiceDate'],
       order: [['invoiceDate', 'ASC']],
-      limit: 30
+      // A year-long window needs more than 30 day-groups to draw a trend.
+      limit: 400
     })
   ]);
   res.json({
@@ -131,6 +147,7 @@ export const dashboard = asyncHandler(async (_req, res) => {
     revenue: Number(revenue || 0),
     recentInvoices,
     lowStockProducts,
+    period: resolveNamedPeriod(req.query),
     charts: { sales: chartRows.map((row) => ({ date: row.invoiceDate, total: Number(row.get('total')) })) }
   });
 });

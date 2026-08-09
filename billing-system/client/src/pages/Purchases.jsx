@@ -2,7 +2,7 @@ import AddIcon from '@mui/icons-material/Add';
 import CancelIcon from '@mui/icons-material/Cancel';
 import ShoppingBasketIcon from '@mui/icons-material/ShoppingBasket';
 import {
-  Button, Chip, Grid, IconButton, MenuItem, Paper,
+  Box, Button, Chip, Grid, IconButton, MenuItem, Paper,
   Stack, TextField, Tooltip, Typography,
 } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
@@ -14,6 +14,7 @@ import Loader from '../components/Loader.jsx';
 import Modal from '../components/Modal.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import Pagination from '../components/Pagination.jsx';
+import PeriodFilter from '../components/PeriodFilter.jsx';
 import StatsCard from '../components/StatsCard.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { productsApi, purchasesApi, suppliersApi } from '../services/resource.service.js';
@@ -35,7 +36,7 @@ function calc(items) {
 export default function Purchases() {
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({});
-  const [query, setQuery] = useState({ page: 1, limit: 10 });
+  const [query, setQuery] = useState({ page: 1, limit: 10 , period: 'all', from: '', to: '', month: '' });
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [suppliers, setSuppliers] = useState([]);
@@ -107,6 +108,11 @@ export default function Purchases() {
         }
       />
 
+      <PeriodFilter
+        value={query}
+        onChange={(range) => setQuery({ ...query, ...range, page: 1 })}
+      />
+
       <Grid container spacing={2}>
         <Grid item xs={6} md={4}>
           <StatsCard title="Total Purchases" value={stats.count} detail="Recorded orders" icon={<ShoppingBasketIcon />} gradient="primary" />
@@ -119,7 +125,8 @@ export default function Purchases() {
         </Grid>
       </Grid>
 
-      {loading ? <Loader /> : (
+      {loading && rows.length === 0 ? <Loader /> : (
+        <Box sx={{ opacity: loading ? 0.55 : 1, transition: 'opacity 0.15s' }}>
         <>
           <DataTable
             mobileKeyField="purchaseNumber"
@@ -149,6 +156,7 @@ export default function Purchases() {
           />
           <Pagination meta={meta} onChangePage={(p) => setQuery({ ...query, page: p })} onChangeLimit={(l) => setQuery({ ...query, limit: l })} />
         </>
+        </Box>
       )}
 
       <Modal open={open} title="Record Purchase" onClose={() => setOpen(false)} maxWidth="lg">
@@ -203,7 +211,7 @@ export default function Purchases() {
           </Grid>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="flex-end">
-            <Button onClick={() => setOpen(false)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+            <Button type="button" onClick={() => setOpen(false)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
             <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ borderRadius: 2, minWidth: 140 }}>
               {isSubmitting ? 'Saving…' : 'Save Purchase'}
             </Button>

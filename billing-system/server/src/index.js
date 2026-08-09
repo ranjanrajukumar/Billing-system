@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import app from './app.js';
 import { sequelize } from './models/index.js';
 import { migrateDatabase } from './config/migration.js';
+import { initBackupSchedule } from './services/backupScheduler.js';
 
 dotenv.config();
 
@@ -38,6 +39,10 @@ async function start() {
 
     databaseReady = true;
     app.locals.database = { status: 'connected' };
+
+    // Only worth arming once there is a database to back up.
+    const schedule = await initBackupSchedule();
+    if (schedule.enabled) console.log(`Nightly backup armed for ${schedule.nextRun}`);
   } catch (error) {
     if (process.env.START_WITHOUT_DB === 'false') {
       console.error('Unable to start server:', error);

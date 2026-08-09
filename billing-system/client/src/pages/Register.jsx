@@ -65,7 +65,7 @@ export default function Register() {
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
             slotProps={{ input: { endAdornment: (
               <InputAdornment position="end">
-                <IconButton size="small" onClick={() => setShowPw((p) => !p)} edge="end">
+                <IconButton type="button" size="small" onClick={() => setShowPw((p) => !p)} edge="end">
                   {showPw ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
                 </IconButton>
               </InputAdornment>

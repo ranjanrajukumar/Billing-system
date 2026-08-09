@@ -102,7 +102,7 @@ export default function DailyBriefing({ open, onClose }) {
               {data ? `Summary for ${formatDate(data.date)}` : 'Loading your summary…'}
             </Typography>
           </Box>
-          <IconButton size="small" onClick={close}><CloseIcon fontSize="small" /></IconButton>
+          <IconButton type="button" size="small" onClick={close}><CloseIcon fontSize="small" /></IconButton>
         </Stack>
 
         <Box sx={{ flex: 1, overflowY: 'auto', px: 2.5, py: 2 }}>
@@ -155,7 +155,7 @@ export default function DailyBriefing({ open, onClose }) {
                   <Typography variant="h6" fontWeight={800} color="error.main">
                     {currency(data.receivables.outstanding)}
                   </Typography>
-                  <Button size="small" sx={{ mt: 0.5, px: 0 }} onClick={() => go('/udhar')}>
+                  <Button type="button" size="small" sx={{ mt: 0.5, px: 0 }} onClick={() => go('/udhar')}>
                     Open Udhar →
                   </Button>
                 </Box>
@@ -218,7 +218,7 @@ export default function DailyBriefing({ open, onClose }) {
                       ))}
                     </Stack>
 
-                    <Button size="small" variant="outlined" sx={{ borderRadius: 2 }} onClick={() => go('/inventory')}>
+                    <Button type="button" size="small" variant="outlined" sx={{ borderRadius: 2 }} onClick={() => go('/inventory')}>
                       Open Inventory
                     </Button>
                   </>
@@ -229,7 +229,7 @@ export default function DailyBriefing({ open, onClose }) {
         </Box>
 
         <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
-          <Button fullWidth variant="contained" sx={{ borderRadius: 2 }} onClick={close}>
+          <Button type="button" fullWidth variant="contained" sx={{ borderRadius: 2 }} onClick={close}>
             Start the day
           </Button>
         </Box>

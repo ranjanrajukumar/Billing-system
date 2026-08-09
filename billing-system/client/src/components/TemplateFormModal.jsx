@@ -280,7 +280,7 @@ export default function TemplateFormModal({ open, template, onClose, onSave }) {
               >
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                   <Typography variant="h6">A4 Preview</Typography>
-                  <Button size="small" onClick={() => setFormData((prev) => ({ ...prev, designLayout: defaultDesignLayout }))}>Reset</Button>
+                  <Button type="button" size="small" onClick={() => setFormData((prev) => ({ ...prev, designLayout: defaultDesignLayout }))}>Reset</Button>
                 </Stack>
                 <Box sx={{ maxWidth: 560, mx: 'auto', bgcolor: 'background.paper', border: 1, borderColor: 'divider', minHeight: 500, p: 2 }}>
                   {(formData.designLayout || []).map((block, index) => {
@@ -306,7 +306,7 @@ export default function TemplateFormModal({ open, template, onClose, onSave }) {
                             </Stack>
                             <Typography variant="caption" color="text.secondary">{tag.sample}</Typography>
                           </Box>
-                          <IconButton size="small" color="error" onClick={() => removeLayoutBlock(block.id)}>
+                          <IconButton type="button" size="small" color="error" onClick={() => removeLayoutBlock(block.id)}>
                             <DeleteIcon fontSize="small" />
                           </IconButton>
                         </Stack>
@@ -339,10 +339,10 @@ export default function TemplateFormModal({ open, template, onClose, onSave }) {
         </TabPanel>
       </DialogContent>
       <DialogActions>
-        <Button onClick={handlePreview} color="info">Live Preview</Button>
+        <Button type="button" onClick={handlePreview} color="info">Live Preview</Button>
         <Box sx={{ flexGrow: 1 }} />
-        <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSave} variant="contained" disabled={!formData.templateName}>Save Template</Button>
+        <Button type="button" onClick={onClose}>Cancel</Button>
+        <Button type="button" onClick={handleSave} variant="contained" disabled={!formData.templateName}>Save Template</Button>
       </DialogActions>
     </Dialog>
   );

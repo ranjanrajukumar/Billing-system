@@ -70,7 +70,11 @@ export default function LineItems({ items, onChange, products, fields = ['rate',
               </Grid>
             ))}
             <Grid item xs={12} sm={1}>
+              {/* This component is always rendered inside a <form>, and a
+                  button with no type defaults to submit — which would save the
+                  document instead of removing a row. */}
               <IconButton
+                type="button"
                 size="small" color="error" onClick={() => removeRow(index)}
                 disabled={items.length === 1}
               >
@@ -81,7 +85,7 @@ export default function LineItems({ items, onChange, products, fields = ['rate',
           {index < items.length - 1 && <Divider />}
         </Stack>
       ))}
-      <Button startIcon={<AddIcon />} onClick={addRow} sx={{ alignSelf: 'flex-start' }}>
+      <Button type="button" startIcon={<AddIcon />} onClick={addRow} sx={{ alignSelf: 'flex-start' }}>
         Add Product
       </Button>
     </Stack>

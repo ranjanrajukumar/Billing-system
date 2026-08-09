@@ -4,7 +4,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import PrintIcon from '@mui/icons-material/Print';
 import {
-  Button, Chip, Grid, IconButton, MenuItem,
+  Box, Button, Chip, Grid, IconButton, MenuItem,
   Stack, TextField, Tooltip, Typography,
 } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
@@ -16,6 +16,7 @@ import Loader from '../components/Loader.jsx';
 import Modal from '../components/Modal.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import Pagination from '../components/Pagination.jsx';
+import PeriodFilter from '../components/PeriodFilter.jsx';
 import SearchBox from '../components/SearchBox.jsx';
 import StatsCard from '../components/StatsCard.jsx';
 import { useToast } from '../context/ToastContext.jsx';
@@ -30,7 +31,7 @@ const STATUS_COLORS = { Pending: 'warning', Delivered: 'success', Returned: 'err
 export default function DeliveryChallans() {
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({});
-  const [query, setQuery] = useState({ page: 1, limit: 10, search: '' });
+  const [query, setQuery] = useState({ page: 1, limit: 10, search: '' , period: 'all', from: '', to: '', month: '' });
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [customers, setCustomers] = useState([]);
@@ -122,6 +123,11 @@ export default function DeliveryChallans() {
         }
       />
 
+      <PeriodFilter
+        value={query}
+        onChange={(range) => setQuery({ ...query, ...range, page: 1 })}
+      />
+
       <Grid container spacing={2}>
         <Grid item xs={6} md={4}>
           <StatsCard title="Total Challans" value={stats.count} detail="All dispatches" icon={<LocalShippingIcon />} gradient="primary" />
@@ -134,7 +140,8 @@ export default function DeliveryChallans() {
         </Grid>
       </Grid>
 
-      {loading ? <Loader /> : (
+      {loading && rows.length === 0 ? <Loader /> : (
+        <Box sx={{ opacity: loading ? 0.55 : 1, transition: 'opacity 0.15s' }}>
         <>
           <DataTable
             mobileKeyField="challanNumber"
@@ -163,6 +170,7 @@ export default function DeliveryChallans() {
           />
           <Pagination meta={meta} onChangePage={(p) => setQuery({ ...query, page: p })} onChangeLimit={(l) => setQuery({ ...query, limit: l })} />
         </>
+        </Box>
       )}
 
       <Modal open={open} title="New Delivery Challan" onClose={() => setOpen(false)} maxWidth="md">
@@ -192,7 +200,7 @@ export default function DeliveryChallans() {
           <TextField fullWidth label="Notes" multiline minRows={2} {...register('notes')} InputLabelProps={{ shrink: true }} />
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="flex-end">
-            <Button onClick={() => setOpen(false)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+            <Button type="button" onClick={() => setOpen(false)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
             <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ borderRadius: 2, minWidth: 140 }}>
               {isSubmitting ? 'Saving…' : 'Save Challan'}
             </Button>

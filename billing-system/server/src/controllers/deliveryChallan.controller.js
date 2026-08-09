@@ -1,7 +1,9 @@
 import { Op } from 'sequelize';
 import { DeliveryChallan, DeliveryChallanItem, Customer, Product, User, StockMovement } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { paged } from '../utils/pagination.js';
 import { scopedWhere } from '../middleware/branchContext.js';
+import { withDateRange } from '../utils/dateRange.js';
 import { sequelize } from '../models/index.js';
 import { documentOutputHandlers } from './documentOutput.js';
 
@@ -16,7 +18,7 @@ export const getAll = asyncHandler(async (req, res) => {
   const { search, page = 1, limit = 10 } = req.query;
   const offset = (page - 1) * limit;
   // In multi-branch mode a user only sees their own branch's records.
-  let where = scopedWhere(req, { detstatus: false });
+  let where = withDateRange(scopedWhere(req, { detstatus: false }), req.query, 'challanDate');
   if (search) {
     where['challanNumber'] = { [Op.like]: `%${search}%` };
   }
@@ -32,7 +34,7 @@ export const getAll = asyncHandler(async (req, res) => {
     order: [['addondt', 'DESC']]
   });
 
-  res.json({ data: rows, total: count, page: parseInt(page), pages: Math.ceil(count / limit) });
+  res.json(paged(rows, count, Number(page), Number(limit)));
 });
 
 export const getOne = asyncHandler(async (req, res) => {
@@ -56,6 +58,9 @@ async function nextChallanNumber(transaction) {
 export const create = asyncHandler(async (req, res) => {
   const { items, ...data } = req.body;
   data.authadd = req.user.id;
+  // The list is filtered by branch, so a record saved without one would be
+  // invisible the moment it was created.
+  data.branchId = data.branchId || req.branchId;
 
   const result = await sequelize.transaction(async (t) => {
     if (!data.challanNumber) {

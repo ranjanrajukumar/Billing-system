@@ -4,14 +4,10 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { exportWorkbook } from '../services/excel.service.js';
 import { gstr1Data, gstr1Workbook } from '../services/gstReturn.service.js';
 import { ageingData, ageingWorkbook } from '../services/ageing.service.js';
+import { resolvePeriod, withDateRange } from '../utils/dateRange.js';
 
-function dateWhere(query) {
-  const where = {};
-  if (query.from || query.to) where.invoiceDate = {};
-  if (query.from) where.invoiceDate[Op.gte] = query.from;
-  if (query.to) where.invoiceDate[Op.lte] = query.to;
-  return where;
-}
+// Named periods (thisMonth, last3Months, thisFinancialYear…) resolve here too.
+const dateWhere = (query) => withDateRange({}, query, 'invoiceDate');
 
 export const salesReport = asyncHandler(async (req, res) => {
   const invoices = await Invoice.findAll({ where: dateWhere(req.query), include: Customer, order: [['invoiceDate', 'DESC']] });
@@ -40,10 +36,13 @@ export const inventoryReport = asyncHandler(async (_req, res) => {
 
 /** Defaults to the current month, which is the period a filer normally wants. */
 function returnPeriod(query) {
+  const resolved = resolvePeriod(query);
+  if (resolved.from || resolved.to) return { from: resolved.from, to: resolved.to };
   const now = new Date();
-  const from = query.from || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const to = query.to || new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
-  return { from, to };
+  return {
+    from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10),
+    to: new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10),
+  };
 }
 
 export const gstr1Report = asyncHandler(async (req, res) => {
@@ -72,13 +71,93 @@ export const ageingExport = asyncHandler(async (req, res) => {
   res.send(Buffer.from(buffer));
 });
 
+/**
+ * Rows and column headings for each report, shared by the screen and the
+ * workbook.
+ *
+ * Previously every type except inventory exported raw invoice rows, so
+ * downloading the Customers report handed you invoices with database column
+ * names for headings. The export also ignored the date filter, meaning the file
+ * never matched the report it came from.
+ */
+const EXPORTS = {
+  sales: {
+    load: (query) => Invoice.findAll({
+      where: dateWhere(query),
+      include: [{ model: Customer, attributes: ['customerName'] }],
+      order: [['invoiceDate', 'DESC']],
+    }),
+    shape: (invoice) => ({
+      'Invoice No': invoice.invoiceNumber,
+      Date: invoice.invoiceDate,
+      Customer: invoice.Customer?.customerName || '',
+      Taxable: Number(invoice.subtotal),
+      CGST: Number(invoice.cgst),
+      SGST: Number(invoice.sgst),
+      IGST: Number(invoice.igst),
+      'Round Off': Number(invoice.roundOff),
+      Total: Number(invoice.grandTotal),
+      Payment: invoice.paymentMethod,
+      Status: invoice.status,
+    }),
+  },
+  gst: {
+    load: (query) => Invoice.findAll({ where: dateWhere(query), order: [['invoiceDate', 'ASC']] }),
+    shape: (invoice) => ({
+      'Invoice No': invoice.invoiceNumber,
+      Date: invoice.invoiceDate,
+      Taxable: Number(invoice.subtotal),
+      CGST: Number(invoice.cgst),
+      SGST: Number(invoice.sgst),
+      IGST: Number(invoice.igst),
+      Cess: Number(invoice.cess),
+      Total: Number(invoice.grandTotal),
+    }),
+  },
+  customers: {
+    load: () => Customer.findAll({ where: { detstatus: false }, order: [['customerName', 'ASC']] }),
+    shape: (customer) => ({
+      Customer: customer.customerName,
+      Mobile: customer.mobileNumber || '',
+      City: customer.city || '',
+      State: customer.state || '',
+      GSTIN: customer.gstNumber || '',
+      'Loyalty Points': Number(customer.loyaltyPoints || 0),
+    }),
+  },
+  products: {
+    load: () => Product.findAll({ where: { detstatus: false }, order: [['productName', 'ASC']] }),
+    shape: (product) => ({
+      Product: product.productName,
+      HSN: product.hsnCode || '',
+      'GST %': Number(product.gstPercent || 0),
+      'Purchase Price': Number(product.purchasePrice || 0),
+      'Selling Price': Number(product.sellingPrice || 0),
+      Stock: Number(product.stock || 0),
+    }),
+  },
+  inventory: {
+    load: () => Product.findAll({ where: { detstatus: false }, order: [['stock', 'ASC']] }),
+    shape: (product) => ({
+      Product: product.productName,
+      HSN: product.hsnCode || '',
+      Stock: Number(product.stock || 0),
+      'Unit Price': Number(product.sellingPrice || 0),
+      'Stock Value': Number(product.stock || 0) * Number(product.sellingPrice || 0),
+    }),
+  },
+};
+
 export const exportReport = asyncHandler(async (req, res) => {
-  const type = req.params.type || 'sales';
-  const rows = type === 'inventory'
-    ? await Product.findAll({ raw: true })
-    : await Invoice.findAll({ where: dateWhere(req.query), raw: true });
-  const buffer = await exportWorkbook(type, rows);
+  const type = EXPORTS[req.params.type] ? req.params.type : 'sales';
+  const { load, shape } = EXPORTS[type];
+
+  const records = await load(req.query);
+  const buffer = await exportWorkbook(type, records.map(shape));
+
+  const { from, to } = resolvePeriod(req.query);
+  const suffix = from || to ? `-${from || 'start'}-to-${to || 'today'}` : '';
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename="${type}-report.xlsx"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${type}-report${suffix}.xlsx"`);
   res.send(buffer);
 });

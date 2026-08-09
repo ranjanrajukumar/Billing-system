@@ -245,7 +245,7 @@ export default function Branches() {
           ))}
           <Grid item xs={12}>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="flex-end">
-              <Button onClick={() => setEditing(null)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+              <Button type="button" onClick={() => setEditing(null)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
               <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ borderRadius: 2 }}>
                 {isSubmitting ? 'Saving…' : editing?.id ? 'Update Branch' : 'Add Branch'}
               </Button>
@@ -316,7 +316,7 @@ export default function Branches() {
           </Grid>
 
           <Stack direction="row" spacing={1} justifyContent="flex-end">
-            <Button onClick={() => setTransferOpen(false)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+            <Button type="button" onClick={() => setTransferOpen(false)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
             <Button
               variant="contained" sx={{ borderRadius: 2 }}
               disabled={!transfer.productId || !transfer.fromBranchId || !transfer.toBranchId || !(Number(transfer.quantity) > 0)}

@@ -2,6 +2,7 @@ import { Op } from 'sequelize';
 import { SalesOrder, SalesOrderItem, Customer, Company, Product, User } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { scopedWhere } from '../middleware/branchContext.js';
+import { withDateRange } from '../utils/dateRange.js';
 import { sequelize } from '../models/index.js';
 import { getPagination, paged } from '../utils/pagination.js';
 import { itemsTotal, normalizeOrderItems } from '../utils/lineItems.js';
@@ -11,7 +12,7 @@ export const getAll = asyncHandler(async (req, res) => {
   const { search } = req.query;
   const { page, limit, offset } = getPagination(req.query);
   // In multi-branch mode a user only sees their own branch's records.
-  let where = scopedWhere(req, { detstatus: false });
+  let where = withDateRange(scopedWhere(req, { detstatus: false }), req.query, 'orderDate');
   if (search) {
     where['orderNumber'] = { [Op.like]: `%${search}%` };
   }
@@ -51,6 +52,9 @@ async function nextOrderNumber(transaction) {
 export const create = asyncHandler(async (req, res) => {
   const { items, ...data } = req.body;
   data.authadd = req.user.id;
+  // The list is filtered by branch, so a record saved without one would be
+  // invisible the moment it was created.
+  data.branchId = data.branchId || req.branchId;
 
   const result = await sequelize.transaction(async (t) => {
     if (!data.orderNumber) {

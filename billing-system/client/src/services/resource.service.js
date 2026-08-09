@@ -50,7 +50,7 @@ export const usersApi = {
 };
 
 export const dashboardApi = {
-  get: () => api.get('/dashboard').then((r) => r.data ?? {}),
+  get: (params) => api.get('/dashboard', { params }).then((r) => r.data ?? {}),
   productPerformance: (params) =>
     api.get('/dashboard/product-performance', { params }).then((r) => r.data ?? {}),
 };
@@ -61,7 +61,8 @@ export const reportsApi = {
   customers: ()       => api.get('/reports/customers').then((r) => r.data ?? []),
   products:  ()       => api.get('/reports/products').then((r) => r.data ?? []),
   inventory: ()       => api.get('/reports/inventory').then((r) => r.data ?? []),
-  export:    (type)   => api.get(`/reports/export/${type}`, { responseType: 'blob' }).then((r) => r.data),
+  // The workbook must cover the same period as the report on screen.
+  export:    (type, params) => api.get(`/reports/export/${type}`, { params, responseType: 'blob' }).then((r) => r.data),
 };
 
 export const settingsApi = {

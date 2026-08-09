@@ -33,7 +33,7 @@ export default function ExpiryAlerts({ days = 60 }) {
     <Alert
       severity={severity}
       icon={<WarningAmberIcon />}
-      action={<Button size="small" onClick={() => navigate('/batches')}>Manage</Button>}
+      action={<Button type="button" size="small" onClick={() => navigate('/batches')}>Manage</Button>}
       sx={{ borderRadius: 3 }}
     >
       <AlertTitle sx={{ fontWeight: 700 }}>

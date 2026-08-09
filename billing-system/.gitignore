@@ -9,3 +9,7 @@ server/uploads/*
 !server/logs/.gitkeep
 !server/pdf/.gitkeep
 !server/uploads/.gitkeep
+
+# Database backups contain every row, including password hashes.
+server/backups/
+backups/

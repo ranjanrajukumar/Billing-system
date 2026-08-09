@@ -33,7 +33,7 @@ export default function RoleRoute({ children }) {
             logs are Admin-only; reports need Admin or Accountant.
           </Typography>
         </Box>
-        <Button variant="contained" sx={{ borderRadius: 2 }} onClick={() => navigate('/')}>
+        <Button type="button" variant="contained" sx={{ borderRadius: 2 }} onClick={() => navigate('/')}>
           Back to Dashboard
         </Button>
       </Stack>

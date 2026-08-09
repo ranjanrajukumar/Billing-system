@@ -205,7 +205,7 @@ export default function Customers() {
           ))}
           <Grid item xs={12}>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="flex-end">
-              <Button onClick={() => setEditing(null)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+              <Button type="button" onClick={() => setEditing(null)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
               <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ borderRadius: 2 }}>
                 {isSubmitting ? 'Saving…' : editing?.id ? 'Update Customer' : 'Add Customer'}
               </Button>
@@ -267,7 +267,7 @@ export default function Customers() {
             </Stack>
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="flex-end">
-              <Button startIcon={<EditIcon />} variant="contained" sx={{ borderRadius: 2 }}
+              <Button type="button" startIcon={<EditIcon />} variant="contained" sx={{ borderRadius: 2 }}
                 onClick={() => { openForm(viewing); setViewing(null); }}>
                 Edit Customer
               </Button>

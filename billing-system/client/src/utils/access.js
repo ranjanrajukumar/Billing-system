@@ -8,6 +8,7 @@
 export const PAGE_ROLES = {
   '/users': ['Admin'],
   '/audit-logs': ['Admin'],
+  '/backups': ['Admin'],
   '/reports': ['Admin', 'Accountant'],
   '/tax-reports': ['Admin', 'Accountant'],
 };
@@ -21,6 +22,9 @@ export const ACTION_ROLES = {
   viewAudit: ['Admin'],
   deleteMasters: ['Admin'],
   managePurchases: ['Admin', 'Accountant'],
+  // Editing an issued invoice rewrites stock, seed lots, coupon use and loyalty
+  // points, so it is narrower than the right to raise one.
+  editInvoice: ['Admin', 'Accountant'],
 };
 
 /**
@@ -29,6 +33,7 @@ export const ACTION_ROLES = {
  */
 export const MENU_KEY_BY_PATH = {
   '/': 'dashboard',
+  '/quick-bill': 'quickBill',
   '/invoices': 'invoices',
   '/sales-orders': 'salesOrders',
   '/quotations': 'quotations',
@@ -49,6 +54,7 @@ export const MENU_KEY_BY_PATH = {
   '/users': 'users',
   '/branches': 'branches',
   '/audit-logs': 'auditLogs',
+  '/backups': 'backups',
   '/invoice-templates': 'invoiceTemplates',
   '/settings': 'settings',
   '/profile': 'profile',

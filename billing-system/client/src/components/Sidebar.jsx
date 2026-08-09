@@ -1,6 +1,8 @@
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import BoltIcon from '@mui/icons-material/Bolt';
 import ScienceIcon from '@mui/icons-material/Science';
+import StorageIcon from '@mui/icons-material/Storage';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import InventoryIcon from '@mui/icons-material/Inventory2';
 import CategoryIcon from '@mui/icons-material/Category';
@@ -53,6 +55,7 @@ const navGroups = [
   {
     label: 'Sales',
     items: [
+      { label: 'Quick Bill', path: '/quick-bill', icon: <BoltIcon fontSize="small" /> },
       { label: 'Invoices', path: '/invoices', icon: <ReceiptIcon fontSize="small" /> },
       { label: 'Sales Orders', path: '/sales-orders', icon: <ShoppingCartIcon fontSize="small" /> },
       { label: 'Quotations', path: '/quotations', icon: <RequestQuoteIcon fontSize="small" /> },
@@ -83,6 +86,7 @@ const navGroups = [
       { label: 'Users & Roles', path: '/users', icon: <GroupIcon fontSize="small" /> },
       { label: 'Branches', path: '/branches', icon: <StoreIcon fontSize="small" /> },
       { label: 'Audit Logs', path: '/audit-logs', icon: <HistoryIcon fontSize="small" /> },
+      { label: 'Backup & Restore', path: '/backups', icon: <StorageIcon fontSize="small" /> },
       { label: 'Invoice Templates', path: '/invoice-templates', icon: <ArticleIcon fontSize="small" /> },
       { label: 'Settings', path: '/settings', icon: <SettingsIcon fontSize="small" /> },
       { label: 'Profile', path: '/profile', icon: <PersonIcon fontSize="small" /> },

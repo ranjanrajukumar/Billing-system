@@ -64,7 +64,7 @@ function StandardCalculator() {
         <Stack direction="row" alignItems="center" justifyContent="flex-end" spacing={1}>
           <Typography variant="h4" fontWeight={700} sx={{ wordBreak: 'break-all' }}>{display}</Typography>
           <Tooltip title="Copy result">
-            <IconButton size="small" onClick={copy}><ContentCopyIcon fontSize="small" /></IconButton>
+            <IconButton type="button" size="small" onClick={copy}><ContentCopyIcon fontSize="small" /></IconButton>
           </Tooltip>
         </Stack>
       </Box>

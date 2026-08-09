@@ -28,13 +28,36 @@ const when = (value) => {
   return `${date(d)} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 };
 
+const isoDay = (d) => d.toISOString().slice(0, 10);
+const daysAgo = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return isoDay(d);
+};
+
+/**
+ * The log grows without limit, so it opens on the last month rather than the
+ * whole history. Every preset stays one click away, including All time.
+ */
+const RANGE_PRESETS = [
+  { key: 'month', label: 'Last month', range: () => ({ from: daysAgo(30), to: isoDay(new Date()) }) },
+  { key: 'quarter', label: 'Last 3 months', range: () => ({ from: daysAgo(90), to: isoDay(new Date()) }) },
+  { key: 'year', label: 'Last year', range: () => ({ from: daysAgo(365), to: isoDay(new Date()) }) },
+  { key: 'all', label: 'All time', range: () => ({ from: '', to: '' }) },
+];
+
+const DEFAULT_RANGE = RANGE_PRESETS[0].range();
+
 export default function AuditLogs() {
   const theme = useTheme();
   const { showToast } = useToast();
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({});
   const [filters, setFilters] = useState({ actions: [], entities: [], users: [] });
-  const [query, setQuery] = useState({ page: 1, limit: 25, search: '', action: '', entity: '', userId: '', from: '', to: '' });
+  const [query, setQuery] = useState({
+    page: 1, limit: 25, search: '', action: '', entity: '', userId: '',
+    ...DEFAULT_RANGE,
+  });
   const [loading, setLoading] = useState(true);
   const [viewing, setViewing] = useState(null);
 
@@ -114,6 +137,30 @@ export default function AuditLogs() {
             />
           </Grid>
         </Grid>
+
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 1.5 }}>
+          <Typography variant="caption" color="text.secondary" fontWeight={700}>Period</Typography>
+          {RANGE_PRESETS.map((preset) => {
+            const range = preset.range();
+            const active = query.from === range.from && query.to === range.to;
+            return (
+              <Chip
+                key={preset.key}
+                size="small"
+                label={preset.label}
+                color={active ? 'primary' : 'default'}
+                variant={active ? 'filled' : 'outlined'}
+                onClick={() => set(range)}
+                sx={{ fontWeight: 700, fontSize: '0.72rem' }}
+              />
+            );
+          })}
+          <Typography variant="caption" color="text.secondary">
+            {query.from || query.to
+              ? `Showing ${query.from ? date(query.from) : 'the beginning'} to ${query.to ? date(query.to) : 'now'}`
+              : 'Showing the entire history'}
+          </Typography>
+        </Stack>
       </Paper>
 
       {loading ? <Loader /> : (

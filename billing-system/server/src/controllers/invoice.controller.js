@@ -9,6 +9,8 @@ import { renderInvoiceHtml } from '../services/invoiceHtml.service.js';
 import { adjustStock, assertAvailable } from '../services/stock.service.js';
 import { recordCouponUse, releaseCouponUse, validateCoupon } from '../services/coupon.service.js';
 import { allocate, consume, restoreFromItems } from '../services/batch.service.js';
+import { withDateRange } from '../utils/dateRange.js';
+import { statusForPayments } from './payment.controller.js';
 import {
   loyaltyConfig, movePoints, pointsForAmount, reverseInvoicePoints, validateRedemption,
 } from '../services/loyalty.service.js';
@@ -36,10 +38,9 @@ async function nextInvoiceNumber(transaction) {
 export const listInvoices = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
   // In multi-branch mode a user only sees their own branch's records.
-  const where = scopedWhere(req, { detstatus: false });
-  if (req.query.from || req.query.to) where.invoiceDate = {};
-  if (req.query.from) where.invoiceDate[Op.gte] = req.query.from;
-  if (req.query.to) where.invoiceDate[Op.lte] = req.query.to;
+  // Accepts either an explicit from/to pair or a named period such as
+  // last3Months, so every screen filters the same way.
+  const where = withDateRange(scopedWhere(req, { detstatus: false }), req.query, 'invoiceDate');
   const { rows, count } = await Invoice.findAndCountAll({
     where,
     include: [{ model: Customer }, { model: InvoiceItem, include: Product }],
@@ -250,6 +251,232 @@ export const createInvoice = asyncHandler(async (req, res) => {
   });
   const invoice = await Invoice.findOne({ where: { id: created.id}, include: [{ model: Customer }, { model: InvoiceItem, include: Product }, Payment] });
   res.status(201).json(invoice);
+});
+
+/**
+ * Edits an invoice in place, keeping its number.
+ *
+ * An invoice is not just a record: issuing it moved stock out of a branch and
+ * out of specific seed lots, consumed a coupon, and moved loyalty points. So an
+ * edit unwinds all of that first and then re-applies it from the new figures,
+ * inside one transaction. Anything less would leave stock or points drifting a
+ * little further from the truth with every correction.
+ *
+ * Payments already recorded are deliberately left alone — money that changed
+ * hands is not ours to rewrite — and the status is recomputed from them.
+ */
+export const updateInvoice = asyncHandler(async (req, res) => {
+  const updated = await sequelize.transaction(async (transaction) => {
+    const existing = await Invoice.findOne({
+      where: { id: req.params.id, detstatus: false },
+      include: [InvoiceItem, Payment],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (!existing) throw Object.assign(new Error('Invoice not found'), { status: 404 });
+
+    const paid = (existing.Payments || [])
+      .filter((p) => !p.detstatus)
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+    const customer = await Customer.findOne({
+      where: { id: req.body.customerId || existing.customerId, detstatus: false },
+      transaction,
+    });
+    if (!customer) throw Object.assign(new Error('Customer not found'), { status: 404 });
+
+    const company = await Company.findOne({ transaction });
+    const companyState = company?.state || process.env.COMPANY_STATE || customer.state;
+    const branchId = existing.branchId || req.branchId;
+
+    // ---- Unwind the original invoice ----
+    await restoreFromItems(existing.InvoiceItems, { transaction, userId: req.user.id });
+    for (const item of existing.InvoiceItems) {
+      await adjustStock({
+        productId: item.productId,
+        branchId,
+        delta: Number(item.quantity),
+        transaction,
+        userId: req.user.id,
+      });
+    }
+    await reverseInvoicePoints({ invoiceId: existing.id, userId: req.user.id, transaction });
+    await releaseCouponUse({ invoiceId: existing.id, userId: req.user.id, transaction });
+    await InvoiceItem.destroy({ where: { invoiceId: existing.id }, transaction });
+
+    // ---- Work out the new invoice ----
+    const productIds = req.body.items.map((item) => item.productId);
+    const products = await Product.findAll({ where: { id: productIds }, transaction, lock: transaction.LOCK.UPDATE });
+    const byId = new Map(products.map((p) => [p.id, p]));
+    const items = req.body.items.map((item) => {
+      const product = byId.get(Number(item.productId));
+      if (!product) throw Object.assign(new Error(`Product ${item.productId} not found`), { status: 404 });
+      return { ...item, rate: item.rate ?? product.sellingPrice, gstPercent: item.gstPercent ?? product.gstPercent };
+    });
+
+    // Checked after the reversal, so an edit that merely moves a line around
+    // is not refused for stock the invoice itself was holding.
+    await assertAvailable(items, branchId, transaction);
+
+    const grossTaxable = items.reduce(
+      (sum, item) => sum + Math.max(Number(item.quantity) * Number(item.rate) - Number(item.discount || 0), 0),
+      0,
+    );
+
+    let couponDiscount = 0;
+    let appliedCoupon = null;
+    if (req.body.couponCode) {
+      const result = await validateCoupon({
+        code: req.body.couponCode,
+        customerId: customer.id,
+        orderValue: grossTaxable,
+        transaction,
+      });
+      appliedCoupon = result.coupon;
+      couponDiscount = result.discount;
+    }
+
+    const config = loyaltyConfig(company);
+    const redemption = await validateRedemption({
+      customer,
+      points: req.body.redeemPoints,
+      orderValue: grossTaxable - couponDiscount,
+      config,
+    });
+
+    const totals = calculateInvoice(items, customer.state, companyState, {
+      couponDiscount,
+      pointsDiscount: redemption.amount,
+      charges: CHARGE_FIELDS.reduce((acc, field) => ({ ...acc, [field]: req.body[field] }), {}),
+    });
+
+    // Refusing here rather than silently leaving the customer in credit.
+    if (paid > Number(totals.grandTotal) + 0.009) {
+      throw Object.assign(
+        new Error(`${paid.toFixed(2)} has already been paid against this invoice, which is more than the new total of ${Number(totals.grandTotal).toFixed(2)}. Remove or reduce the payment first.`),
+        { status: 409 },
+      );
+    }
+
+    await existing.update({
+      invoiceDate: req.body.invoiceDate || existing.invoiceDate,
+      customerId: customer.id,
+      paymentMethod: req.body.paymentMethod || existing.paymentMethod,
+      subtotal: totals.subtotal,
+      cgst: totals.cgst,
+      sgst: totals.sgst,
+      igst: totals.igst,
+      grandTotal: totals.grandTotal,
+      roundOff: totals.roundOff,
+      amountInWords: totals.amountInWords,
+      couponId: appliedCoupon?.id || null,
+      couponCode: appliedCoupon?.code || null,
+      couponDiscount,
+      pointsRedeemed: redemption.points,
+      pointsDiscount: redemption.amount,
+      pointsEarned: 0,
+      notes: req.body.notes ?? existing.notes,
+      authlstedit: req.user.id,
+      ...Object.fromEntries(DOCUMENT_FIELDS
+        .filter((field) => req.body[field] !== undefined && req.body[field] !== '')
+        .map((field) => [field, req.body[field]])),
+    }, { transaction });
+
+    // ---- Re-apply stock, lots and lines ----
+    const rows = [];
+    for (const item of totals.items) {
+      const allocations = await allocate({
+        productId: item.productId,
+        branchId,
+        quantity: item.quantity,
+        batchId: item.batchId,
+        transaction,
+      });
+      if (!allocations.length) {
+        rows.push({ item, quantity: Number(item.quantity), batch: null });
+        continue;
+      }
+      await consume(allocations, { transaction, userId: req.user.id });
+      for (const allocation of allocations) {
+        rows.push({ item, quantity: allocation.quantity, batch: allocation.batch });
+      }
+    }
+
+    await InvoiceItem.bulkCreate(rows.map(({ item, quantity, batch }) => {
+      const share = Number(item.quantity) > 0 ? quantity / Number(item.quantity) : 1;
+      return {
+        invoiceId: existing.id,
+        productId: item.productId,
+        quantity,
+        rate: item.rate,
+        discount: Number(item.discount || 0) * share,
+        gstPercent: item.gstPercent,
+        gstAmount: Number(item.gstAmount) * share,
+        amount: Number(item.amount) * share,
+        packing: item.packing || null,
+        um: item.um || null,
+        batchId: batch?.id || null,
+        batchNumber: batch?.batchNumber || null,
+        germinationPercent: batch?.germinationPercent ?? null,
+        expiryDate: batch?.expiryDate || null,
+      };
+    }), { transaction });
+
+    for (const item of totals.items) {
+      await adjustStock({
+        productId: item.productId,
+        branchId,
+        delta: -Number(item.quantity),
+        transaction,
+        userId: req.user.id,
+      });
+    }
+
+    await StockMovement.bulkCreate(totals.items.map((item) => ({
+      productId: item.productId,
+      createdBy: req.user.id,
+      movementType: 'Sale',
+      quantity: -item.quantity,
+      referenceType: 'Invoice Edit',
+      referenceId: existing.id,
+      notes: `Revised via Invoice ${existing.invoiceNumber}`,
+      authadd: req.user.id,
+    })), { transaction });
+
+    if (appliedCoupon) {
+      await recordCouponUse({
+        coupon: appliedCoupon, customerId: customer.id, invoiceId: existing.id,
+        discount: couponDiscount, userId: req.user.id, transaction,
+      });
+    }
+    if (redemption.points > 0) {
+      await movePoints({
+        customerId: customer.id, points: -redemption.points, entryType: 'Redeemed',
+        invoiceId: existing.id, notes: `Redeemed against ${existing.invoiceNumber}`,
+        userId: req.user.id, transaction,
+      });
+    }
+    const earned = pointsForAmount(totals.grandTotal, config);
+    if (earned > 0) {
+      await movePoints({
+        customerId: customer.id, points: earned, entryType: 'Earned',
+        invoiceId: existing.id, notes: `Earned on ${existing.invoiceNumber}`,
+        userId: req.user.id, transaction,
+      });
+      await existing.update({ pointsEarned: earned }, { transaction });
+    }
+
+    // Status follows the money actually recorded, not the payment method.
+    await existing.update({ status: statusForPayments(paid, totals.grandTotal) }, { transaction });
+
+    return existing;
+  });
+
+  const invoice = await Invoice.findOne({
+    where: { id: updated.id },
+    include: [{ model: Customer }, { model: InvoiceItem, include: Product }, Payment],
+  });
+  res.json(invoice);
 });
 
 export const removeInvoice = asyncHandler(async (req, res) => {

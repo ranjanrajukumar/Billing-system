@@ -5,7 +5,7 @@ import PrintIcon from '@mui/icons-material/Print';
 import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
 import ShareIcon from '@mui/icons-material/Share';
 import {
-  Button, Chip, Grid, IconButton, MenuItem, Paper,
+  Box, Button, Chip, Grid, IconButton, MenuItem, Paper,
   Stack, TextField, Tooltip, Typography,
 } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
@@ -17,6 +17,7 @@ import Loader from '../components/Loader.jsx';
 import Modal from '../components/Modal.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import Pagination from '../components/Pagination.jsx';
+import PeriodFilter from '../components/PeriodFilter.jsx';
 import SearchBox from '../components/SearchBox.jsx';
 import StatsCard from '../components/StatsCard.jsx';
 import { useToast } from '../context/ToastContext.jsx';
@@ -40,7 +41,7 @@ function calc(items) {
 export default function Quotations() {
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({});
-  const [query, setQuery] = useState({ page: 1, limit: 10, search: '' });
+  const [query, setQuery] = useState({ page: 1, limit: 10, search: '' , period: 'all', from: '', to: '', month: '' });
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [customers, setCustomers] = useState([]);
@@ -139,6 +140,11 @@ export default function Quotations() {
         }
       />
 
+      <PeriodFilter
+        value={query}
+        onChange={(range) => setQuery({ ...query, ...range, page: 1 })}
+      />
+
       <Grid container spacing={2}>
         <Grid item xs={6} md={4}>
           <StatsCard title="Total Quotations" value={stats.count} detail="All quotes" icon={<RequestQuoteIcon />} gradient="primary" />
@@ -151,7 +157,8 @@ export default function Quotations() {
         </Grid>
       </Grid>
 
-      {loading ? <Loader /> : (
+      {loading && rows.length === 0 ? <Loader /> : (
+        <Box sx={{ opacity: loading ? 0.55 : 1, transition: 'opacity 0.15s' }}>
         <>
           <DataTable
             mobileKeyField="quotationNumber"
@@ -184,6 +191,7 @@ export default function Quotations() {
           />
           <Pagination meta={meta} onChangePage={(p) => setQuery({ ...query, page: p })} onChangeLimit={(l) => setQuery({ ...query, limit: l })} />
         </>
+        </Box>
       )}
 
       <Modal open={open} title="New Quotation" onClose={() => setOpen(false)} maxWidth="lg">
@@ -235,7 +243,7 @@ export default function Quotations() {
           </Grid>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="flex-end">
-            <Button onClick={() => setOpen(false)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+            <Button type="button" onClick={() => setOpen(false)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
             <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ borderRadius: 2, minWidth: 140 }}>
               {isSubmitting ? 'Saving…' : 'Save Quotation'}
             </Button>

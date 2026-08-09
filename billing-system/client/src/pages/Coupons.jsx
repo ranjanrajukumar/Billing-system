@@ -3,7 +3,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import {
-  Button, Chip, Grid, IconButton, MenuItem, Stack, TextField, Tooltip, Typography,
+  Box, Button, Chip, Grid, IconButton, MenuItem, Stack, TextField, Tooltip, Typography,
 } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -116,7 +116,8 @@ export default function Coupons() {
         </Grid>
       </Grid>
 
-      {loading ? <Loader /> : (
+      {loading && rows.length === 0 ? <Loader /> : (
+        <Box sx={{ opacity: loading ? 0.55 : 1, transition: 'opacity 0.15s' }}>
         <>
           <DataTable
             mobileKeyField="code"
@@ -156,6 +157,7 @@ export default function Coupons() {
           />
           <Pagination meta={meta} onChangePage={(p) => setQuery({ ...query, page: p })} onChangeLimit={(l) => setQuery({ ...query, limit: l, page: 1 })} />
         </>
+        </Box>
       )}
 
       <Modal open={Boolean(editing)} title={editing?.id ? 'Update Coupon' : 'Add Coupon'} onClose={() => setEditing(null)} maxWidth="sm">
@@ -212,7 +214,7 @@ export default function Coupons() {
           </Grid>
           <Grid item xs={12}>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="flex-end">
-              <Button onClick={() => setEditing(null)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+              <Button type="button" onClick={() => setEditing(null)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
               <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ borderRadius: 2 }}>
                 {isSubmitting ? 'Saving…' : editing?.id ? 'Update Coupon' : 'Add Coupon'}
               </Button>

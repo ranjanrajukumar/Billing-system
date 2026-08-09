@@ -4,9 +4,37 @@ import { buildInvoicePdf } from '../services/pdf.service.js';
 import { defaultLayout, renderInvoiceHtml } from '../services/invoiceHtml.service.js';
 import { documentTitle, toPrintableDocument } from '../services/documentAdapter.js';
 
+/**
+ * Documents that must not show money, and the template that suits them.
+ *
+ * A delivery challan moves goods; printing prices and a grand total on it is
+ * wrong. Without this it would inherit the company's default invoice template
+ * and hand the customer a priced document.
+ */
+// Keyed by the `kind` the handlers are built with, which is camelCase — not the
+// hyphenated form used in the URL.
+const TEMPLATE_BY_KIND = {
+  deliveryChallan: 'Delivery / Dispatch Note',
+};
+
+async function templateForKind(kind) {
+  const name = TEMPLATE_BY_KIND[kind];
+  if (!name) return null;
+  const saved = await InvoiceTemplate.findOne({
+    where: { templateName: name, detstatus: false, isActive: true },
+  });
+  return saved ? { template: saved.toJSON(), missing: false } : null;
+}
+
 // A stale company default must not take document output down with it, so an
 // unresolvable template falls back to the built-in layout.
-async function resolveTemplate(requested, company) {
+async function resolveTemplate(requested, company, kind) {
+  // An explicit choice always wins; otherwise a challan gets its own layout
+  // before falling back to the invoice default.
+  if (!requested) {
+    const forKind = await templateForKind(kind);
+    if (forKind) return forKind;
+  }
   const selected = requested || company?.defaultInvoiceTemplate || '';
   if (!String(selected).startsWith('template:')) return { template: selected || 'standard', missing: false };
 
@@ -26,7 +54,7 @@ export function documentOutputHandlers(kind, load) {
     if (!record) return res.status(404).json({ message: 'Not found' });
 
     const company = await Company.unscoped().findOne();
-    const { template, missing } = await resolveTemplate(req.query.template, company);
+    const { template, missing } = await resolveTemplate(req.query.template, company, kind);
     if (missing) return res.status(404).json({ message: 'Invoice template not found' });
 
     const document = toPrintableDocument(kind, record, company?.state || process.env.COMPANY_STATE);
@@ -43,7 +71,7 @@ export function documentOutputHandlers(kind, load) {
     if (!record) return res.status(404).json({ message: 'Not found' });
 
     const company = await Company.findOne();
-    const { template, missing } = await resolveTemplate(req.query.template, company);
+    const { template, missing } = await resolveTemplate(req.query.template, company, kind);
     if (missing) return res.status(404).json({ message: 'Invoice template not found' });
 
     const resolved = typeof template === 'object' ? { ...template } : {};

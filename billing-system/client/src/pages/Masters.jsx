@@ -296,7 +296,7 @@ function MasterTable({ masterKey, config }) {
           ))}
           <Grid item xs={12}>
             <Stack direction="row" spacing={1} justifyContent="flex-end">
-              <Button onClick={() => setEditing(null)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+              <Button type="button" onClick={() => setEditing(null)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
               <Button startIcon={<SaveIcon />} type="submit" variant="contained" disabled={isSubmitting} sx={{ borderRadius: 2 }}>
                 {isSubmitting ? 'Saving…' : 'Save'}
               </Button>

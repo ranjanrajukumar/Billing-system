@@ -2,6 +2,7 @@ import { Op } from 'sequelize';
 import { Company, InvoiceTemplate } from '../models/index.js';
 import { BLOCK_TYPES, defaultLayout, renderInvoiceHtml, sampleInvoice } from '../services/invoiceHtml.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { paged } from '../utils/pagination.js';
 import { buildInvoicePdf } from '../services/pdf.service.js';
 
 export const getAll = asyncHandler(async (req, res) => {
@@ -19,7 +20,7 @@ export const getAll = asyncHandler(async (req, res) => {
     order: [['addondt', 'DESC']]
   });
 
-  res.json({ data: rows, total: count, page: parseInt(page), pages: Math.ceil(count / limit) });
+  res.json(paged(rows, count, Number(page), Number(limit)));
 });
 
 export const getOne = asyncHandler(async (req, res) => {

@@ -1,6 +1,7 @@
 import { Op, col, fn } from 'sequelize';
 import { Customer, KhataEntry, Supplier } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { withDateRange } from '../utils/dateRange.js';
 import { imageColumns } from '../utils/imageUpload.js';
 
 const round2 = (value) => Math.round(Number(value || 0) * 100) / 100;
@@ -43,7 +44,7 @@ export const summary = asyncHandler(async (req, res) => {
       [fn('MAX', col('entry_date')), 'lastEntry'],
       [fn('COUNT', col('id')), 'entries'],
     ],
-    where: { detstatus: false, ...ownerScope(req) },
+    where: withDateRange({ detstatus: false, ...ownerScope(req) }, req.query, 'entryDate'),
     group: ['partyType', 'partyId', 'entryType'],
     raw: true,
   });
@@ -100,7 +101,7 @@ export const partyLedger = asyncHandler(async (req, res) => {
   const party = await loadParty(partyType, partyId);
 
   const entries = await KhataEntry.findAll({
-    where: { partyType, partyId, detstatus: false, ...ownerScope(req) },
+    where: withDateRange({ partyType, partyId, detstatus: false, ...ownerScope(req) }, req.query, 'entryDate'),
     order: [['entryDate', 'ASC'], ['id', 'ASC']],
   });
 
