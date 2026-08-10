@@ -16,6 +16,8 @@ export async function ensureDatabase() {
   const dbDialect = settings.dialect;
 
   if (dbDialect === 'sqlite') return;
+  if (process.env.DB_CREATE_DATABASE === 'false') return;
+  if (process.env.NODE_ENV === 'production' && process.env.DB_CREATE_DATABASE !== 'true') return;
 
   assertSupportedAuth();
 

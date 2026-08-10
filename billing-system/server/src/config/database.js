@@ -14,7 +14,7 @@ const connectionOptions = {
     paranoid: false
   },
   pool: {
-    max: Number(process.env.DB_POOL_MAX || 2),
+    max: Number(process.env.DB_POOL_MAX || 5),
     min: 0,
     acquire: 30000,
     idle: 10000
