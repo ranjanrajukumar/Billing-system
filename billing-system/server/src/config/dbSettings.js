@@ -75,12 +75,64 @@ export function getDbSettings() {
   };
 }
 
+// export function getConnectionOptions({ databaseLogging = false } = {}) {
+//   const settings = getDbSettings();
+//   const options = {
+//     host: settings.host,
+//     dialect: settings.dialect,
+//     logging: databaseLogging
+//   };
+
+//   if (settings.dialect !== 'mssql') {
+//     options.port = settings.port || 3306;
+//     return options;
+//   }
+
+//   options.dialectOptions = {
+//     options: {
+//       encrypt: settings.encrypt,
+//       trustServerCertificate: settings.trustServerCertificate,
+//       connectTimeout: settings.connectTimeout,
+//       requestTimeout: settings.requestTimeout
+//     }
+//   };
+
+//   if (settings.instance) {
+//     options.dialectOptions.options.instanceName = settings.instance;
+//   } else {
+//     options.port = settings.port;
+//   }
+
+//   if (settings.authType === 'ntlm') {
+//     options.dialectOptions.authentication = {
+//       type: 'ntlm',
+//       options: {
+//         domain: settings.domain,
+//         userName: settings.user,
+//         password: settings.password
+//       }
+//     };
+//   }
+
+//   return options;
+// }
+
+
 export function getConnectionOptions({ databaseLogging = false } = {}) {
   const settings = getDbSettings();
+
   const options = {
     host: settings.host,
     dialect: settings.dialect,
-    logging: databaseLogging
+    logging: databaseLogging,
+
+    // Keep the connection pool very small for FreeDB
+    pool: {
+      max: 1,
+      min: 0,
+      acquire: 30000,
+      idle: 10000
+    }
   };
 
   if (settings.dialect !== 'mssql') {
@@ -119,7 +171,10 @@ export function getConnectionOptions({ databaseLogging = false } = {}) {
 
 export function assertSupportedAuth() {
   const settings = getDbSettings();
-  if (settings.dialect !== 'mssql' || settings.authType !== 'trusted') return;
+
+  if (settings.dialect !== 'mssql' || settings.authType !== 'trusted') {
+    return;
+  }
 
   throw new Error(
     'Trusted_Connection=True is a Windows/SSMS connection mode. The Sequelize SQL Server driver used here needs SQL authentication (DB_USER/DB_PASSWORD) or DB_AUTH_TYPE=ntlm with a Windows username and password.'
