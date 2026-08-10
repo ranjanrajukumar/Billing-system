@@ -80,8 +80,8 @@ export const Coupon = CouponModel(sequelize);
 export const CouponUsage = CouponUsageModel(sequelize);
 export const LoyaltyTransaction = LoyaltyTransactionModel(sequelize);
 export const ProductBatch = ProductBatchModel(sequelize);
-Role.hasMany(User, { foreignKey: 'roleId' });
-User.belongsTo(Role, { foreignKey: 'roleId' });
+Role.hasMany(User, { foreignKey: 'roleId', onDelete: 'RESTRICT', onUpdate: 'CASCADE' });
+User.belongsTo(Role, { foreignKey: 'roleId', onDelete: 'RESTRICT', onUpdate: 'CASCADE' });
 
 Category.hasMany(Product, { foreignKey: 'categoryId' });
 Product.belongsTo(Category, { foreignKey: 'categoryId' });

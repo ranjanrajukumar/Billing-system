@@ -13,7 +13,12 @@ const connectionOptions = {
     timestamps: true,
     paranoid: false
   },
-  pool: { max: 10, min: 0, acquire: 30000, idle: 10000 }
+  pool: {
+    max: Number(process.env.DB_POOL_MAX || 2),
+    min: 0,
+    acquire: 30000,
+    idle: 10000
+  }
 };
 
 export const sequelize = new Sequelize(

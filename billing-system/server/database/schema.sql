@@ -1,5 +1,7 @@
-CREATE DATABASE IF NOT EXISTS billing_system CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE billing_system;
+--CREATE DATABASE IF NOT EXISTS billing_system CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS freedb_1rNdTRV9 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+USE freedb_1rNdTRV9;
 
 CREATE TABLE roles (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

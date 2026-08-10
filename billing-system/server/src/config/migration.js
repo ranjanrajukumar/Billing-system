@@ -6,15 +6,15 @@ import { sequelize, Role, User, Company, Category, Product, Branch, BranchStock,
 import { DEFAULT_TEMPLATES } from './defaultTemplates.js';
 import { assertSupportedAuth, getConnectionOptions, getDbSettings } from './dbSettings.js';
 
-const settings = getDbSettings();
-const dbName = settings.database;
-const dbDialect = settings.dialect;
-
 function quoteSqlServerName(name) {
   return `[${String(name).replaceAll(']', ']]')}]`;
 }
 
 export async function ensureDatabase() {
+  const settings = getDbSettings();
+  const dbName = settings.database;
+  const dbDialect = settings.dialect;
+
   if (dbDialect === 'sqlite') return;
 
   assertSupportedAuth();
@@ -40,6 +40,35 @@ export async function ensureDatabase() {
     );
   } finally {
     await adminConnection.close();
+  }
+}
+
+async function ensureMissingColumns() {
+  const queryInterface = sequelize.getQueryInterface();
+  const models = Object.values(sequelize.models);
+
+  for (const model of models) {
+    const tableName = model.getTableName();
+    const describedTable = typeof tableName === 'string' ? tableName : tableName.tableName;
+    const quotedTable = queryInterface.queryGenerator.quoteTable(tableName);
+    const [columns] = await sequelize.query(`SHOW COLUMNS FROM ${quotedTable}`);
+    const existing = new Set(columns.map((column) => column.Field.toLowerCase()));
+
+    for (const attribute of Object.values(model.rawAttributes)) {
+      if (attribute.type?.key === 'VIRTUAL') continue;
+
+      const fieldName = attribute.field || attribute.fieldName;
+      if (!fieldName || existing.has(fieldName.toLowerCase())) continue;
+
+      try {
+        await queryInterface.addColumn(tableName, fieldName, attribute);
+        console.log(`Added missing column ${describedTable}.${fieldName}`);
+      } catch (error) {
+        if (error.original?.code !== 'ER_DUP_FIELDNAME') throw error;
+      }
+
+      existing.add(fieldName.toLowerCase());
+    }
   }
 }
 
@@ -249,11 +278,9 @@ export async function migrateDatabase() {
   await ensureDatabase();
   await sequelize.authenticate();
 
-  if (process.env.DB_SYNC_ALTER !== 'false') {
-    await dropDuplicateIndexes();
-  }
-
-  await sequelize.sync({ alter: process.env.DB_SYNC_ALTER !== 'false' });
+  await dropDuplicateIndexes();
+  await sequelize.sync({ alter: false });
+  await ensureMissingColumns();
   await seedDefaults();
   await migrateToDefaultBranch();
   await seedInvoiceTemplates();
