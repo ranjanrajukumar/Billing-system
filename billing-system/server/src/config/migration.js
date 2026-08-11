@@ -74,6 +74,61 @@ async function ensureMissingColumns() {
   }
 }
 
+/**
+ * Compares the ENUM values defined in each Sequelize model with the values
+ * actually present in the MySQL column and ALTERs the column when they differ.
+ * This prevents "Data truncated for column" errors when new ENUM values are
+ * added to a model but the database column was never updated.
+ */
+async function ensureEnumValues() {
+  const dialect = sequelize.getDialect();
+  if (dialect !== 'mysql' && dialect !== 'mariadb') return;
+
+  const queryInterface = sequelize.getQueryInterface();
+  const models = Object.values(sequelize.models);
+
+  for (const model of models) {
+    const tableName = model.getTableName();
+    const describedTable = typeof tableName === 'string' ? tableName : tableName.tableName;
+    const quotedTable = queryInterface.queryGenerator.quoteTable(tableName);
+    const [columns] = await sequelize.query(`SHOW COLUMNS FROM ${quotedTable}`);
+    const columnMap = Object.fromEntries(columns.map((c) => [c.Field.toLowerCase(), c]));
+
+    for (const attribute of Object.values(model.rawAttributes)) {
+      if (attribute.type?.key !== 'ENUM') continue;
+
+      const fieldName = attribute.field || attribute.fieldName;
+      if (!fieldName) continue;
+
+      const col = columnMap[fieldName.toLowerCase()];
+      if (!col || !col.Type.startsWith('enum(')) continue;
+
+      // Parse the existing DB enum values: enum('A','B','C') → ['A','B','C']
+      const dbValues = col.Type
+        .slice(5, -1)                       // strip "enum(" and ")"
+        .split(',')
+        .map((v) => v.trim().replace(/^'|'$/g, ''));
+
+      const modelValues = attribute.type.values || attribute.values || [];
+      const dbSet = new Set(dbValues);
+      const missing = modelValues.filter((v) => !dbSet.has(v));
+
+      if (missing.length === 0) continue;
+
+      const allQuoted = modelValues.map((v) => `'${v}'`).join(',');
+      const nullClause = attribute.allowNull === false ? ' NOT NULL' : '';
+      const defaultClause = attribute.defaultValue != null
+        ? ` DEFAULT '${attribute.defaultValue}'`
+        : '';
+
+      await sequelize.query(
+        `ALTER TABLE ${quotedTable} MODIFY COLUMN \`${fieldName}\` ENUM(${allQuoted})${nullClause}${defaultClause}`
+      );
+      console.log(`Updated ENUM ${describedTable}.${fieldName}: added ${missing.join(', ')}`);
+    }
+  }
+}
+
 export async function seedDefaults() {
   const fullPermissions = {
     users: { view: true, create: true, edit: true, delete: true },
@@ -283,6 +338,7 @@ export async function migrateDatabase() {
   await dropDuplicateIndexes();
   await sequelize.sync({ alter: false });
   await ensureMissingColumns();
+  await ensureEnumValues();
   await seedDefaults();
   await migrateToDefaultBranch();
   await seedInvoiceTemplates();

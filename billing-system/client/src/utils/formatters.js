@@ -1,7 +1,7 @@
 const SERVER_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '');
 
 // The API returns image locations as server-relative paths (/media/... for
-// database-backed images, /uploads/... for anything not yet migrated).
+// database-backed images).
 export const mediaUrl = (relativePath) => (relativePath ? SERVER_ORIGIN + relativePath : '');
 
 export const currency = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(Number(value || 0));

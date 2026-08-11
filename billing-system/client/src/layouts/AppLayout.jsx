@@ -36,10 +36,10 @@ export default function AppLayout({ mode, onToggleMode }) {
         <Box
           sx={{
             flexGrow: 1,
-            px: { xs: 2, sm: 3 },
+            px: { xs: 1.5, sm: 3 },
             py: { xs: 2, sm: 3 },
-            // Extra bottom padding on mobile for bottom nav
-            pb: { xs: '88px', sm: 3 },
+            // Extra bottom padding on mobile for bottom nav + safe area
+            pb: { xs: 'calc(88px + env(safe-area-inset-bottom, 0px))', sm: 3 },
             maxWidth: '100%',
             boxSizing: 'border-box',
           }}

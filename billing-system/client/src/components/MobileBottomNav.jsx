@@ -58,6 +58,8 @@ export default function MobileBottomNav({ onOpenSidebar }) {
           theme.palette.mode === 'dark'
             ? alpha('#1a1a2e', 0.95)
             : alpha('#ffffff', 0.95),
+        // Safe area for notched phones (iPhone etc.)
+        pb: 'env(safe-area-inset-bottom, 0px)',
       }}
     >
       <BottomNavigation

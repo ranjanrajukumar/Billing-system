@@ -100,7 +100,7 @@ export default function Navbar({ onMenu, mode, onToggleMode }) {
         <Box sx={{ flex: 1, display: { xs: 'none', md: 'block' } }} />
 
         {/* Right section */}
-        <Stack direction="row" alignItems="center" spacing={0.5}>
+        <Stack direction="row" alignItems="center" spacing={{ xs: 0.25, sm: 0.5 }}>
           <Box sx={{ display: { xs: 'none', sm: 'block' }, mr: 0.5 }}>
             <BranchSwitcher />
           </Box>
@@ -114,13 +114,13 @@ export default function Navbar({ onMenu, mode, onToggleMode }) {
                 color: 'text.secondary',
                 bgcolor: alpha(theme.palette.primary.main, 0.06),
                 borderRadius: 2,
-                width: 34,
-                height: 34,
+                width: { xs: 30, sm: 34 },
+                height: { xs: 30, sm: 34 },
                 transition: 'all 0.2s',
                 '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.12) },
               }}
             >
-              <NotificationsIcon sx={{ fontSize: 18 }} />
+              <NotificationsIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
             </IconButton>
           </Tooltip>
 
@@ -133,13 +133,13 @@ export default function Navbar({ onMenu, mode, onToggleMode }) {
                 color: 'text.secondary',
                 bgcolor: alpha(theme.palette.primary.main, 0.06),
                 borderRadius: 2,
-                width: 34,
-                height: 34,
+                width: { xs: 30, sm: 34 },
+                height: { xs: 30, sm: 34 },
                 transition: 'all 0.2s',
                 '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.12) },
               }}
             >
-              <CalculateIcon sx={{ fontSize: 18 }} />
+              <CalculateIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
             </IconButton>
           </Tooltip>
 
@@ -152,8 +152,8 @@ export default function Navbar({ onMenu, mode, onToggleMode }) {
                 color: 'text.secondary',
                 bgcolor: alpha(theme.palette.primary.main, 0.06),
                 borderRadius: 2,
-                width: 34,
-                height: 34,
+                width: { xs: 30, sm: 34 },
+                height: { xs: 30, sm: 34 },
                 transition: 'all 0.2s',
                 '&:hover': {
                   bgcolor: alpha(theme.palette.primary.main, 0.12),
@@ -162,9 +162,9 @@ export default function Navbar({ onMenu, mode, onToggleMode }) {
               }}
             >
               {mode === 'dark' ? (
-                <LightModeIcon sx={{ fontSize: 18 }} />
+                <LightModeIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
               ) : (
-                <DarkModeIcon sx={{ fontSize: 18 }} />
+                <DarkModeIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
               )}
             </IconButton>
           </Tooltip>

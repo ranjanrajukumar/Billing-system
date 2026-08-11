@@ -12,6 +12,26 @@ body {
   font-family: 'Inter', Roboto, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Prevent iOS Safari from auto-resizing text */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Prevent pull-to-refresh on overscroll (better PWA feel) */
+  overscroll-behavior-y: contain;
+}
+
+/* ── Touch-Friendly Defaults ──────────────────────────────────────── */
+
+/* Faster taps on mobile (remove 300ms delay) */
+a, button, [role="button"], input, select, textarea {
+  touch-action: manipulation;
+}
+
+/* Ensure minimum touch target size on mobile */
+@media (max-width: 599px) {
+  .MuiIconButton-root {
+    min-width: 40px;
+    min-height: 40px;
+  }
 }
 
 a {
@@ -190,10 +210,43 @@ a {
   scrollbar-color: rgba(128,128,128,0.3) transparent;
 }
 
+/* Hide scrollbar on mobile for cleaner appearance */
+@media (max-width: 599px) {
+  * {
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* ── Page container padding on mobile ─────────────────────────────── */
 
 @media (max-width: 599px) {
   .page-root {
-    padding-bottom: 72px; /* room for bottom nav */
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); /* room for bottom nav + notch */
   }
 }
+
+/* ── Mobile Utility Classes ───────────────────────────────────────── */
+
+/* Horizontal scroll container for chips / filters on mobile */
+.mobile-scroll-row {
+  display: flex;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  gap: 6px;
+}
+.mobile-scroll-row::-webkit-scrollbar { display: none; }
+
+/* Hide element only on mobile */
+@media (max-width: 599px) {
+  .mobile-hide { display: none !important; }
+}
+
+/* Show element only on mobile */
+@media (min-width: 600px) {
+  .mobile-only { display: none !important; }
+}
+

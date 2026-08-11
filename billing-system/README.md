@@ -43,10 +43,8 @@ billing-system/
       routes/
       services/
       utils/
-    database/schema.sql
     logs/
     pdf/
-    uploads/
 ```
 
 The server code lives under `server/src` for maintainability while preserving the requested MVC folders.
@@ -60,13 +58,7 @@ cd billing-system
 npm run install:all
 ```
 
-2. Create MySQL database:
-
-```bash
-mysql -u root -p < server/database/schema.sql
-```
-
-3. Configure environment:
+2. Configure environment:
 
 ```bash
 cp server/.env.example server/.env
@@ -75,7 +67,7 @@ cp client/.env.example client/.env
 
 Update `server/.env` with your MySQL credentials and a strong `JWT_SECRET`.
 
-4. Migrate/sync tables and seed default data:
+3. Migrate/sync tables and seed default data:
 
 ```bash
 npm run db:migrate --prefix server
@@ -88,7 +80,7 @@ Email: admin@example.com
 Password: Admin@123
 ```
 
-5. Start development servers:
+4. Start development servers:
 
 ```bash
 npm run dev:server

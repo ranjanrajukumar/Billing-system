@@ -24,7 +24,6 @@ app.use(apiLimiter);
 app.use(requestContext);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 app.use('/pdf', express.static(path.join(__dirname, '..', 'pdf')));
 
 app.get('/health', (req, res) => {
