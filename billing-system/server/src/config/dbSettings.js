@@ -126,9 +126,8 @@ export function getConnectionOptions({ databaseLogging = false } = {}) {
     dialect: settings.dialect,
     logging: databaseLogging,
 
-    // Keep the connection pool very small for FreeDB
     pool: {
-      max: 1,
+      max: Number(process.env.DB_POOL_MAX || 5),
       min: 0,
       acquire: 30000,
       idle: 10000
@@ -137,6 +136,13 @@ export function getConnectionOptions({ databaseLogging = false } = {}) {
 
   if (settings.dialect !== 'mssql') {
     options.port = settings.port || 3306;
+    if (settings.encrypt || process.env.DB_SSL === 'true' || (settings.host && settings.host.includes('aivencloud.com'))) {
+      options.dialectOptions = {
+        ssl: {
+          rejectUnauthorized: false
+        }
+      };
+    }
     return options;
   }
 

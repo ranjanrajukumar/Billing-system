@@ -21,7 +21,7 @@ export async function ensureDatabase() {
 
   assertSupportedAuth();
 
-  const adminDatabase = dbDialect === 'mssql' ? 'master' : '';
+  const adminDatabase = dbDialect === 'mssql' ? 'master' : dbName;
   const adminConnection = new Sequelize(
     adminDatabase,
     settings.user,
@@ -40,8 +40,12 @@ export async function ensureDatabase() {
     await adminConnection.query(
       `CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
     );
+  } catch (err) {
+    console.warn(`Database creation check skipped/ignored (${err.message})`);
   } finally {
-    await adminConnection.close();
+    try {
+      await adminConnection.close();
+    } catch {}
   }
 }
 
