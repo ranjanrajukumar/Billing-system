@@ -1,5 +1,5 @@
 import { Op } from 'sequelize';
-import { sequelize, Product, Purchase, PurchaseItem, StockMovement, Supplier } from '../models/index.js';
+import { sequelize, Product, ProductBatch, Purchase, PurchaseItem, StockMovement, Supplier } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { scopedWhere } from '../middleware/branchContext.js';
 import { withDateRange } from '../utils/dateRange.js';
@@ -12,14 +12,36 @@ async function nextPurchaseNumber(transaction) {
   return `PO-${year}-${String(count + 1).padStart(5, '0')}`;
 }
 
-function calculateItems(items) {
+function calculateItems(items, byId) {
   const calculated = items.map((item) => {
+    const p = byId.get(Number(item.productId));
+    const primaryUnit = p?.primaryUnit || 'PCS';
+    const secondaryUnit = p?.secondaryUnit || '';
+    const factor = Number(p?.unitConversionFactor || 1);
+    const billedUnit = item.um || primaryUnit;
+
+    const primaryQty = (billedUnit === secondaryUnit && factor > 1)
+      ? Number(item.quantity || 0) * factor
+      : Number(item.quantity || 0);
+
     const quantity = Number(item.quantity || 0);
     const rate = Number(item.rate || 0);
     const gstPercent = Number(item.gstPercent || 0);
     const taxable = quantity * rate;
     const gstAmount = taxable * gstPercent / 100;
-    return { ...item, quantity, rate, gstPercent, gstAmount, amount: taxable + gstAmount };
+
+    return {
+      ...item,
+      um: billedUnit,
+      primaryUnit,
+      unitConversionFactor: factor,
+      primaryQty,
+      quantity,
+      rate,
+      gstPercent,
+      gstAmount,
+      amount: taxable + gstAmount,
+    };
   });
   const subtotal = calculated.reduce((sum, item) => sum + item.quantity * item.rate, 0);
   const taxAmount = calculated.reduce((sum, item) => sum + item.gstAmount, 0);
@@ -28,7 +50,6 @@ function calculateItems(items) {
 
 export const listPurchases = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  // In multi-branch mode a user only sees their own branch's records.
   const where = withDateRange(scopedWhere(req, { detstatus: false }), req.query, 'purchaseDate');
   const { rows, count } = await Purchase.findAndCountAll({
     where,
@@ -58,7 +79,7 @@ export const createPurchase = asyncHandler(async (req, res) => {
       if (!byId.has(Number(item.productId))) throw Object.assign(new Error(`Product ${item.productId} not found`), { status: 404 });
     });
 
-    const totals = calculateItems(req.body.items);
+    const totals = calculateItems(req.body.items, byId);
     const purchase = await Purchase.create({
       purchaseNumber: req.body.purchaseNumber || await nextPurchaseNumber(transaction),
       purchaseDate: req.body.purchaseDate,
@@ -77,6 +98,13 @@ export const createPurchase = asyncHandler(async (req, res) => {
     await PurchaseItem.bulkCreate(totals.items.map((item) => ({
       purchaseId: purchase.id,
       productId: item.productId,
+      um: item.um,
+      primaryUnit: item.primaryUnit,
+      unitConversionFactor: item.unitConversionFactor,
+      primaryQty: item.primaryQty,
+      batchNumber: item.batchNumber || null,
+      germinationPercent: item.germinationPercent || null,
+      expiryDate: item.expiryDate || null,
       quantity: item.quantity,
       rate: item.rate,
       gstPercent: item.gstPercent,
@@ -86,22 +114,54 @@ export const createPurchase = asyncHandler(async (req, res) => {
 
     if (purchase.status === 'Received') {
       for (const item of totals.items) {
+        // Adjust branch stock using primaryQty (e.g. 10 BAGS * 50 = 500 KG)
         await adjustStock({
           productId: item.productId,
           branchId: req.branchId,
-          delta: Number(item.quantity),
+          delta: Number(item.primaryQty),
           transaction,
           userId: req.user.id,
         });
+
+        // If batch number is provided, automatically create or update ProductBatch
+        if (item.batchNumber && item.batchNumber.trim()) {
+          const batchNo = item.batchNumber.trim();
+          const [batchRow] = await ProductBatch.findOrCreate({
+            where: { productId: item.productId, branchId: req.branchId, batchNumber: batchNo, detstatus: false },
+            defaults: {
+              productId: item.productId,
+              branchId: req.branchId,
+              batchNumber: batchNo,
+              lotNumber: batchNo,
+              germinationPercent: item.germinationPercent || null,
+              expiryDate: item.expiryDate || null,
+              quantity: 0,
+              purchaseRate: item.rate,
+              supplierName: supplier.supplierName,
+            },
+            transaction,
+            lock: transaction.LOCK.UPDATE
+          });
+
+          await batchRow.update({
+            quantity: Number(batchRow.quantity || 0) + Number(item.primaryQty),
+            germinationPercent: item.germinationPercent || batchRow.germinationPercent,
+            expiryDate: item.expiryDate || batchRow.expiryDate,
+            purchaseRate: item.rate,
+            supplierName: supplier.supplierName,
+            authlstedit: req.user.id
+          }, { transaction });
+        }
       }
+
       await StockMovement.bulkCreate(totals.items.map((item) => ({
         productId: item.productId,
         createdBy: req.user.id,
         movementType: 'Purchase',
-        quantity: item.quantity,
+        quantity: item.primaryQty,
         referenceType: 'Purchase',
         referenceId: purchase.id,
-        notes: purchase.purchaseNumber
+        notes: `${purchase.purchaseNumber} (${item.quantity} ${item.um} = ${item.primaryQty} ${item.primaryUnit})`
       })), { transaction });
     }
 
@@ -121,26 +181,41 @@ export const removePurchase = asyncHandler(async (req, res) => {
     });
     if (!purchase) throw Object.assign(new Error('Purchase not found'), { status: 404 });
 
-    // Only received stock was added, so only received stock comes back out.
     if (purchase.status === 'Received') {
       const branchId = purchase.branchId || req.branchId;
-      // Refuses rather than driving the branch negative if the goods were sold on.
-      await assertAvailable(purchase.PurchaseItems, branchId, transaction);
+      const itemsToValidate = purchase.PurchaseItems.map((it) => ({
+        ...it.dataValues,
+        quantity: it.primaryQty || it.quantity
+      }));
+      await assertAvailable(itemsToValidate, branchId, transaction);
+
       for (const item of purchase.PurchaseItems) {
+        const qtyToDeduct = Number(item.primaryQty || item.quantity);
         await adjustStock({
           productId: item.productId,
           branchId,
-          delta: -Number(item.quantity),
+          delta: -qtyToDeduct,
           transaction,
           userId: req.user.id,
         });
+
+        if (item.batchNumber) {
+          const batchRow = await ProductBatch.findOne({
+            where: { productId: item.productId, branchId, batchNumber: item.batchNumber, detstatus: false },
+            transaction
+          });
+          if (batchRow) {
+            const nextQty = Math.max(0, Number(batchRow.quantity) - qtyToDeduct);
+            await batchRow.update({ quantity: nextQty, authlstedit: req.user.id }, { transaction });
+          }
+        }
       }
 
       await StockMovement.bulkCreate(purchase.PurchaseItems.map((item) => ({
         productId: item.productId,
         createdBy: req.user.id,
         movementType: 'Adjustment Out',
-        quantity: -item.quantity,
+        quantity: -Number(item.primaryQty || item.quantity),
         referenceType: 'Purchase Cancellation',
         referenceId: purchase.id,
         notes: `Reversed via cancelled purchase ${purchase.purchaseNumber}`,

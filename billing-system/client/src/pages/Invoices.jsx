@@ -285,6 +285,7 @@ export default function Invoices() {
   useEffect(() => { load(); }, [query]);
 
   const setItem = (i, patch) => setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, ...patch } : it));
+  const removeItem = (idx) => setItems((prev) => prev.filter((_, i) => i !== idx));
   const chooseProduct = (i, productId) => {
     const p = products.find((p) => String(p.id) === String(productId));
     const primaryUnit = p?.primaryUnit || 'PCS';
@@ -590,8 +591,8 @@ export default function Invoices() {
             <Stack spacing={1.5} sx={{ p: 2 }}>
               {items.map((item, index) => (
                 <Box key={index}>
-                  <Grid container spacing={1} alignItems="center">
-                    <Grid item xs={12} md={3}>
+                  <Grid container spacing={1} alignItems="center" wrap="nowrap" sx={{ minWidth: 0 }}>
+                    <Grid item xs={12} md={2.5} sx={{ minWidth: 0 }}>
                       <TextField fullWidth select size="small" label="Product" value={item.productId} onChange={(e) => chooseProduct(index, e.target.value)}>
                         {products.map((p) => (
                           <MenuItem value={p.id} key={p.id} disabled={Number(p.stock || 0) <= 0}>
@@ -604,12 +605,12 @@ export default function Invoices() {
                       </TextField>
                     </Grid>
                     {[['quantity', 'Qty'], ['rate', 'Rate'], ['discount', 'Disc.'], ['gstPercent', 'GST%']].map(([name, label]) => (
-                      <Grid item xs={6} sm={3} md={1.25} key={name}>
+                      <Grid item xs={6} sm={3} md={1} key={name}>
                         <TextField fullWidth size="small" type="number" label={label} value={item[name]} onChange={(e) => setItem(index, { [name]: e.target.value })} />
                       </Grid>
                     ))}
                     {/* Unit Selector (UM) */}
-                    <Grid item xs={6} sm={3} md={1.25}>
+                    <Grid item xs={6} sm={3} md={1}>
                       <TextField
                         fullWidth select size="small" label="Unit (UM)"
                         value={item.um || 'PCS'}
@@ -630,19 +631,35 @@ export default function Invoices() {
                     <Grid item xs={6} sm={3} md={1}>
                       <TextField fullWidth size="small" label="Packing" placeholder="1 KG" value={item.packing || ''} onChange={(e) => setItem(index, { packing: e.target.value })} />
                     </Grid>
+                    {/* Total */}
                     <Grid item xs={6} sm={3} md={1.5}>
-                      <Box sx={{ px: 1.5, py: 0.75, borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.08), textAlign: 'center' }}>
+                      <Box sx={{ px: 1, py: 0.75, borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.08), textAlign: 'center' }}>
                         <Typography variant="caption" color="text.secondary" display="block">Total</Typography>
                         <Typography fontWeight={700} color="primary.main" fontSize="0.85rem">{currency(lineTotal(item))}</Typography>
                       </Box>
                     </Grid>
-                    <Grid item xs={6} sm={3} md={0.5}>
-                      {/* Every control in this form needs type="button": the
-                          HTML default is "submit", which would save the invoice
-                          instead of doing what the button says. */}
-                      <IconButton type="button" size="small" color="error" onClick={() => setItems(items.filter((_, i) => i !== index))} disabled={items.length === 1}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
+                    {/* Delete line item */}
+                    <Grid item sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Tooltip title="Remove line" arrow>
+                        <span>
+                          <IconButton
+                            type="button"
+                            size="small"
+                            onClick={() => removeItem(index)}
+                            disabled={items.length === 1}
+                            sx={{
+                              color: items.length === 1 ? 'action.disabled' : 'error.main',
+                              bgcolor: items.length === 1 ? 'transparent' : alpha(theme.palette.error.main, 0.08),
+                              '&:hover': {
+                                bgcolor: alpha(theme.palette.error.main, 0.18),
+                              },
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
                     </Grid>
                   </Grid>
                   {/* Lot picker, only for products that actually have lots. */}

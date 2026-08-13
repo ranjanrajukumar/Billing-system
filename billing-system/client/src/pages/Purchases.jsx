@@ -179,7 +179,7 @@ export default function Purchases() {
             </Grid>
           </Grid>
 
-          <LineItems items={items} onChange={setItems} products={products} fields={['rate', 'gstPercent']} blank={blankItem} />
+          <LineItems items={items} onChange={setItems} products={products} fields={['rate', 'gstPercent']} showBatchFields={true} blank={blankItem} />
 
           <Grid container spacing={2}>
             <Grid item xs={12} md={7}>

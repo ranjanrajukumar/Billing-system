@@ -15,16 +15,19 @@ const FIELD_LABELS = {
  * Editable product line items, shared by the document pages (quotations,
  * challans, returns, purchases). `fields` picks which numeric columns show.
  */
-export default function LineItems({ items, onChange, products, fields = ['rate', 'discount', 'gstPercent'], blank }) {
+export default function LineItems({ items, onChange, products, fields = ['rate', 'discount', 'gstPercent'], showBatchFields = false, blank }) {
   const setItem = (index, patch) => onChange(items.map((it, i) => (i === index ? { ...it, ...patch } : it)));
 
   const chooseProduct = (index, productId) => {
     const product = products.find((p) => String(p.id) === String(productId));
     const primaryUnit = product?.primaryUnit || 'PCS';
+    const rateToUse = fields.includes('rate')
+      ? (showBatchFields ? Number(product?.purchasePrice || 0) : Number(product?.sellingPrice || 0))
+      : 0;
     setItem(index, {
       productId,
       um: primaryUnit,
-      ...(fields.includes('rate') ? { rate: product?.sellingPrice || 0 } : {}),
+      ...(fields.includes('rate') ? { rate: rateToUse } : {}),
       ...(fields.includes('gstPercent') ? { gstPercent: product?.gstPercent || 0 } : {}),
     });
   };
@@ -37,10 +40,14 @@ export default function LineItems({ items, onChange, products, fields = ['rate',
       const primary = product.primaryUnit || 'PCS';
       const secondary = product.secondaryUnit || '';
       const factor = Number(product.unitConversionFactor || 1);
+      const basePrice = showBatchFields ? Number(product.purchasePrice || 0) : Number(product.sellingPrice || 0);
+
       if (unitCode === secondary && factor > 1) {
-        newRate = product.secondarySellingPrice ? Number(product.secondarySellingPrice) : Number((product.sellingPrice / factor).toFixed(2));
+        newRate = (!showBatchFields && product.secondarySellingPrice)
+          ? Number(product.secondarySellingPrice)
+          : Number((basePrice / factor).toFixed(2));
       } else if (unitCode === primary) {
-        newRate = Number(product.sellingPrice || 0);
+        newRate = basePrice;
       }
     }
     setItem(index, { um: unitCode, rate: newRate });
@@ -52,75 +59,120 @@ export default function LineItems({ items, onChange, products, fields = ['rate',
   return (
     <Stack spacing={1.5}>
       <Typography variant="subtitle2" fontWeight={700}>Line Items</Typography>
-      {items.map((item, index) => (
-        <Stack key={index} spacing={1.5}>
-          <Grid container spacing={1.5} alignItems="center">
-            <Grid item xs={12} sm={3.5}>
-              <TextField
-                select fullWidth size="small" label="Product"
-                value={item.productId || ''}
-                onChange={(e) => chooseProduct(index, e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              >
-                <MenuItem value=""><em>Select product</em></MenuItem>
-                {products.map((p) => (
-                  <MenuItem key={p.id} value={p.id}>{p.productName}</MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={6} sm={1.5}>
-              <TextField
-                fullWidth size="small" label="Qty" type="number"
-                inputProps={{ min: 0, step: 'any' }}
-                value={item.quantity ?? ''}
-                onChange={(e) => setItem(index, { quantity: e.target.value })}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={6} sm={1.5}>
-              <TextField
-                select fullWidth size="small" label="Unit"
-                value={item.um || 'PCS'}
-                onChange={(e) => changeUnit(index, e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              >
-                {(() => {
-                  const p = products.find((p) => String(p.id) === String(item.productId));
-                  const uList = [];
-                  if (p?.primaryUnit) uList.push(p.primaryUnit);
-                  if (p?.secondaryUnit && !uList.includes(p.secondaryUnit)) uList.push(p.secondaryUnit);
-                  if (!uList.length) uList.push('PCS', 'KG', 'BOX', 'BAG');
-                  return uList.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>);
-                })()}
-              </TextField>
-            </Grid>
-            {fields.map((field) => (
-              <Grid item xs={6} sm={2} key={field}>
+      {items.map((item, index) => {
+        const product = products.find((p) => String(p.id) === String(item.productId));
+        const primary = product?.primaryUnit || 'PCS';
+        const secondary = product?.secondaryUnit || '';
+        const factor = Number(product?.unitConversionFactor || 1);
+        const billedUnit = item.um || primary;
+        const isSecondary = billedUnit === secondary && factor > 1;
+        const primaryQty = isSecondary ? Number(item.quantity || 0) * factor : Number(item.quantity || 0);
+
+        return (
+          <Stack key={index} spacing={1} sx={{ p: 1.5, borderRadius: 2, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
+            <Grid container spacing={1.5} alignItems="center">
+              <Grid item xs={12} sm={3.5}>
                 <TextField
-                  fullWidth size="small" label={FIELD_LABELS[field] || field} type="number"
+                  select fullWidth size="small" label="Product"
+                  value={item.productId || ''}
+                  onChange={(e) => chooseProduct(index, e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                >
+                  <MenuItem value=""><em>Select product</em></MenuItem>
+                  {products.map((p) => (
+                    <MenuItem key={p.id} value={p.id}>{p.productName}</MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid item xs={6} sm={1.5}>
+                <TextField
+                  fullWidth size="small" label="Qty" type="number"
                   inputProps={{ min: 0, step: 'any' }}
-                  value={item[field] ?? ''}
-                  onChange={(e) => setItem(index, { [field]: e.target.value })}
+                  value={item.quantity ?? ''}
+                  onChange={(e) => setItem(index, { quantity: e.target.value })}
                   InputLabelProps={{ shrink: true }}
                 />
               </Grid>
-            ))}
-            <Grid item xs={12} sm={1}>
-              {/* This component is always rendered inside a <form>, and a
-                  button with no type defaults to submit — which would save the
-                  document instead of removing a row. */}
-              <IconButton
-                type="button"
-                size="small" color="error" onClick={() => removeRow(index)}
-                disabled={items.length === 1}
-              >
-                <DeleteIcon fontSize="small" />
-              </IconButton>
+              <Grid item xs={6} sm={1.5}>
+                <TextField
+                  select fullWidth size="small" label="Unit"
+                  value={item.um || 'PCS'}
+                  onChange={(e) => changeUnit(index, e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                >
+                  {(() => {
+                    const uList = [];
+                    if (product?.primaryUnit) uList.push(product.primaryUnit);
+                    if (product?.secondaryUnit && !uList.includes(product.secondaryUnit)) uList.push(product.secondaryUnit);
+                    if (!uList.length) uList.push('PCS', 'KG', 'BOX', 'BAG');
+                    return uList.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>);
+                  })()}
+                </TextField>
+              </Grid>
+              {fields.map((field) => (
+                <Grid item xs={6} sm={2} key={field}>
+                  <TextField
+                    fullWidth size="small" label={FIELD_LABELS[field] || field} type="number"
+                    inputProps={{ min: 0, step: 'any' }}
+                    value={item[field] ?? ''}
+                    onChange={(e) => setItem(index, { [field]: e.target.value })}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+              ))}
+              <Grid item xs={12} sm={0.5}>
+                <IconButton
+                  type="button"
+                  size="small" color="error" onClick={() => removeRow(index)}
+                  disabled={items.length === 1}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Grid>
             </Grid>
-          </Grid>
-          {index < items.length - 1 && <Divider />}
-        </Stack>
-      ))}
+
+            {/* Conversion Helper Banner */}
+            {isSecondary && (
+              <Typography variant="caption" color="primary.main" fontWeight={600} sx={{ ml: 1 }}>
+                ℹ Conversion: {item.quantity} {billedUnit} = {primaryQty} {primary} (Factor: 1 {billedUnit} = {factor} {primary})
+              </Typography>
+            )}
+
+            {/* Optional Seed Lot / Batch Information for PO Purchases */}
+            {showBatchFields && item.productId && (
+              <Grid container spacing={1.5} sx={{ mt: 0.5, pt: 1, borderTop: '1px dashed', borderColor: 'divider' }}>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth size="small" label="Seed Lot / Batch #"
+                    placeholder="e.g. LOT-2026-X"
+                    value={item.batchNumber || ''}
+                    onChange={(e) => setItem(index, { batchNumber: e.target.value })}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+                <Grid item xs={6} sm={4}>
+                  <TextField
+                    fullWidth size="small" label="Germination %" type="number"
+                    placeholder="e.g. 98"
+                    inputProps={{ min: 0, max: 100, step: 'any' }}
+                    value={item.germinationPercent || ''}
+                    onChange={(e) => setItem(index, { germinationPercent: e.target.value })}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+                <Grid item xs={6} sm={4}>
+                  <TextField
+                    fullWidth size="small" label="Expiry / Validity Date" type="date"
+                    value={item.expiryDate || ''}
+                    onChange={(e) => setItem(index, { expiryDate: e.target.value })}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+              </Grid>
+            )}
+          </Stack>
+        );
+      })}
       <Button type="button" startIcon={<AddIcon />} onClick={addRow} sx={{ alignSelf: 'flex-start' }}>
         Add Product
       </Button>
