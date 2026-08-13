@@ -17,6 +17,7 @@ import {
   Menu, MenuItem, Paper, Stack, TextField, Tooltip, Typography, useTheme,
 } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import api from '../services/api.js';
 import DataTable from '../components/DataTable.jsx';
@@ -25,6 +26,8 @@ import Modal from '../components/Modal.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import Pagination from '../components/Pagination.jsx';
 import PeriodFilter from '../components/PeriodFilter.jsx';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import InvoiceDetailsModal from '../components/InvoiceDetailsModal.jsx';
 import PaymentsModal from '../components/PaymentsModal.jsx';
 import StatsCard from '../components/StatsCard.jsx';
 import { useToast } from '../context/ToastContext.jsx';
@@ -132,7 +135,23 @@ export default function Invoices() {
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
   const [items, setItems] = useState([blankItem]);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [payingFor, setPayingFor] = useState(null);
+  const [viewingInvoiceId, setViewingInvoiceId] = useState(null);
+
+  const urlInvoiceId = searchParams.get('id') || searchParams.get('open');
+  useEffect(() => {
+    if (urlInvoiceId) setViewingInvoiceId(urlInvoiceId);
+  }, [urlInvoiceId]);
+
+  const handleCloseViewing = () => {
+    setViewingInvoiceId(null);
+    if (searchParams.get('id') || searchParams.get('open')) {
+      searchParams.delete('id');
+      searchParams.delete('open');
+      setSearchParams(searchParams, { replace: true });
+    }
+  };
   const [couponCode, setCouponCode] = useState('');
   const [applied, setApplied] = useState(null);
   const [redeemPoints, setRedeemPoints] = useState('');
@@ -267,10 +286,36 @@ export default function Invoices() {
 
   const setItem = (i, patch) => setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, ...patch } : it));
   const chooseProduct = (i, productId) => {
-    const p = products.find((p) => p.id === Number(productId));
-    // Changing the product invalidates any lot chosen for the old one.
-    setItem(i, { productId, rate: p?.sellingPrice || 0, gstPercent: p?.gstPercent || 0, batchId: '' });
+    const p = products.find((p) => String(p.id) === String(productId));
+    const primaryUnit = p?.primaryUnit || 'PCS';
+    setItem(i, {
+      productId,
+      rate: Number(p?.sellingPrice || 0),
+      gstPercent: Number(p?.gstPercent || 0),
+      um: primaryUnit,
+      batchId: '',
+    });
     loadBatches(productId);
+  };
+
+  const changeItemUnit = (i, unitCode) => {
+    const item = items[i];
+    const p = products.find((p) => String(p.id) === String(item.productId));
+    let newRate = Number(item.rate || 0);
+
+    if (p) {
+      const primary = p.primaryUnit || 'PCS';
+      const secondary = p.secondaryUnit || '';
+      const factor = Number(p.unitConversionFactor || 1);
+
+      if (unitCode === secondary && factor > 1) {
+        newRate = p.secondarySellingPrice ? Number(p.secondarySellingPrice) : Number((p.sellingPrice / factor).toFixed(2));
+      } else if (unitCode === primary) {
+        newRate = Number(p.sellingPrice || 0);
+      }
+    }
+
+    setItem(i, { um: unitCode, rate: newRate });
   };
 
   // Seed lots available per product, fetched once per product and cached. An
@@ -335,11 +380,19 @@ export default function Invoices() {
     if (!editing) {
       const oversold = selected.find((it) => {
         const p = products.find((p) => p.id === Number(it.productId));
-        return p && Number(it.quantity) > Number(p.stock || 0);
+        if (!p) return false;
+        // Convert billed quantity to primary-unit equivalent for the stock check.
+        const billedUnit = it.um || p.primaryUnit || 'PCS';
+        const primaryUnit = p.primaryUnit || 'PCS';
+        const factor = Number(p.unitConversionFactor || 1);
+        const primaryQty = (billedUnit !== primaryUnit && factor > 1)
+          ? Number(it.quantity) * factor
+          : Number(it.quantity);
+        return primaryQty > Number(p.stock || 0);
       });
       if (oversold) {
         const p = products.find((p) => p.id === Number(oversold.productId));
-        showToast(`${p.productName} only has ${p.stock} in stock`, 'error'); return;
+        showToast(`${p.productName} only has ${p.stock} in stock (${p.primaryUnit || 'PCS'})`, 'error'); return;
       }
     }
     try {
@@ -439,7 +492,16 @@ export default function Invoices() {
           <DataTable
             mobileKeyField="invoiceNumber"
             columns={[
-              { field: 'invoiceNumber', headerName: 'Invoice #', render: (row) => <Typography fontWeight={700} color="primary.main">{row.invoiceNumber}</Typography> },
+              { field: 'invoiceNumber', headerName: 'Invoice #', render: (row) => (
+                <Typography
+                  fontWeight={700}
+                  color="primary.main"
+                  onClick={() => setViewingInvoiceId(row.id)}
+                  sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+                >
+                  {row.invoiceNumber}
+                </Typography>
+              )},
               { field: 'invoiceDate', headerName: 'Date', render: (row) => date(row.invoiceDate) },
               { field: 'customer', headerName: 'Customer', render: (row) => row.Customer?.customerName },
               { field: 'paymentMethod', headerName: 'Payment', render: (row) => <PaymentChip method={row.paymentMethod} /> },
@@ -455,6 +517,11 @@ export default function Invoices() {
               )},
               { field: 'actions', headerName: 'Actions', render: (row) => (
                 <Stack direction="row" spacing={0.25}>
+                  <Tooltip title="View Details">
+                    <IconButton size="small" onClick={() => setViewingInvoiceId(row.id)} sx={{ borderRadius: 1.5, color: 'primary.main' }}>
+                      <VisibilityIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                   <DownloadMenu id={row.id} />
                   {/* Prints through the default invoice template. */}
                   <Tooltip title="Print"><IconButton size="small" onClick={() => printInvoiceHtml(row.id)} sx={{ borderRadius: 1.5 }}><PrintIcon fontSize="small" /></IconButton></Tooltip>
@@ -480,6 +547,13 @@ export default function Invoices() {
         </>
         </Box>
       )}
+
+      <InvoiceDetailsModal
+        invoiceId={viewingInvoiceId}
+        onClose={handleCloseViewing}
+        onEdit={(inv) => openEdit(inv)}
+        onManagePayments={(inv) => setPayingFor(inv)}
+      />
 
       <PaymentsModal invoice={payingFor} onClose={() => setPayingFor(null)} onChanged={load} />
 
@@ -534,12 +608,27 @@ export default function Invoices() {
                         <TextField fullWidth size="small" type="number" label={label} value={item[name]} onChange={(e) => setItem(index, { [name]: e.target.value })} />
                       </Grid>
                     ))}
-                    {/* Printed on the bill of supply beside the HSN column. */}
-                    <Grid item xs={6} sm={3} md={1}>
-                      <TextField fullWidth size="small" label="Packing" placeholder="1 KG" value={item.packing} onChange={(e) => setItem(index, { packing: e.target.value })} />
+                    {/* Unit Selector (UM) */}
+                    <Grid item xs={6} sm={3} md={1.25}>
+                      <TextField
+                        fullWidth select size="small" label="Unit (UM)"
+                        value={item.um || 'PCS'}
+                        onChange={(e) => changeItemUnit(index, e.target.value)}
+                        InputLabelProps={{ shrink: true }}
+                      >
+                        {(() => {
+                          const p = products.find((p) => String(p.id) === String(item.productId));
+                          const uList = [];
+                          if (p?.primaryUnit) uList.push(p.primaryUnit);
+                          if (p?.secondaryUnit && !uList.includes(p.secondaryUnit)) uList.push(p.secondaryUnit);
+                          if (!uList.length) uList.push('PCS', 'KG', 'BOX', 'BAG', 'LTR');
+                          return uList.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>);
+                        })()}
+                      </TextField>
                     </Grid>
-                    <Grid item xs={6} sm={3} md={0.75}>
-                      <TextField fullWidth size="small" label="UM" placeholder="KG" value={item.um} onChange={(e) => setItem(index, { um: e.target.value })} />
+                    {/* Packing */}
+                    <Grid item xs={6} sm={3} md={1}>
+                      <TextField fullWidth size="small" label="Packing" placeholder="1 KG" value={item.packing || ''} onChange={(e) => setItem(index, { packing: e.target.value })} />
                     </Grid>
                     <Grid item xs={6} sm={3} md={1.5}>
                       <Box sx={{ px: 1.5, py: 0.75, borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.08), textAlign: 'center' }}>

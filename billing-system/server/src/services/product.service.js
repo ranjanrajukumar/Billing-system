@@ -12,13 +12,17 @@ export function normalizeProductPayload(body, userId) {
   return {
     productName: body.productName?.trim(),
     categoryId: optionalInt(body.categoryId),
-    hsnCode: body.hsnCode?.trim(),
+    hsnCode: body.hsnCode?.trim() || '',
     purchasePrice: numberOrZero(body.purchasePrice),
     sellingPrice: numberOrZero(body.sellingPrice),
     gstPercent: numberOrZero(body.gstPercent),
     stock: numberOrZero(body.stock),
     barcode: body.barcode?.trim() || null,
     lowStockThreshold: optionalInt(body.lowStockThreshold) ?? 5,
+    primaryUnit: body.primaryUnit?.trim() || 'PCS',
+    secondaryUnit: body.secondaryUnit?.trim() || null,
+    unitConversionFactor: numberOrZero(body.unitConversionFactor) || 1,
+    secondarySellingPrice: body.secondarySellingPrice ? Number(body.secondarySellingPrice) : null,
     isActive: body.isActive === undefined ? true : ['true', true, '1', 1].includes(body.isActive),
     authadd: userId
   };

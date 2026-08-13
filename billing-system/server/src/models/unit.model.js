@@ -4,6 +4,8 @@ export default (sequelize) => {
   const Unit = sequelize.define('Unit', {
     code: { type: DataTypes.STRING, allowNull: false },
     name: { type: DataTypes.STRING, allowNull: false },
+    baseUnitCode: { type: DataTypes.STRING, allowNull: true },
+    conversionFactor: { type: DataTypes.DECIMAL(10, 4), defaultValue: 1 },
     precision: { type: DataTypes.INTEGER, defaultValue: 0 },
     authadd: { type: DataTypes.INTEGER, allowNull: true },
     authlstedit: { type: DataTypes.INTEGER, allowNull: true },

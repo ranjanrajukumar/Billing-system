@@ -4,7 +4,7 @@ import { unsignedInteger } from './types.js';
 export default (sequelize) => sequelize.define('Product', {
   id: { type: unsignedInteger(sequelize), autoIncrement: true, primaryKey: true },
   productName: { type: DataTypes.STRING(180), allowNull: false },
-  hsnCode: { type: DataTypes.STRING(20), allowNull: false },
+  hsnCode: { type: DataTypes.STRING(20), allowNull: true, defaultValue: '' },
   purchasePrice: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
   sellingPrice: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
   gstPercent: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 0 },
@@ -14,6 +14,10 @@ export default (sequelize) => sequelize.define('Product', {
   // live products is enforced in the controller instead.
   barcode: { type: DataTypes.STRING(80) },
   lowStockThreshold: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 5 },
+  primaryUnit: { type: DataTypes.STRING(20), defaultValue: 'PCS' },
+  secondaryUnit: { type: DataTypes.STRING(20), allowNull: true },
+  unitConversionFactor: { type: DataTypes.DECIMAL(10, 4), defaultValue: 1 },
+  secondarySellingPrice: { type: DataTypes.DECIMAL(12, 2), allowNull: true },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
   imagePath: { type: DataTypes.STRING(255) },
   imageData: { type: DataTypes.BLOB('long') },

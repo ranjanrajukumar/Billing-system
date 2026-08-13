@@ -70,6 +70,7 @@ export function getDbSettings() {
     domain: process.env.DB_DOMAIN || '',
     encrypt: isTrue(process.env.DB_ENCRYPT),
     trustServerCertificate: trustServerCertificate === undefined ? true : isTrue(trustServerCertificate),
+    storage: process.env.DB_STORAGE || 'database.sqlite',
     connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT || 30000),
     requestTimeout: Number(process.env.DB_REQUEST_TIMEOUT || 30000)
   };
@@ -103,21 +104,6 @@ export function getDbSettings() {
 //     options.port = settings.port;
 //   }
 
-//   if (settings.authType === 'ntlm') {
-//     options.dialectOptions.authentication = {
-//       type: 'ntlm',
-//       options: {
-//         domain: settings.domain,
-//         userName: settings.user,
-//         password: settings.password
-//       }
-//     };
-//   }
-
-//   return options;
-// }
-
-
 export function getConnectionOptions({ databaseLogging = false } = {}) {
   const settings = getDbSettings();
 
@@ -133,6 +119,12 @@ export function getConnectionOptions({ databaseLogging = false } = {}) {
       idle: 10000
     }
   };
+
+  if (settings.dialect === 'sqlite') {
+    options.storage = settings.storage;
+    delete options.pool;
+    return options;
+  }
 
   if (settings.dialect !== 'mssql') {
     options.port = settings.port || 3306;

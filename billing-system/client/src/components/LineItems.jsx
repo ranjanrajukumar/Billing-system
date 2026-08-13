@@ -20,11 +20,30 @@ export default function LineItems({ items, onChange, products, fields = ['rate',
 
   const chooseProduct = (index, productId) => {
     const product = products.find((p) => String(p.id) === String(productId));
+    const primaryUnit = product?.primaryUnit || 'PCS';
     setItem(index, {
       productId,
+      um: primaryUnit,
       ...(fields.includes('rate') ? { rate: product?.sellingPrice || 0 } : {}),
       ...(fields.includes('gstPercent') ? { gstPercent: product?.gstPercent || 0 } : {}),
     });
+  };
+
+  const changeUnit = (index, unitCode) => {
+    const item = items[index];
+    const product = products.find((p) => String(p.id) === String(item.productId));
+    let newRate = item.rate;
+    if (product) {
+      const primary = product.primaryUnit || 'PCS';
+      const secondary = product.secondaryUnit || '';
+      const factor = Number(product.unitConversionFactor || 1);
+      if (unitCode === secondary && factor > 1) {
+        newRate = product.secondarySellingPrice ? Number(product.secondarySellingPrice) : Number((product.sellingPrice / factor).toFixed(2));
+      } else if (unitCode === primary) {
+        newRate = Number(product.sellingPrice || 0);
+      }
+    }
+    setItem(index, { um: unitCode, rate: newRate });
   };
 
   const addRow = () => onChange([...items, { ...blank }]);
@@ -36,7 +55,7 @@ export default function LineItems({ items, onChange, products, fields = ['rate',
       {items.map((item, index) => (
         <Stack key={index} spacing={1.5}>
           <Grid container spacing={1.5} alignItems="center">
-            <Grid item xs={12} sm={4}>
+            <Grid item xs={12} sm={3.5}>
               <TextField
                 select fullWidth size="small" label="Product"
                 value={item.productId || ''}
@@ -49,7 +68,7 @@ export default function LineItems({ items, onChange, products, fields = ['rate',
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={6} sm={2}>
+            <Grid item xs={6} sm={1.5}>
               <TextField
                 fullWidth size="small" label="Qty" type="number"
                 inputProps={{ min: 0, step: 'any' }}
@@ -57,6 +76,23 @@ export default function LineItems({ items, onChange, products, fields = ['rate',
                 onChange={(e) => setItem(index, { quantity: e.target.value })}
                 InputLabelProps={{ shrink: true }}
               />
+            </Grid>
+            <Grid item xs={6} sm={1.5}>
+              <TextField
+                select fullWidth size="small" label="Unit"
+                value={item.um || 'PCS'}
+                onChange={(e) => changeUnit(index, e.target.value)}
+                InputLabelProps={{ shrink: true }}
+              >
+                {(() => {
+                  const p = products.find((p) => String(p.id) === String(item.productId));
+                  const uList = [];
+                  if (p?.primaryUnit) uList.push(p.primaryUnit);
+                  if (p?.secondaryUnit && !uList.includes(p.secondaryUnit)) uList.push(p.secondaryUnit);
+                  if (!uList.length) uList.push('PCS', 'KG', 'BOX', 'BAG');
+                  return uList.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>);
+                })()}
+              </TextField>
             </Grid>
             {fields.map((field) => (
               <Grid item xs={6} sm={2} key={field}>

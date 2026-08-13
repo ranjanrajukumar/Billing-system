@@ -28,6 +28,11 @@ const DATE_PREFIX = 'date:';
 
 /** Tables are dumped in dependency order so a restore can insert them as-is. */
 async function tableNames() {
+  const dialect = sequelize.getDialect();
+  if (dialect === 'sqlite') {
+    const rows = await sequelize.query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'", { type: QueryTypes.SELECT });
+    return rows.map((row) => row.name).sort();
+  }
   const rows = await sequelize.query('SHOW TABLES', { type: QueryTypes.SELECT });
   return rows.map((row) => Object.values(row)[0]).sort();
 }
@@ -184,12 +189,18 @@ export async function restoreBackup(filename, { userId = null } = {}) {
   const tables = Object.keys(archive.data);
   const restored = {};
 
+  const dialect = sequelize.getDialect();
   await sequelize.transaction(async (transaction) => {
-    await sequelize.query('SET FOREIGN_KEY_CHECKS = 0', { transaction });
+    if (dialect === 'sqlite') {
+      await sequelize.query('PRAGMA foreign_keys = OFF', { transaction });
+    } else {
+      await sequelize.query('SET FOREIGN_KEY_CHECKS = 0', { transaction });
+    }
     try {
       for (const table of tables) {
         const rows = archive.data[table].map(decodeRow);
-        await sequelize.query(`DELETE FROM \`${table}\``, { transaction });
+        const quotedTable = sequelize.getQueryInterface().queryGenerator.quoteTable(table);
+        await sequelize.query(`DELETE FROM ${quotedTable}`, { transaction });
         if (!rows.length) { restored[table] = 0; continue; }
 
         // Inserted in batches: one statement per row is far too slow on a
@@ -201,15 +212,20 @@ export async function restoreBackup(filename, { userId = null } = {}) {
           const batch = rows.slice(i, i + batchSize);
           const placeholders = batch.map(() => `(${columns.map(() => '?').join(',')})`).join(',');
           const values = batch.flatMap((row) => columns.map((c) => row[c] ?? null));
+          const quotedCols = columns.map((c) => sequelize.getQueryInterface().queryGenerator.quoteIdentifier(c)).join(',');
           await sequelize.query(
-            `INSERT INTO \`${table}\` (${columns.map((c) => `\`${c}\``).join(',')}) VALUES ${placeholders}`,
+            `INSERT INTO ${quotedTable} (${quotedCols}) VALUES ${placeholders}`,
             { replacements: values, transaction },
           );
         }
         restored[table] = rows.length;
       }
     } finally {
-      await sequelize.query('SET FOREIGN_KEY_CHECKS = 1', { transaction });
+      if (dialect === 'sqlite') {
+        await sequelize.query('PRAGMA foreign_keys = ON', { transaction });
+      } else {
+        await sequelize.query('SET FOREIGN_KEY_CHECKS = 1', { transaction });
+      }
     }
   });
 

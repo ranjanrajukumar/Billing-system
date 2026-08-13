@@ -22,13 +22,25 @@ import Pagination from '../components/Pagination.jsx';
 import SearchBox from '../components/SearchBox.jsx';
 import StatsCard from '../components/StatsCard.jsx';
 import { useToast } from '../context/ToastContext.jsx';
-import { productsApi } from '../services/resource.service.js';
+import { productsApi, unitsApi } from '../services/resource.service.js';
 import { currency, mediaUrl } from '../utils/formatters.js';
+
+const DEFAULT_UNITS = [
+  { code: 'PCS', name: 'Pieces' },
+  { code: 'KG', name: 'Kilograms' },
+  { code: 'BOX', name: 'Box' },
+  { code: 'BAG', name: 'Bag' },
+  { code: 'LTR', name: 'Liters' },
+  { code: 'MTR', name: 'Meters' },
+  { code: 'PACK', name: 'Pack' },
+  { code: 'DOZEN', name: 'Dozen' },
+];
 
 const empty = {
   productName: '', categoryId: '', hsnCode: '', purchasePrice: 0,
   sellingPrice: 0, gstPercent: 18, stock: 0, barcode: '',
-  lowStockThreshold: 5, isActive: true,
+  lowStockThreshold: 5, primaryUnit: 'PCS', secondaryUnit: '',
+  unitConversionFactor: 1, secondarySellingPrice: '', isActive: true,
 };
 
 function ProductImage({ row }) {
@@ -58,6 +70,7 @@ function StockChip({ row }) {
 export default function Products() {
   const [rows, setRows] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [units, setUnits] = useState(DEFAULT_UNITS);
   const [meta, setMeta] = useState({});
   const [query, setQuery] = useState({ page: 1, limit: 10, search: '', categoryId: '' });
   const [loading, setLoading] = useState(true);
@@ -74,13 +87,22 @@ export default function Products() {
     try {
       const params = { ...query };
       if (!params.categoryId) delete params.categoryId;
-      const [result, cats] = await Promise.all([
+      const [result, cats, masterUnitsRes] = await Promise.all([
         productsApi.list(params),
         api.get('/products/categories').then((r) => r.data).catch(() => []),
+        unitsApi.list({ limit: 100 }).catch(() => ({ data: [] })),
       ]);
       setRows(result?.data || []);
       setMeta(result?.meta || {});
       setCategories(Array.isArray(cats) ? cats : []);
+      const fetchedUnits = masterUnitsRes?.data || [];
+      const mergedUnits = [...DEFAULT_UNITS];
+      fetchedUnits.forEach((u) => {
+        if (u.code && !mergedUnits.some((existing) => existing.code === u.code)) {
+          mergedUnits.push({ code: u.code, name: u.name || u.code });
+        }
+      });
+      setUnits(mergedUnits);
     } catch {
       setRows([]);
       setMeta({});
@@ -99,7 +121,14 @@ export default function Products() {
 
   const openForm = (row = null) => {
     setEditing(row || {});
-    reset(row ? { ...row, categoryId: row.categoryId || '', isActive: row.isActive !== false } : empty);
+    reset(row ? {
+      ...row,
+      categoryId: row.categoryId || '',
+      primaryUnit: row.primaryUnit || 'PCS',
+      secondaryUnit: row.secondaryUnit || '',
+      unitConversionFactor: row.unitConversionFactor ?? 1,
+      isActive: row.isActive !== false,
+    } : empty);
   };
 
   const submit = async (values) => {
@@ -174,6 +203,16 @@ export default function Products() {
                 : <Typography variant="caption" color="text.disabled">—</Typography>
               },
               { field: 'sellingPrice', headerName: 'Price', render: (row) => <Typography fontWeight={700}>{currency(row.sellingPrice)}</Typography> },
+              { field: 'unit', headerName: 'Unit / Conversion', render: (row) => (
+                <Box>
+                  <Typography variant="body2" fontWeight={600}>{row.primaryUnit || 'PCS'}</Typography>
+                  {row.secondaryUnit && Number(row.unitConversionFactor) > 1 && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      1 {row.primaryUnit} = {row.unitConversionFactor} {row.secondaryUnit}
+                    </Typography>
+                  )}
+                </Box>
+              )},
               { field: 'gstPercent', headerName: 'GST', render: (row) => `${Number(row.gstPercent || 0)}%` },
               { field: 'stock', headerName: 'Stock', render: (row) => <StockChip row={row} /> },
               { field: 'margin', headerName: 'Margin', render: (row) => {
@@ -213,13 +252,13 @@ export default function Products() {
               />
             </Stack>
           </Grid>
-          <Grid item xs={12} sm={6}><TextField fullWidth label="Product Name" {...register('productName', { required: 'Required' })} error={Boolean(errors.productName)} helperText={errors.productName?.message} InputLabelProps={{ shrink: true }} /></Grid>
+          <Grid item xs={12} sm={6}><TextField fullWidth label="Product Name *" {...register('productName', { required: 'Product name is required' })} error={Boolean(errors.productName)} helperText={errors.productName?.message} InputLabelProps={{ shrink: true }} /></Grid>
           <Grid item xs={12} sm={6}>
             <TextField fullWidth select label="Category" defaultValue="" {...register('categoryId')} InputLabelProps={{ shrink: true }}>
               {categories.map((c) => <MenuItem value={c.id} key={c.id}>{c.name}</MenuItem>)}
             </TextField>
           </Grid>
-          <Grid item xs={12} sm={6}><TextField fullWidth label="HSN/SAC Code" {...register('hsnCode', { required: 'Required' })} InputLabelProps={{ shrink: true }} /></Grid>
+          <Grid item xs={12} sm={6}><TextField fullWidth label="HSN/SAC Code" {...register('hsnCode')} InputLabelProps={{ shrink: true }} /></Grid>
           <Grid item xs={12} sm={6}><TextField fullWidth label="Barcode / SKU" {...register('barcode')} InputLabelProps={{ shrink: true }} /></Grid>
           {[
             ['purchasePrice', 'Purchase Price (₹)'],
@@ -229,9 +268,49 @@ export default function Products() {
             ['lowStockThreshold', 'Low Stock Alert At'],
           ].map(([name, label]) => (
             <Grid item xs={12} sm={6} key={name}>
-              <TextField fullWidth type="number" label={label} {...register(name, { required: 'Required' })} InputLabelProps={{ shrink: true }} />
+              <TextField fullWidth type="number" label={label} {...register(name)} InputLabelProps={{ shrink: true }} />
             </Grid>
           ))}
+
+          {/* Unit & Unit Conversion Section */}
+          <Grid item xs={12}>
+            <Box sx={{ p: 2, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5, color: 'primary.main' }}>
+                Unit Master & Unit Conversion
+              </Typography>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth select label="Primary Unit" defaultValue="PCS" {...register('primaryUnit')} InputLabelProps={{ shrink: true }}>
+                    {units.map((u) => <MenuItem key={u.code} value={u.code}>{u.code} — {u.name}</MenuItem>)}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth select label="Secondary Unit (Optional)" defaultValue="" {...register('secondaryUnit')} InputLabelProps={{ shrink: true }}>
+                    <MenuItem value="">None (Single Unit)</MenuItem>
+                    {units.map((u) => <MenuItem key={u.code} value={u.code}>{u.code} — {u.name}</MenuItem>)}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth type="number" label="Conversion Factor"
+                    placeholder="e.g. 10"
+                    inputProps={{ min: 0, step: 'any' }}
+                    {...register('unitConversionFactor')}
+                    InputLabelProps={{ shrink: true }}
+                    helperText="e.g. 1 BOX = 10 PCS"
+                  />
+                </Grid>
+                {formValues.secondaryUnit && Number(formValues.unitConversionFactor) > 0 && (
+                  <Grid item xs={12}>
+                    <Chip
+                      label={`Conversion Rule: 1 ${formValues.primaryUnit || 'Unit'} = ${formValues.unitConversionFactor} ${formValues.secondaryUnit}`}
+                      color="primary" variant="outlined" sx={{ fontWeight: 700 }}
+                    />
+                  </Grid>
+                )}
+              </Grid>
+            </Box>
+          </Grid>
           <Grid item xs={12}>
             <FormControlLabel control={<Switch defaultChecked {...register('isActive')} />} label="Active for billing" />
           </Grid>

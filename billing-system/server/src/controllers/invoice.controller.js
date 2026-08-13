@@ -43,6 +43,7 @@ export const listInvoices = asyncHandler(async (req, res) => {
   const where = withDateRange(scopedWhere(req, { detstatus: false }), req.query, 'invoiceDate');
   const { rows, count } = await Invoice.findAndCountAll({
     where,
+    distinct: true,
     include: [{ model: Customer }, { model: InvoiceItem, include: Product }],
     limit,
     offset,
@@ -70,11 +71,36 @@ export const createInvoice = asyncHandler(async (req, res) => {
     const items = req.body.items.map((item) => {
       const product = byId.get(Number(item.productId));
       if (!product) throw Object.assign(new Error(`Product ${item.productId} not found`), { status: 404 });
-      return { ...item, rate: item.rate ?? product.sellingPrice, gstPercent: item.gstPercent ?? product.gstPercent };
+
+      // Unit conversion: determine how many primary-unit items this line represents.
+      const billedUnit = item.um || product.primaryUnit || 'PCS';
+      const primaryUnit = product.primaryUnit || 'PCS';
+      const factor = Number(product.unitConversionFactor || 1);
+      const qty = Number(item.quantity);
+      // If the billed unit is the primary unit, primaryQty = qty directly.
+      // If it's the secondary unit, multiply by the conversion factor (e.g. 2 BOX × 10 = 20 PCS).
+      // If it IS the primary unit or no conversion applies, primaryQty = qty.
+      const primaryQty = (billedUnit !== primaryUnit && factor > 1)
+        ? qty * factor
+        : qty;
+
+      return {
+        ...item,
+        rate: item.rate ?? product.sellingPrice,
+        gstPercent: item.gstPercent ?? product.gstPercent,
+        um: billedUnit,
+        primaryUnit,
+        unitConversionFactor: factor,
+        primaryQty,
+      };
     });
 
     // Availability is judged at the branch making the sale, not company-wide.
-    await assertAvailable(items, req.branchId, transaction);
+    // Use primaryQty for availability checks — stock is always tracked in the primary unit.
+    await assertAvailable(
+      items.map((it) => ({ ...it, quantity: it.primaryQty })),
+      req.branchId, transaction,
+    );
 
     // Coupon and points both reduce the taxable value before GST is worked out.
     const grossTaxable = items.reduce(
@@ -173,6 +199,10 @@ export const createInvoice = asyncHandler(async (req, res) => {
         amount: Number(item.amount) * share,
         packing: item.packing || null,
         um: item.um || null,
+        // Unit conversion snapshot for audit trail.
+        primaryUnit: item.primaryUnit || null,
+        unitConversionFactor: item.unitConversionFactor || 1,
+        primaryQty: Number(item.primaryQty || item.quantity) * share,
         batchId: batch?.id || null,
         // Copied, not just linked, so a reprint survives the lot being edited.
         batchNumber: batch?.batchNumber || null,
@@ -181,26 +211,31 @@ export const createInvoice = asyncHandler(async (req, res) => {
       };
     }), { transaction });
 
+    // Stock is always tracked in the primary unit, so deduct primaryQty.
     for (const item of totals.items) {
+      const deductQty = Number(item.primaryQty || item.quantity);
       await adjustStock({
         productId: item.productId,
         branchId: req.branchId,
-        delta: -Number(item.quantity),
+        delta: -deductQty,
         transaction,
         userId: req.user.id,
       });
     }
 
-    await StockMovement.bulkCreate(totals.items.map((item) => ({
-      productId: item.productId,
-      createdBy: req.user.id,
-      movementType: 'Sale',
-      quantity: -item.quantity,
-      referenceType: 'Invoice',
-      referenceId: invoice.id,
-      notes: `Sold via Invoice ${invoice.invoiceNumber}`,
-      authadd: req.user.id
-    })), { transaction });
+    await StockMovement.bulkCreate(totals.items.map((item) => {
+      const deductQty = Number(item.primaryQty || item.quantity);
+      return {
+        productId: item.productId,
+        createdBy: req.user.id,
+        movementType: 'Sale',
+        quantity: -deductQty,
+        referenceType: 'Invoice',
+        referenceId: invoice.id,
+        notes: `Sold ${item.quantity} ${item.um || 'PCS'}${item.um !== item.primaryUnit ? ` (= ${deductQty} ${item.primaryUnit})` : ''} via Invoice ${invoice.invoiceNumber}`,
+        authadd: req.user.id,
+      };
+    }), { transaction });
 
     // Spend the points, log the coupon, then award points on what was paid.
     if (appliedCoupon) {

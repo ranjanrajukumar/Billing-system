@@ -12,18 +12,23 @@ const connectionOptions = {
     underscored: true,
     timestamps: true,
     paranoid: false
-  },
-  pool: {
-    max: Number(process.env.DB_POOL_MAX || 1),
-    min: 0,
-    acquire: 30000,
-    idle: 10000
   }
 };
 
-export const sequelize = new Sequelize(
-  settings.database,
-  settings.user,
-  settings.password,
-  connectionOptions
-);
+if (settings.dialect === 'sqlite') {
+  delete connectionOptions.pool;
+}
+
+export const sequelize = settings.dialect === 'sqlite'
+  ? new Sequelize({
+      dialect: 'sqlite',
+      storage: settings.storage,
+      ...connectionOptions
+    })
+  : new Sequelize(
+      settings.database,
+      settings.user,
+      settings.password,
+      connectionOptions
+    );
+

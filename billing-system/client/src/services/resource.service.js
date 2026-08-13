@@ -13,6 +13,7 @@ export const makeMasterDataResource = (masterKey) => makeResource(`/master-data/
 export const customersApi     = makeResource('/customers');
 export const categoriesApi    = makeResource('/categories');
 export const productsApi      = makeResource('/products');
+export const unitsApi         = makeMasterDataResource('unit');
 export const suppliersApi     = makeResource('/suppliers');
 export const purchasesApi     = makeResource('/purchases');
 export const invoicesApi      = makeResource('/invoices');

@@ -1,5 +1,5 @@
 import { Op, fn, col } from 'sequelize';
-import { ProductBatch } from '../models/index.js';
+import { ProductBatch, sequelize } from '../models/index.js';
 
 /**
  * Seed lots sit alongside branch stock rather than replacing it.
@@ -18,7 +18,7 @@ export async function batchesFor(productId, branchId, transaction) {
     where: { productId, branchId, detstatus: false },
     // Nulls last: a lot with no expiry is used only once the dated ones are gone.
     order: [
-      [fn('ISNULL', col('expiry_date')), 'ASC'],
+      [sequelize.literal('CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END'), 'ASC'],
       ['expiryDate', 'ASC'],
       ['id', 'ASC'],
     ],

@@ -50,6 +50,9 @@ export async function ensureDatabase() {
 }
 
 async function ensureMissingColumns() {
+  const dialect = sequelize.getDialect();
+  if (dialect !== 'mysql' && dialect !== 'mariadb') return;
+
   const queryInterface = sequelize.getQueryInterface();
   const models = Object.values(sequelize.models);
 
@@ -261,8 +264,9 @@ async function migrateToDefaultBranch() {
   ];
   for (const table of tables) {
     try {
+      const quotedTable = sequelize.getQueryInterface().queryGenerator.quoteTable(table);
       await sequelize.query(
-        `UPDATE \`${table}\` SET branch_id = :branchId WHERE branch_id IS NULL`,
+        `UPDATE ${quotedTable} SET branch_id = :branchId WHERE branch_id IS NULL`,
         { replacements: { branchId: branch.id } },
       );
     } catch (error) {
@@ -340,7 +344,7 @@ export async function migrateDatabase() {
   await sequelize.authenticate();
 
   await dropDuplicateIndexes();
-  await sequelize.sync({ alter: false });
+  await sequelize.sync({ alter: { drop: false } });
   await ensureMissingColumns();
   await ensureEnumValues();
   await seedDefaults();

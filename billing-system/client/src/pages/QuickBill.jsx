@@ -87,6 +87,10 @@ export default function QuickBill() {
         rate: Number(product.sellingPrice || 0),
         discount: 0,
         gstPercent: Number(product.gstPercent || 0),
+        um: product.primaryUnit || 'PCS',
+        primaryUnit: product.primaryUnit || 'PCS',
+        secondaryUnit: product.secondaryUnit || '',
+        unitConversionFactor: Number(product.unitConversionFactor || 1),
         batchId: batch?.id || '',
         batchNumber: batch?.batchNumber || '',
         stock: Number(product.stock || 0),
@@ -131,6 +135,25 @@ export default function QuickBill() {
     setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
   const removeLine = (index) => setLines((prev) => prev.filter((_, i) => i !== index));
 
+  const changeLineUnit = (index, unitCode) => {
+    setLines((prev) => prev.map((l, i) => {
+      if (i !== index) return l;
+      const p = products.find((p) => String(p.id) === String(l.productId));
+      let newRate = l.rate;
+      if (p) {
+        const primary = p.primaryUnit || 'PCS';
+        const secondary = p.secondaryUnit || '';
+        const factor = Number(p.unitConversionFactor || 1);
+        if (unitCode === secondary && factor > 1) {
+          newRate = p.secondarySellingPrice ? Number(p.secondarySellingPrice) : Number((p.sellingPrice / factor).toFixed(2));
+        } else if (unitCode === primary) {
+          newRate = Number(p.sellingPrice || 0);
+        }
+      }
+      return { ...l, um: unitCode, rate: newRate };
+    }));
+  };
+
   const clearBill = useCallback(() => {
     setLines([]);
     setScan('');
@@ -154,6 +177,7 @@ export default function QuickBill() {
           rate: l.rate,
           discount: l.discount,
           gstPercent: l.gstPercent,
+          um: l.um || 'PCS',
           batchId: l.batchId || undefined,
         })),
       });
@@ -252,7 +276,7 @@ export default function QuickBill() {
               <Stack divider={<Divider />}>
                 {lines.map((line, index) => (
                   <Grid container spacing={1} key={`${line.productId}-${line.batchId}`} alignItems="center" sx={{ p: 1.5 }}>
-                    <Grid item xs={12} md={4}>
+                    <Grid item xs={12} md={3}>
                       <Typography variant="body2" fontWeight={600}>{line.productName}</Typography>
                       <Typography variant="caption" color="text.secondary">
                         {line.gstPercent}% GST
@@ -260,8 +284,8 @@ export default function QuickBill() {
                         {line.quantity > line.stock ? ` · only ${line.stock} in stock` : ''}
                       </Typography>
                     </Grid>
-                    {[['quantity', 'Qty'], ['rate', 'Rate'], ['discount', 'Disc.']].map(([field, label]) => (
-                      <Grid item xs={4} md={2} key={field}>
+                    {[['quantity', 'Qty'], ['rate', 'Rate']].map(([field, label]) => (
+                      <Grid item xs={4} md={1.75} key={field}>
                         <TextField
                           fullWidth size="small" type="number" label={label}
                           value={line[field]}
@@ -270,6 +294,31 @@ export default function QuickBill() {
                         />
                       </Grid>
                     ))}
+                    {/* Unit (UM) */}
+                    <Grid item xs={4} md={1.5}>
+                      <TextField
+                        fullWidth select size="small" label="Unit"
+                        value={line.um || 'PCS'}
+                        onChange={(e) => changeLineUnit(index, e.target.value)}
+                      >
+                        {(() => {
+                          const p = products.find((p) => String(p.id) === String(line.productId));
+                          const uList = [];
+                          if (p?.primaryUnit) uList.push(p.primaryUnit);
+                          if (p?.secondaryUnit && !uList.includes(p.secondaryUnit)) uList.push(p.secondaryUnit);
+                          if (!uList.length) uList.push('PCS', 'KG', 'BOX', 'BAG');
+                          return uList.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>);
+                        })()}
+                      </TextField>
+                    </Grid>
+                    <Grid item xs={4} md={1.75}>
+                      <TextField
+                        fullWidth size="small" type="number" label="Disc."
+                        value={line.discount}
+                        onChange={(e) => setLine(index, { discount: Number(e.target.value) || 0 })}
+                        inputProps={{ min: 0, step: 'any' }}
+                      />
+                    </Grid>
                     <Grid item xs={8} md={1.5}>
                       <Typography fontWeight={700} color="primary.main" textAlign="right">
                         {currency(lineTotal(line))}

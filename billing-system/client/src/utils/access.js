@@ -66,15 +66,14 @@ export const MENU_KEY_BY_PATH = {
  * API still enforces the real rules on every request.
  */
 export function canOpen(path, role, menus = null) {
-  if (!role) return false;
-
   const allowedRoles = PAGE_ROLES[path];
-  const roleAllows = role === 'Admin' || !allowedRoles || allowedRoles.includes(role);
-  if (!roleAllows) return false;
+  if (allowedRoles && allowedRoles.length > 0) {
+    if (!role) return false;
+    const roleAllows = role === 'Admin' || allowedRoles.includes(role);
+    if (!roleAllows) return false;
+  }
 
-  // Admins configure menu rights, so hiding a page from them is a trap: a stale
-  // or incomplete rights list would remove the very screen used to fix it.
-  if (role === 'Admin') return true;
+  if (!role || role === 'Admin') return true;
 
   if (!Array.isArray(menus) || menus.length === 0) return true;
   const key = MENU_KEY_BY_PATH[path];
