@@ -15,6 +15,13 @@ export default (sequelize) => sequelize.define('Customer', {
   // Running loyalty balance; the ledger of changes lives in loyalty_transactions.
   loyaltyPoints: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
 
+  // What this customer already owed when they were entered into the system.
+  // Positive means they owe us. The ledger starts from this figure.
+  openingBalance: { type: DataTypes.DECIMAL(14, 2), allowNull: false, defaultValue: 0 },
+  creditLimit: { type: DataTypes.DECIMAL(14, 2), allowNull: true },
+  // Which price tier this customer buys at: Retail, Wholesale or Dealer.
+  priceTier: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'Retail' },
+
   authadd: { type: DataTypes.INTEGER, allowNull: true },
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },
   authdel: { type: DataTypes.INTEGER, allowNull: true },

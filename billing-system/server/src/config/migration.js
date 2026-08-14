@@ -2,9 +2,13 @@ import bcrypt from 'bcrypt';
 import fs from 'fs';
 import path from 'path';
 import { Op, Sequelize } from 'sequelize';
-import { sequelize, Role, User, Company, Category, Product, Branch, BranchStock, InvoiceTemplate } from '../models/index.js';
+import {
+  sequelize, Role, User, Company, Category, Product, Branch, BranchStock,
+  InvoiceTemplate, Warehouse, ExpenseCategory, ApprovalRule,
+} from '../models/index.js';
 import { DEFAULT_TEMPLATES } from './defaultTemplates.js';
 import { assertSupportedAuth, getConnectionOptions, getDbSettings } from './dbSettings.js';
+import { withoutAudit } from '../services/audit.service.js';
 
 function quoteSqlServerName(name) {
   return `[${String(name).replaceAll(']', ']]')}]`;
@@ -159,19 +163,111 @@ export async function seedDefaults() {
 
   await Role.findOrCreate({ where: { name: 'Sales' }, defaults: { permissions: {} } });
   await Role.findOrCreate({ where: { name: 'Accountant' }, defaults: { permissions: {} } });
-  await User.findOrCreate({
-    where: { email: process.env.ADMIN_EMAIL || 'admin@example.com' },
+
+  // Advanced-mode roles. They exist in Basic mode too but have nothing to do
+  // there, since module gating removes their pages — creating them up front
+  // means switching to Advanced does not also require inventing a role list.
+  for (const name of ['Purchase Manager', 'Warehouse Manager', 'Branch Manager', 'Cashier', 'Inventory Staff', 'Auditor']) {
+    await Role.findOrCreate({ where: { name }, defaults: { permissions: {} } });
+  }
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@123';
+  const adminHash = await bcrypt.hash(adminPassword, Number(process.env.BCRYPT_ROUNDS || 12));
+  const [adminUser, adminCreated] = await User.findOrCreate({
+    where: { email: adminEmail },
     defaults: {
       name: 'System Admin',
-      passwordHash: await bcrypt.hash(process.env.ADMIN_PASSWORD || 'Admin@123', Number(process.env.BCRYPT_ROUNDS || 12)),
+      passwordHash: adminHash,
       roleId: adminRole.id
     }
   });
+
+  const adminUpdates = {};
+  if (!adminUser.roleId) adminUpdates.roleId = adminRole.id;
+  if (adminUser.isActive === false) adminUpdates.isActive = true;
+
+  // In development the login page advertises the seeded admin account, so keep
+  // that account in sync with the configured default credentials.
+  if (!adminCreated && process.env.NODE_ENV !== 'production') {
+    adminUpdates.passwordHash = adminHash;
+  }
+
+  if (Object.keys(adminUpdates).length) {
+    await adminUser.update(adminUpdates);
+  }
   await Company.findOrCreate({
     where: { id: 1 },
     defaults: { name: 'Your Company', state: process.env.COMPANY_STATE || 'Tamil Nadu' }
   });
   await Category.bulkCreate([{ name: 'General' }, { name: 'Electronics' }, { name: 'Services' }], { ignoreDuplicates: true });
+
+  // Expense heads, matched to ledger accounts by name in chartOfAccounts.js.
+  for (const name of ['Rent', 'Electricity', 'Salary', 'Transport', 'Maintenance', 'Internet', 'Marketing', 'Packaging', 'Other']) {
+    await ExpenseCategory.findOrCreate({ where: { name }, defaults: { name } });
+  }
+}
+
+/**
+ * Existing warehouse master rows become real stock locations.
+ *
+ * Warehouses used to be a lookup list with no stock behind them. Mirroring them
+ * into `branches` as locationType 'Warehouse' is what makes them usable for
+ * transfers, GRNs and counts — matched by code, so re-running changes nothing.
+ */
+async function migrateWarehousesToLocations() {
+  // Everything that predates the type column is a branch.
+  try {
+    await sequelize.query(
+      `UPDATE ${sequelize.getQueryInterface().queryGenerator.quoteTable('branches')} SET location_type = 'Branch' WHERE location_type IS NULL`,
+    );
+  } catch (error) {
+    console.warn(`Location type back-fill skipped: ${error.message}`);
+  }
+
+  let migrated = 0;
+  const warehouses = await Warehouse.findAll({ where: { detstatus: false } }).catch(() => []);
+  for (const warehouse of warehouses) {
+    const code = String(warehouse.code || warehouse.name || `WH${warehouse.id}`).slice(0, 20);
+    const [, created] = await Branch.findOrCreate({
+      where: { branchCode: code },
+      defaults: {
+        branchName: warehouse.name,
+        branchCode: code,
+        locationType: 'Warehouse',
+        // A warehouse stores; it does not bill.
+        canSell: false,
+        city: warehouse.city || null,
+        isDefault: false,
+        isActive: true,
+      },
+    });
+    if (created) migrated += 1;
+  }
+  if (migrated > 0) console.log(`Promoted ${migrated} warehouse(s) to stock locations.`);
+}
+
+/**
+ * Starter approval rules, created once and then owned by the business.
+ *
+ * They are seeded inactive on purpose: a threshold picked by us would be wrong
+ * for almost everyone, so these exist as editable examples rather than as
+ * policy imposed on a company that never asked for it.
+ */
+async function seedApprovalRules() {
+  const examples = [
+    { documentType: 'PurchaseOrder', name: 'Large purchase order', field: 'grandTotal', operator: '>', threshold: 100000, approverRole: 'Admin' },
+    { documentType: 'StockTransfer', name: 'Large stock transfer', field: 'quantity', operator: '>', threshold: 500, approverRole: 'Warehouse Manager' },
+    { documentType: 'StockAdjustment', name: 'Large stock adjustment', field: 'quantity', operator: '>', threshold: 50, approverRole: 'Warehouse Manager' },
+    { documentType: 'Expense', name: 'Large expense', field: 'amount', operator: '>', threshold: 25000, approverRole: 'Admin' },
+    { documentType: 'Discount', name: 'Deep discount', field: 'discountPercent', operator: '>', threshold: 10, approverRole: 'Branch Manager' },
+  ];
+
+  for (const rule of examples) {
+    await ApprovalRule.findOrCreate({
+      where: { documentType: rule.documentType, name: rule.name },
+      defaults: { ...rule, isActive: false, priority: 100 },
+    });
+  }
 }
 
 async function dropDuplicateIndexes() {
@@ -347,8 +443,24 @@ export async function migrateDatabase() {
   await sequelize.sync({ alter: { drop: false } });
   await ensureMissingColumns();
   await ensureEnumValues();
-  await seedDefaults();
-  await migrateToDefaultBranch();
-  await seedInvoiceTemplates();
-  await migrateImagesToDatabase();
+
+  // Seeding is the system setting itself up, not a user acting, so it is not
+  // audited — see withoutAudit for why that also matters mechanically.
+  await withoutAudit(async () => {
+    await seedDefaults();
+    await migrateToDefaultBranch();
+    await migrateWarehousesToLocations();
+    await seedApprovalRules();
+    await seedInvoiceTemplates();
+    await migrateImagesToDatabase();
+
+    // Accounts are only seeded for a company already running in Advanced mode;
+    // switching mode seeds them too, so a Basic shop never grows a chart it has
+    // no use for.
+    const company = await Company.findOne();
+    if (company?.businessMode === 'Advanced') {
+      const { seedChartOfAccounts } = await import('../services/accounting.service.js');
+      await seedChartOfAccounts();
+    }
+  });
 }

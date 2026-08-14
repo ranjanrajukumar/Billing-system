@@ -25,6 +25,18 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import StoreIcon from '@mui/icons-material/Store';
 import HistoryIcon from '@mui/icons-material/History';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import MoveToInboxIcon from '@mui/icons-material/MoveToInbox';
+import UndoIcon from '@mui/icons-material/Undo';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import TuneIcon from '@mui/icons-material/Tune';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
+import QrCode2Icon from '@mui/icons-material/QrCode2';
+import PaymentsIcon from '@mui/icons-material/Payments';
+import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import WarehouseIcon from '@mui/icons-material/Warehouse';
+import TaskAltIcon from '@mui/icons-material/TaskAlt';
 import {
   alpha,
   Box,
@@ -45,6 +57,14 @@ import { canOpen } from '../utils/access.js';
 
 const DRAWER_WIDTH = 256;
 
+/**
+ * The navigation, grouped as the work is grouped.
+ *
+ * Every item is filtered through the signed-in user's menu list, which the
+ * server has already narrowed to the modules this company runs — so a small
+ * shop in Basic mode simply never sees GRN, journals or warehouse transfers,
+ * and a large business does. One menu, two very different products.
+ */
 const navGroups = [
   {
     label: 'Overview',
@@ -70,14 +90,38 @@ const navGroups = [
     ],
   },
   {
+    label: 'Purchasing',
+    items: [
+      { label: 'Purchase Orders', path: '/purchase-orders', icon: <AssignmentIcon fontSize="small" /> },
+      { label: 'Goods Receipt', path: '/grn', icon: <MoveToInboxIcon fontSize="small" /> },
+      { label: 'Purchase Invoices', path: '/purchases', icon: <ShoppingBasketIcon fontSize="small" /> },
+      { label: 'Purchase Returns', path: '/purchase-returns', icon: <UndoIcon fontSize="small" /> },
+      { label: 'Suppliers', path: '/suppliers', icon: <StorefrontIcon fontSize="small" /> },
+    ],
+  },
+  {
     label: 'Inventory',
     items: [
       { label: 'Products', path: '/products', icon: <CategoryIcon fontSize="small" /> },
       { label: 'Inventory', path: '/inventory', icon: <InventoryIcon fontSize="small" /> },
-      { label: 'Seed Batches', path: '/batches', icon: <ScienceIcon fontSize="small" /> },
-      { label: 'Purchases', path: '/purchases', icon: <ShoppingBasketIcon fontSize="small" /> },
-      { label: 'Suppliers', path: '/suppliers', icon: <StorefrontIcon fontSize="small" /> },
+      { label: 'Stock Transfers', path: '/stock-transfers', icon: <SwapHorizIcon fontSize="small" /> },
+      { label: 'Stock Adjustments', path: '/stock-adjustments', icon: <TuneIcon fontSize="small" /> },
+      { label: 'Stock Counting', path: '/stock-counts', icon: <FactCheckIcon fontSize="small" /> },
+      { label: 'Batches & Expiry', path: '/batches', icon: <ScienceIcon fontSize="small" /> },
+      { label: 'Serial Numbers', path: '/serials', icon: <QrCode2Icon fontSize="small" /> },
       { label: 'Masters', path: '/masters', icon: <ListAltIcon fontSize="small" /> },
+    ],
+  },
+  {
+    label: 'Accounts',
+    items: [
+      { label: 'Party Ledgers', path: '/ledgers', icon: <MenuBookIcon fontSize="small" /> },
+      { label: 'Expenses', path: '/expenses', icon: <PaymentsIcon fontSize="small" /> },
+      { label: 'Cash Register', path: '/cash-registers', icon: <PointOfSaleIcon fontSize="small" /> },
+      { label: 'Bank Accounts', path: '/bank-accounts', icon: <AccountBalanceIcon fontSize="small" /> },
+      { label: 'Chart of Accounts', path: '/chart-of-accounts', icon: <AccountTreeIcon fontSize="small" /> },
+      { label: 'Journal Entries', path: '/journal-entries', icon: <ArticleIcon fontSize="small" /> },
+      { label: 'Financial Statements', path: '/financials', icon: <AssessmentIcon fontSize="small" /> },
     ],
   },
   {
@@ -85,6 +129,8 @@ const navGroups = [
     items: [
       { label: 'Users & Roles', path: '/users', icon: <GroupIcon fontSize="small" /> },
       { label: 'Branches', path: '/branches', icon: <StoreIcon fontSize="small" /> },
+      { label: 'Warehouses', path: '/warehouses', icon: <WarehouseIcon fontSize="small" /> },
+      { label: 'Approvals', path: '/approvals', icon: <TaskAltIcon fontSize="small" /> },
       { label: 'Audit Logs', path: '/audit-logs', icon: <HistoryIcon fontSize="small" /> },
       { label: 'Backup & Restore', path: '/backups', icon: <StorageIcon fontSize="small" /> },
       { label: 'Invoice Templates', path: '/invoice-templates', icon: <ArticleIcon fontSize="small" /> },
@@ -234,7 +280,7 @@ function SidebarContent({ onClose }) {
                 <NavItem key={item.path} {...item} onClose={onClose} />
               ))}
             </List>
-            {gi < navGroups.length - 1 && (
+            {gi < visibleGroups.length - 1 && (
               <Divider sx={{ mt: 1.5, opacity: 0.5 }} />
             )}
           </Box>

@@ -1,5 +1,6 @@
 import { DataTypes } from 'sequelize';
-import { unsignedInteger } from './types.js';
+import { enumType, unsignedInteger } from './types.js';
+import { BUSINESS_MODES } from '../config/modules.js';
 
 export default (sequelize) => sequelize.define('Company', {
   id: { type: unsignedInteger(sequelize), autoIncrement: true, primaryKey: true },
@@ -30,6 +31,14 @@ export default (sequelize) => sequelize.define('Company', {
   // Off by default: the app runs against a single implicit branch and behaves
   // exactly as it did before branches existed.
   multiBranchEnabled: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+
+  // Basic runs a shop: POS, inventory, party ledgers. Advanced adds the full
+  // ERP workflow (PO/GRN, warehouses, transfers, accounting, approvals).
+  // Existing installations start Basic, so nothing appears or changes for them.
+  businessMode: { ...enumType(sequelize, BUSINESS_MODES), allowNull: false, defaultValue: 'Basic' },
+  // Selling into the negative is refused unless a business explicitly wants it
+  // (e.g. back-dated data entry where receipts are keyed after the sales).
+  allowNegativeStock: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
 
   // Loyalty: earn N points per ₹100 spent, each point worth ₹redeemValue.
   loyaltyEnabled: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },

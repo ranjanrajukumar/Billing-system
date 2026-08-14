@@ -2,7 +2,8 @@ import bcrypt from 'bcrypt';
 import { Branch, Role, User } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { getPagination, paged } from '../utils/pagination.js';
-import { ALL_MENU_KEYS, ALWAYS_VISIBLE, MENU_CATALOGUE, menusForRole } from '../config/menu.js';
+import { ALL_MENU_KEYS, ALWAYS_VISIBLE, catalogueForModules, visibleMenus } from '../config/menu.js';
+import { getConfig } from '../services/config.service.js';
 
 const publicUser = (user) => ({ id: user.id, name: user.name, email: user.email, mobile: user.mobile, isActive: user.isActive, role: user.Role?.name, roleId: user.roleId, branchId: user.branchId, branchName: user.Branch?.branchName, profileImagePath: user.profileImagePath, profileImageUrl: user.profileImageUrl });
 
@@ -22,15 +23,20 @@ export const listRoles = asyncHandler(async (_req, res) => {
 
 /** The menu tree plus each role's current rights, for the rights screen. */
 export const menuRights = asyncHandler(async (_req, res) => {
-  const roles = await Role.findAll({ where: { detstatus: false }, order: [['name', 'ASC']] });
+  const [roles, { modules }] = await Promise.all([
+    Role.findAll({ where: { detstatus: false }, order: [['name', 'ASC']] }),
+    getConfig(),
+  ]);
+
+  // Only pages this company actually has are worth granting rights to.
   res.json({
-    catalogue: MENU_CATALOGUE,
+    catalogue: catalogueForModules(modules),
     alwaysVisible: ALWAYS_VISIBLE,
     roles: roles.map((role) => ({
       id: role.id,
       name: role.name,
       isAdmin: role.name === 'Admin',
-      menus: menusForRole(role),
+      menus: visibleMenus(role, modules),
     })),
   });
 });

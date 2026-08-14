@@ -27,6 +27,20 @@ import settingsRoutes from './settings.routes.js';
 import supplierRoutes from './supplier.routes.js';
 import userRoutes from './user.routes.js';
 import invoiceTemplateRoutes from './invoiceTemplate.routes.js';
+// Advanced (ERP) modules. Each router gates itself on its feature flag, so a
+// module that is switched off answers 403 rather than quietly working.
+import stockTransferRoutes from './stockTransfer.routes.js';
+import stockAdjustmentRoutes from './stockAdjustment.routes.js';
+import stockCountRoutes from './stockCount.routes.js';
+import purchaseOrderRoutes from './purchaseOrder.routes.js';
+import grnRoutes from './grn.routes.js';
+import purchaseReturnRoutes from './purchaseReturn.routes.js';
+import warehouseRoutes from './warehouse.routes.js';
+import expenseRoutes from './expense.routes.js';
+import cashRoutes from './cash.routes.js';
+import accountingRoutes from './accounting.routes.js';
+import approvalRoutes from './approval.routes.js';
+import ledgerRoutes from './ledger.routes.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { resolveBranch } from '../middleware/branchContext.js';
 
@@ -63,5 +77,20 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/invoice-templates', invoiceTemplateRoutes);
 router.use('/users', userRoutes);
+
+// Advanced mode.
+router.use('/stock-transfers', stockTransferRoutes);
+router.use('/stock-adjustments', stockAdjustmentRoutes);
+router.use('/stock-counts', stockCountRoutes);
+router.use('/purchase-orders', purchaseOrderRoutes);
+router.use('/grn', grnRoutes);
+router.use('/purchase-returns', purchaseReturnRoutes);
+router.use('/warehouses', warehouseRoutes);
+router.use('/expenses', expenseRoutes);
+router.use('/cash', cashRoutes);
+router.use('/accounting', accountingRoutes);
+router.use('/approvals', approvalRoutes);
+// Party ledgers work in both modes — a small shop needs them most of all.
+router.use('/ledgers', ledgerRoutes);
 
 export default router;

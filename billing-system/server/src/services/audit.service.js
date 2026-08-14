@@ -63,10 +63,32 @@ function diff(instance) {
 }
 
 /**
+ * Set while the schema is being migrated and the defaults seeded.
+ *
+ * The audit log records what people did. Boot-time seeding is not that: it
+ * would write the same "Created Role Admin" lines on every restart, and because
+ * audit writes are deliberately un-awaited and untransacted they also race the
+ * seeding transactions they are describing — which on SQLite, with its single
+ * writer, is an outright lock error.
+ */
+let suppressed = false;
+
+/** Runs `work` with audit logging turned off, restoring it afterwards. */
+export async function withoutAudit(work) {
+  suppressed = true;
+  try {
+    return await work();
+  } finally {
+    suppressed = false;
+  }
+}
+
+/**
  * Writes an audit entry. Deliberately fire-and-forget and outside any caller
  * transaction: a failure to log must never roll back or break a real operation.
  */
 export function recordAudit(AuditLog, entry) {
+  if (suppressed) return;
   const context = getContext() || {};
   AuditLog.create({
     userId: entry.userId ?? context.userId ?? null,

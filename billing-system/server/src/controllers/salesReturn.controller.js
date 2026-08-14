@@ -1,12 +1,12 @@
 import { Op } from 'sequelize';
-import { SalesReturn, SalesReturnItem, Customer, Product, User, StockMovement, Company } from '../models/index.js';
+import { SalesReturn, SalesReturnItem, Customer, Product, User, Company } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { paged } from '../utils/pagination.js';
 import { scopedWhere } from '../middleware/branchContext.js';
 import { withDateRange } from '../utils/dateRange.js';
 import { sequelize } from '../models/index.js';
 import { documentOutputHandlers } from './documentOutput.js';
-import { adjustStock } from '../services/stock.service.js';
+import { postStockTransaction } from '../services/stock.service.js';
 
 // The client posts items as quantity/rate; the model stores a refund amount.
 function normalizeReturnItems(items = []) {
@@ -84,26 +84,23 @@ export const create = asyncHandler(async (req, res) => {
       const itemsData = normalizeReturnItems(items).map(item => ({ ...item, returnId: parent.id, authadd: req.user.id }));
       await SalesReturnItem.bulkCreate(itemsData, { transaction: t });
 
+      // Returned goods come back into the location that took the return, each
+      // one leaving a 'Sale Return' row in the stock ledger.
       for (const item of normalizeReturnItems(items)) {
-        await adjustStock({
+        await postStockTransaction({
           productId: item.productId,
           branchId: req.branchId,
-          delta: Number(item.quantity),
+          quantity: Number(item.quantity),
+          movementType: 'Sale Return',
+          referenceType: 'Sales Return',
+          referenceId: parent.id,
+          referenceNumber: parent.returnNumber,
+          transactionDate: parent.returnDate,
+          notes: `Returned via ${parent.returnNumber}`,
           transaction: t,
           userId: req.user.id,
         });
       }
-      
-      await StockMovement.bulkCreate(items.map((item) => ({
-        productId: item.productId,
-        createdBy: req.user.id,
-        movementType: 'Adjustment In',
-        quantity: item.quantity,
-        referenceType: 'Sales Return',
-        referenceId: parent.id,
-        notes: `Returned via ${parent.returnNumber}`,
-        authadd: req.user.id
-      })), { transaction: t });
     }
     return parent;
   });

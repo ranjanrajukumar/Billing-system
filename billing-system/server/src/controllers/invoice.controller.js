@@ -1,12 +1,13 @@
 import { Op } from 'sequelize';
-import { sequelize, Customer, Invoice, InvoiceItem, Product, Company, Payment, StockMovement, InvoiceTemplate } from '../models/index.js';
+import { sequelize, Customer, Invoice, InvoiceItem, Product, Company, Payment, InvoiceTemplate, ProductSerial, JournalEntry } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { scopedWhere } from '../middleware/branchContext.js';
 import { calculateInvoice } from '../utils/invoiceMath.js';
 import { getPagination, paged } from '../utils/pagination.js';
 import { buildInvoicePdf } from '../services/pdf.service.js';
 import { renderInvoiceHtml } from '../services/invoiceHtml.service.js';
-import { adjustStock, assertAvailable } from '../services/stock.service.js';
+import { assertAvailable, postStockTransaction } from '../services/stock.service.js';
+import { postSale, reverseEntry } from '../services/accounting.service.js';
 import { recordCouponUse, releaseCouponUse, validateCoupon } from '../services/coupon.service.js';
 import { allocate, consume, restoreFromItems } from '../services/batch.service.js';
 import { withDateRange } from '../utils/dateRange.js';
@@ -212,30 +213,24 @@ export const createInvoice = asyncHandler(async (req, res) => {
     }), { transaction });
 
     // Stock is always tracked in the primary unit, so deduct primaryQty.
+    // One call per line moves the quantity and writes the ledger row together.
     for (const item of totals.items) {
       const deductQty = Number(item.primaryQty || item.quantity);
-      await adjustStock({
+      await postStockTransaction({
         productId: item.productId,
         branchId: req.branchId,
-        delta: -deductQty,
+        quantity: -deductQty,
+        movementType: 'Sale',
+        referenceType: 'Invoice',
+        referenceId: invoice.id,
+        referenceNumber: invoice.invoiceNumber,
+        unitCost: byId.get(Number(item.productId))?.purchasePrice ?? null,
+        transactionDate: invoice.invoiceDate,
+        notes: `Sold ${item.quantity} ${item.um || 'PCS'}${item.um !== item.primaryUnit ? ` (= ${deductQty} ${item.primaryUnit})` : ''} via Invoice ${invoice.invoiceNumber}`,
         transaction,
         userId: req.user.id,
       });
     }
-
-    await StockMovement.bulkCreate(totals.items.map((item) => {
-      const deductQty = Number(item.primaryQty || item.quantity);
-      return {
-        productId: item.productId,
-        createdBy: req.user.id,
-        movementType: 'Sale',
-        quantity: -deductQty,
-        referenceType: 'Invoice',
-        referenceId: invoice.id,
-        notes: `Sold ${item.quantity} ${item.um || 'PCS'}${item.um !== item.primaryUnit ? ` (= ${deductQty} ${item.primaryUnit})` : ''} via Invoice ${invoice.invoiceNumber}`,
-        authadd: req.user.id,
-      };
-    }), { transaction });
 
     // Spend the points, log the coupon, then award points on what was paid.
     if (appliedCoupon) {
@@ -282,6 +277,19 @@ export const createInvoice = asyncHandler(async (req, res) => {
         authadd: req.user.id
       }, { transaction });
     }
+
+    // Books the sale, the GST collected and the cost of the goods that left.
+    // No-op unless the accounting module is on, so a shop is unaffected.
+    await postSale({
+      invoice,
+      costOfGoods: totals.items.reduce((sum, item) => {
+        const cost = Number(byId.get(Number(item.productId))?.purchasePrice || 0);
+        return sum + cost * Number(item.primaryQty || item.quantity);
+      }, 0),
+      transaction,
+      userId: req.user.id,
+    });
+
     return invoice;
   });
   const invoice = await Invoice.findOne({ where: { id: created.id}, include: [{ model: Customer }, { model: InvoiceItem, include: Product }, Payment] });
@@ -327,10 +335,15 @@ export const updateInvoice = asyncHandler(async (req, res) => {
     // ---- Unwind the original invoice ----
     await restoreFromItems(existing.InvoiceItems, { transaction, userId: req.user.id });
     for (const item of existing.InvoiceItems) {
-      await adjustStock({
+      await postStockTransaction({
         productId: item.productId,
         branchId,
-        delta: Number(item.quantity),
+        quantity: Number(item.primaryQty || item.quantity),
+        movementType: 'Adjustment In',
+        referenceType: 'Invoice Edit Reversal',
+        referenceId: existing.id,
+        referenceNumber: existing.invoiceNumber,
+        notes: `Reversed original line before editing ${existing.invoiceNumber}`,
         transaction,
         userId: req.user.id,
       });
@@ -458,25 +471,20 @@ export const updateInvoice = asyncHandler(async (req, res) => {
     }), { transaction });
 
     for (const item of totals.items) {
-      await adjustStock({
+      await postStockTransaction({
         productId: item.productId,
         branchId,
-        delta: -Number(item.quantity),
+        quantity: -Number(item.quantity),
+        movementType: 'Sale',
+        referenceType: 'Invoice Edit',
+        referenceId: existing.id,
+        referenceNumber: existing.invoiceNumber,
+        transactionDate: existing.invoiceDate,
+        notes: `Revised via Invoice ${existing.invoiceNumber}`,
         transaction,
         userId: req.user.id,
       });
     }
-
-    await StockMovement.bulkCreate(totals.items.map((item) => ({
-      productId: item.productId,
-      createdBy: req.user.id,
-      movementType: 'Sale',
-      quantity: -item.quantity,
-      referenceType: 'Invoice Edit',
-      referenceId: existing.id,
-      notes: `Revised via Invoice ${existing.invoiceNumber}`,
-      authadd: req.user.id,
-    })), { transaction });
 
     if (appliedCoupon) {
       await recordCouponUse({
@@ -531,13 +539,34 @@ export const removeInvoice = asyncHandler(async (req, res) => {
       { detstatus: true, authdel: req.user.id, delondt: new Date() },
       { where: { invoiceId: invoice.id, detstatus: false }, transaction }
     );
+
+    // The accounting entry is reversed rather than removed: a cancelled sale
+    // still happened, and the books should say so.
+    const entry = await JournalEntry.findOne({
+      where: { sourceType: 'Invoice', sourceId: invoice.id, status: 'Posted', detstatus: false },
+      transaction,
+    });
+    if (entry) {
+      await reverseEntry({
+        entryId: entry.id,
+        userId: req.user.id,
+        transaction,
+        narration: `Cancellation of invoice ${invoice.invoiceNumber}`,
+      });
+    }
     
-    // Reverse stock at the branch that made the sale.
+    // Reverse stock at the location that made the sale, logging each reversal.
     for (const item of invoice.InvoiceItems) {
-      await adjustStock({
+      await postStockTransaction({
         productId: item.productId,
         branchId: invoice.branchId || req.branchId,
-        delta: Number(item.quantity),
+        quantity: Number(item.primaryQty || item.quantity),
+        movementType: 'Sale Return',
+        referenceType: 'Invoice Cancellation',
+        referenceId: invoice.id,
+        referenceNumber: invoice.invoiceNumber,
+        batchId: item.batchId || null,
+        notes: `Reversed via Cancelled Invoice ${invoice.invoiceNumber}`,
         transaction,
         userId: req.user.id,
       });
@@ -546,18 +575,19 @@ export const removeInvoice = asyncHandler(async (req, res) => {
     // Seed lots go back to the exact batches the sale drew from, so a cancelled
     // bill cannot quietly move stock between lots.
     await restoreFromItems(invoice.InvoiceItems, { transaction, userId: req.user.id });
-    
-    // Create stock movement logs for cancellation
-    await StockMovement.bulkCreate(invoice.InvoiceItems.map((item) => ({
-      productId: item.productId,
-      createdBy: req.user.id,
-      movementType: 'Sale Return',
-      quantity: item.quantity, // Positive quantity for return
-      referenceType: 'Invoice Cancellation',
-      referenceId: invoice.id,
-      notes: `Reversed via Cancelled Invoice ${invoice.invoiceNumber}`,
-      authadd: req.user.id
-    })), { transaction });
+
+    // Serials sold on this bill come back into stock at the same location.
+    await ProductSerial.update(
+      {
+        status: 'In Stock',
+        branchId: invoice.branchId || req.branchId,
+        invoiceId: null,
+        customerId: null,
+        soldAt: null,
+        authlstedit: req.user.id,
+      },
+      { where: { invoiceId: invoice.id, detstatus: false }, transaction },
+    );
   });
 
   res.json({ message: 'Invoice cancelled and stock reversed' });

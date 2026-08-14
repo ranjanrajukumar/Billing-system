@@ -8,7 +8,34 @@ export default (sequelize) => sequelize.define('Product', {
   purchasePrice: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
   sellingPrice: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
   gstPercent: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 0 },
+  // Mirror of the total across all locations; `branch_stock` is the authority.
   stock: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+
+  // ---- Product master ----
+  sku: { type: DataTypes.STRING(60), allowNull: true },
+  brandId: { type: unsignedInteger(sequelize), allowNull: true },
+  mrp: { type: DataTypes.DECIMAL(12, 2), allowNull: true },
+  // Tier pricing. Null falls back to sellingPrice, so a shop that only has one
+  // price never has to think about any of this.
+  wholesalePrice: { type: DataTypes.DECIMAL(12, 2), allowNull: true },
+  dealerPrice: { type: DataTypes.DECIMAL(12, 2), allowNull: true },
+
+  // ---- Reordering ----
+  minimumStock: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  reorderLevel: { type: DataTypes.INTEGER, allowNull: true },
+  reorderQuantity: { type: DataTypes.INTEGER, allowNull: true },
+
+  // ---- Tracking, opt-in per product ----
+  batchRequired: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+  expiryRequired: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+  serialRequired: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+  warrantyMonths: { type: DataTypes.INTEGER, allowNull: true },
+
+  // Variants, kept as plain attributes rather than a variant table: most shops
+  // want "red, large" on the product, not a second entity to maintain.
+  size: { type: DataTypes.STRING(40), allowNull: true },
+  color: { type: DataTypes.STRING(40), allowNull: true },
+  description: { type: DataTypes.TEXT, allowNull: true },
   // Not unique in the database: products are soft deleted, and a unique index
   // would keep a removed product's barcode locked forever. Uniqueness among
   // live products is enforced in the controller instead.
@@ -40,5 +67,8 @@ export default (sequelize) => sequelize.define('Product', {
   tableName: 'products',
   // Image bytes are only ever needed by the media endpoint, so keep them out of every other query.
   defaultScope: { attributes: { exclude: ['imageData'] } },
-  indexes: [{ fields: ['product_name'] }, { fields: ['barcode'] }, { fields: ['hsn_code'] }]
+  indexes: [
+    { fields: ['product_name'] }, { fields: ['barcode'] }, { fields: ['hsn_code'] },
+    { fields: ['sku'] }, { fields: ['brand_id'] }
+  ]
 });

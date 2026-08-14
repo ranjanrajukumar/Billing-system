@@ -26,11 +26,19 @@ export function clearBranchCache() {
 }
 
 /**
- * Decides which branch this request acts on.
+ * Decides which location this request acts on.
  *
- * Single-branch mode: always the default branch, so behaviour is unchanged.
- * Multi-branch mode: the user's own branch. Admins may target another branch
- * with `X-Branch-Id` (or `?branchId=`), and may read across all branches.
+ * Two separate questions, which used to be conflated:
+ *
+ *   - *Which* location am I acting on? Answered by `X-Branch-Id` (or
+ *     `?branchId=`) when the caller is entitled to target one. A warehouse is a
+ *     location, so this has to work even for a business that has not turned on
+ *     multi-branch scoping — otherwise receiving goods into a warehouse would
+ *     silently put them in the shop.
+ *
+ *   - *What may I see*? Answered by `branchScope`, which multi-branch mode
+ *     turns on. In single-location mode there is nothing to filter, so it stays
+ *     null and every existing list behaves exactly as it did before.
  */
 export async function resolveBranch(req, _res, next) {
   try {
@@ -41,8 +49,13 @@ export async function resolveBranch(req, _res, next) {
     req.multiBranch = multiBranch;
 
     if (!multiBranch) {
-      req.branchId = defaultBranchId;
-      req.branchScope = null; // no filtering; there is only one branch
+      // An Admin may still name the location to act on — warehouses depend on
+      // it — but nothing is filtered, so reads stay unchanged.
+      const explicit = isAdmin && requested && String(requested).toLowerCase() !== 'all'
+        ? Number(requested)
+        : null;
+      req.branchId = Number.isFinite(explicit) && explicit ? explicit : defaultBranchId;
+      req.branchScope = null; // no filtering; there is only one selling location
       return next();
     }
 

@@ -40,7 +40,10 @@ export default function Login() {
       await login(values);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
+      setError(
+        err.response?.data?.message ||
+        'Unable to sign in right now. Please make sure the server is running and try again.'
+      );
     }
   };
 

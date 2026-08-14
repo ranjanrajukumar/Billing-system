@@ -4,6 +4,7 @@ import BusinessIcon from '@mui/icons-material/Business';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import LoyaltyIcon from '@mui/icons-material/Loyalty';
 import StoreIcon from '@mui/icons-material/Store';
+import TuneIcon from '@mui/icons-material/Tune';
 import {
   alpha, Box, Button, Divider, FormControlLabel, Grid, MenuItem, Paper,
   Stack, Switch, TextField, Typography, useTheme,
@@ -12,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import Loader from '../components/Loader.jsx';
+import ModeSetup from '../components/ModeSetup.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { settingsApi } from '../services/resource.service.js';
@@ -120,6 +122,12 @@ export default function Settings() {
           </Button>
         }
       />
+
+      {/* How much application this business needs. Deliberately first: it
+          decides what the rest of the app even shows. */}
+      <SectionCard title="Business Mode & Modules" icon={<TuneIcon fontSize="small" />}>
+        <ModeSetup />
+      </SectionCard>
 
       {/* Company Logo Section */}
       <SectionCard title="Company Logo" icon={<ImageIcon fontSize="small" />}>
@@ -248,6 +256,26 @@ export default function Settings() {
               </Button>
             </Grid>
           </Grid>
+
+          <Controller
+            name="allowNegativeStock"
+            control={control}
+            defaultValue={false}
+            render={({ field }) => (
+              <FormControlLabel
+                control={<Switch checked={Boolean(field.value)} onChange={(e) => field.onChange(e.target.checked)} />}
+                label={
+                  <Box>
+                    <Typography variant="body2" fontWeight={700}>Allow stock to go negative</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Off (recommended): a sale is refused when the shelf cannot cover it. On: useful only when
+                      receipts are keyed in after the sales they cover, and it will let stock figures go below zero.
+                    </Typography>
+                  </Box>
+                }
+              />
+            )}
+          />
         </Stack>
       </SectionCard>
 

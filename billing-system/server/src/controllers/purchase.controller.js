@@ -1,10 +1,11 @@
 import { Op } from 'sequelize';
-import { sequelize, Product, ProductBatch, Purchase, PurchaseItem, StockMovement, Supplier } from '../models/index.js';
+import { sequelize, JournalEntry, Product, ProductBatch, Purchase, PurchaseItem, Supplier } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { scopedWhere } from '../middleware/branchContext.js';
 import { withDateRange } from '../utils/dateRange.js';
 import { getPagination, paged } from '../utils/pagination.js';
-import { adjustStock, assertAvailable } from '../services/stock.service.js';
+import { assertAvailable, postStockTransaction } from '../services/stock.service.js';
+import { postPurchase, reverseEntry } from '../services/accounting.service.js';
 
 async function nextPurchaseNumber(transaction) {
   const year = new Date().getFullYear();
@@ -114,11 +115,19 @@ export const createPurchase = asyncHandler(async (req, res) => {
 
     if (purchase.status === 'Received') {
       for (const item of totals.items) {
-        // Adjust branch stock using primaryQty (e.g. 10 BAGS * 50 = 500 KG)
-        await adjustStock({
+        // Receive into location stock using primaryQty (e.g. 10 BAGS * 50 = 500 KG),
+        // writing the ledger row in the same call.
+        await postStockTransaction({
           productId: item.productId,
           branchId: req.branchId,
-          delta: Number(item.primaryQty),
+          quantity: Number(item.primaryQty),
+          movementType: 'Purchase',
+          referenceType: 'Purchase',
+          referenceId: purchase.id,
+          referenceNumber: purchase.purchaseNumber,
+          unitCost: item.rate,
+          transactionDate: purchase.purchaseDate,
+          notes: `${purchase.purchaseNumber} (${item.quantity} ${item.um} = ${item.primaryQty} ${item.primaryUnit})`,
           transaction,
           userId: req.user.id,
         });
@@ -153,17 +162,10 @@ export const createPurchase = asyncHandler(async (req, res) => {
           }, { transaction });
         }
       }
-
-      await StockMovement.bulkCreate(totals.items.map((item) => ({
-        productId: item.productId,
-        createdBy: req.user.id,
-        movementType: 'Purchase',
-        quantity: item.primaryQty,
-        referenceType: 'Purchase',
-        referenceId: purchase.id,
-        notes: `${purchase.purchaseNumber} (${item.quantity} ${item.um} = ${item.primaryQty} ${item.primaryUnit})`
-      })), { transaction });
     }
+
+    // Stock in, ITC claimable, supplier owed. Skipped unless accounting is on.
+    await postPurchase({ purchase, transaction, userId: req.user.id });
 
     return purchase;
   });
@@ -191,10 +193,16 @@ export const removePurchase = asyncHandler(async (req, res) => {
 
       for (const item of purchase.PurchaseItems) {
         const qtyToDeduct = Number(item.primaryQty || item.quantity);
-        await adjustStock({
+        await postStockTransaction({
           productId: item.productId,
           branchId,
-          delta: -qtyToDeduct,
+          quantity: -qtyToDeduct,
+          movementType: 'Adjustment Out',
+          referenceType: 'Purchase Cancellation',
+          referenceId: purchase.id,
+          referenceNumber: purchase.purchaseNumber,
+          unitCost: item.rate,
+          notes: `Reversed via cancelled purchase ${purchase.purchaseNumber}`,
           transaction,
           userId: req.user.id,
         });
@@ -210,17 +218,20 @@ export const removePurchase = asyncHandler(async (req, res) => {
           }
         }
       }
+    }
 
-      await StockMovement.bulkCreate(purchase.PurchaseItems.map((item) => ({
-        productId: item.productId,
-        createdBy: req.user.id,
-        movementType: 'Adjustment Out',
-        quantity: -Number(item.primaryQty || item.quantity),
-        referenceType: 'Purchase Cancellation',
-        referenceId: purchase.id,
-        notes: `Reversed via cancelled purchase ${purchase.purchaseNumber}`,
-        authadd: req.user.id
-      })), { transaction });
+    // Reverse rather than delete the accounting entry.
+    const entry = await JournalEntry.findOne({
+      where: { sourceType: 'Purchase', sourceId: purchase.id, status: 'Posted', detstatus: false },
+      transaction,
+    });
+    if (entry) {
+      await reverseEntry({
+        entryId: entry.id,
+        userId: req.user.id,
+        transaction,
+        narration: `Cancellation of purchase ${purchase.purchaseNumber}`,
+      });
     }
 
     await purchase.update({

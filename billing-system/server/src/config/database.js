@@ -16,7 +16,12 @@ const connectionOptions = {
 };
 
 if (settings.dialect === 'sqlite') {
-  delete connectionOptions.pool;
+  // SQLite has one writer. A multi-connection pool turns ordinary concurrent
+  // writes into SQLITE_BUSY, so it gets a single connection and is told to wait
+  // rather than fail if a write is briefly held.
+  connectionOptions.pool = { max: 1, min: 0, idle: 10_000, acquire: 60_000 };
+  connectionOptions.retry = { match: [/SQLITE_BUSY/], max: 5 };
+  connectionOptions.dialectOptions = { ...connectionOptions.dialectOptions, timeout: 30_000 };
 }
 
 export const sequelize = settings.dialect === 'sqlite'

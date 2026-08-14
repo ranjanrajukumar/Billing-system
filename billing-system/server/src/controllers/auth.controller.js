@@ -4,27 +4,36 @@ import jwt from 'jsonwebtoken';
 import { Op } from 'sequelize';
 import { AuditLog, Role, User } from '../models/index.js';
 import { recordAudit } from '../services/audit.service.js';
-import { menusForRole } from '../config/menu.js';
+import { visibleMenus } from '../config/menu.js';
+import { getConfig } from '../services/config.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { imageColumns } from '../utils/imageUpload.js';
 import { sendPasswordResetEmail } from '../services/email.service.js';
 
 const signToken = (user) => jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '1d' });
 
-const buildAuthResponse = (user) => ({
-  token: signToken(user),
-  user: {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    mobile: user.mobile,
-    role: user.Role?.name,
-    profileImagePath: user.profileImagePath,
-    profileImageUrl: user.profileImageUrl,
-    // Menu rights travel with the user so the sidebar can render correctly.
-    menus: menusForRole(user.Role)
-  }
-});
+const buildAuthResponse = async (user) => {
+  // The sidebar is built from these, so what a user is offered at sign-in is
+  // already narrowed to the modules this company runs.
+  const { mode, modules } = await getConfig();
+
+  return {
+    token: signToken(user),
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      mobile: user.mobile,
+      role: user.Role?.name,
+      profileImagePath: user.profileImagePath,
+      profileImageUrl: user.profileImageUrl,
+      // Menu rights travel with the user so the sidebar can render correctly.
+      menus: visibleMenus(user.Role, modules),
+      modules: [...modules],
+      businessMode: mode,
+    }
+  };
+};
 
 export const register = asyncHandler(async (req, res) => {
   const { name, email, password, mobile } = req.body;
@@ -41,7 +50,7 @@ export const register = asyncHandler(async (req, res) => {
   });
 
   const createdUser = await User.findOne({ where: { id: user.id}, include: Role });
-  return res.status(201).json(buildAuthResponse(createdUser));
+  return res.status(201).json(await buildAuthResponse(createdUser));
 });
 
 export const login = asyncHandler(async (req, res) => {
@@ -72,7 +81,7 @@ export const login = asyncHandler(async (req, res) => {
     entityId: user.id,
     summary: `${user.name} signed in`,
   });
-  res.json(buildAuthResponse(user));
+  res.json(await buildAuthResponse(user));
 });
 
 export const me = asyncHandler(async (req, res) => res.json({ user: req.user }));
@@ -140,5 +149,5 @@ export const updateProfile = asyncHandler(async (req, res) => {
   }
 
   await user.save();
-  res.json(buildAuthResponse(user));
+  res.json(await buildAuthResponse(user));
 });

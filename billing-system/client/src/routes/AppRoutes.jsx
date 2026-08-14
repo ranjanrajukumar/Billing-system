@@ -32,6 +32,24 @@ import Register from '../pages/Register.jsx';
 import Reports from '../pages/Reports.jsx';
 import Settings from '../pages/Settings.jsx';
 import Users from '../pages/Users.jsx';
+// Advanced (ERP) screens. Their routes always exist; the sidebar and the API
+// decide whether this company can reach them.
+import PurchaseOrders from '../pages/PurchaseOrders.jsx';
+import Grn from '../pages/Grn.jsx';
+import PurchaseReturns from '../pages/PurchaseReturns.jsx';
+import StockTransfers from '../pages/StockTransfers.jsx';
+import StockAdjustments from '../pages/StockAdjustments.jsx';
+import StockCounts from '../pages/StockCounts.jsx';
+import Serials from '../pages/Serials.jsx';
+import Warehouses from '../pages/Warehouses.jsx';
+import Ledgers from '../pages/Ledgers.jsx';
+import Expenses from '../pages/Expenses.jsx';
+import CashRegisters from '../pages/CashRegisters.jsx';
+import BankAccounts from '../pages/BankAccounts.jsx';
+import ChartOfAccounts from '../pages/ChartOfAccounts.jsx';
+import JournalEntries from '../pages/JournalEntries.jsx';
+import Financials from '../pages/Financials.jsx';
+import Approvals from '../pages/Approvals.jsx';
 
 export default function AppRoutes({ mode, onToggleMode }) {
   return (
@@ -67,6 +85,24 @@ export default function AppRoutes({ mode, onToggleMode }) {
           <Route path="invoice-templates" element={<InvoiceTemplateSetup />} />
           <Route path="invoice-templates/:id/design" element={<InvoiceDesigner />} />
           <Route path="profile" element={<Profile />} />
+
+          {/* Advanced mode */}
+          <Route path="purchase-orders" element={<PurchaseOrders />} />
+          <Route path="grn" element={<Grn />} />
+          <Route path="purchase-returns" element={<PurchaseReturns />} />
+          <Route path="stock-transfers" element={<StockTransfers />} />
+          <Route path="stock-adjustments" element={<StockAdjustments />} />
+          <Route path="stock-counts" element={<StockCounts />} />
+          <Route path="serials" element={<Serials />} />
+          <Route path="warehouses" element={<Warehouses />} />
+          <Route path="ledgers" element={<Ledgers />} />
+          <Route path="expenses" element={<Expenses />} />
+          <Route path="cash-registers" element={<CashRegisters />} />
+          <Route path="bank-accounts" element={<BankAccounts />} />
+          <Route path="chart-of-accounts" element={<ChartOfAccounts />} />
+          <Route path="journal-entries" element={<JournalEntries />} />
+          <Route path="financials" element={<Financials />} />
+          <Route path="approvals" element={<Approvals />} />
         </Route>
       </Route>
       <Route path="/404" element={<NotFound />} />

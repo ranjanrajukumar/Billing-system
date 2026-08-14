@@ -58,11 +58,36 @@ export const MENU_KEY_BY_PATH = {
   '/invoice-templates': 'invoiceTemplates',
   '/settings': 'settings',
   '/profile': 'profile',
+
+  // Advanced mode.
+  '/purchase-orders': 'purchaseOrders',
+  '/grn': 'grn',
+  '/purchase-returns': 'purchaseReturns',
+  '/stock-transfers': 'stockTransfers',
+  '/stock-adjustments': 'stockAdjustments',
+  '/stock-counts': 'stockCounts',
+  '/serials': 'serials',
+  '/warehouses': 'warehouses',
+  '/ledgers': 'ledgers',
+  '/expenses': 'expenses',
+  '/cash-registers': 'cashRegisters',
+  '/bank-accounts': 'bankAccounts',
+  '/chart-of-accounts': 'chartOfAccounts',
+  '/journal-entries': 'journalEntries',
+  '/financials': 'financials',
+  '/approvals': 'approvals',
 };
 
+/** Pages that must stay reachable whatever the rights say. */
+const ALWAYS_OPEN = new Set(['/', '/profile']);
+
 /**
- * A page is open when the role's own rules allow it *and* the role's configured
- * menu rights include it. Rights only ever narrow access, never widen it — the
+ * A page is open when the role's own rules allow it *and* the signed-in user's
+ * menu list includes it.
+ *
+ * The menu list arrives from the server already narrowed to the modules this
+ * company has switched on, so it gates Admins too — a disabled module is absent
+ * from the product, not merely restricted. Rights only ever narrow access; the
  * API still enforces the real rules on every request.
  */
 export function canOpen(path, role, menus = null) {
@@ -73,11 +98,20 @@ export function canOpen(path, role, menus = null) {
     if (!roleAllows) return false;
   }
 
-  if (!role || role === 'Admin') return true;
+  if (ALWAYS_OPEN.has(path)) return true;
 
-  if (!Array.isArray(menus) || menus.length === 0) return true;
+  // No list at all means an older session; fall back to role rules only rather
+  // than locking the user out of everything.
+  if (!Array.isArray(menus) || menus.length === 0) return !role || role === 'Admin' ? true : true;
+
   const key = MENU_KEY_BY_PATH[path];
   return !key || menus.includes(key);
+}
+
+/** Whether a module is switched on for this company. */
+export function hasModule(moduleKey, modules) {
+  if (!Array.isArray(modules)) return true;
+  return modules.includes(moduleKey);
 }
 
 export function can(action, role) {

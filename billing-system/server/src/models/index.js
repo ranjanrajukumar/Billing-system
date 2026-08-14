@@ -39,6 +39,31 @@ import CouponModel from './coupon.model.js';
 import CouponUsageModel from './couponUsage.model.js';
 import LoyaltyTransactionModel from './loyaltyTransaction.model.js';
 import ProductBatchModel from './productBatch.model.js';
+import FeatureFlagModel from './featureFlag.model.js';
+import StockTransferModel from './stockTransfer.model.js';
+import StockTransferItemModel from './stockTransferItem.model.js';
+import StockAdjustmentModel from './stockAdjustment.model.js';
+import StockAdjustmentItemModel from './stockAdjustmentItem.model.js';
+import StockCountModel from './stockCount.model.js';
+import StockCountItemModel from './stockCountItem.model.js';
+import PurchaseOrderModel from './purchaseOrder.model.js';
+import PurchaseOrderItemModel from './purchaseOrderItem.model.js';
+import GrnModel from './grn.model.js';
+import GrnItemModel from './grnItem.model.js';
+import PurchaseReturnModel from './purchaseReturn.model.js';
+import PurchaseReturnItemModel from './purchaseReturnItem.model.js';
+import ProductSerialModel from './productSerial.model.js';
+import WarehouseBinModel from './warehouseBin.model.js';
+import ExpenseModel from './expense.model.js';
+import CashRegisterModel from './cashRegister.model.js';
+import CashTransactionModel from './cashTransaction.model.js';
+import BankAccountModel from './bankAccount.model.js';
+import BankTransactionModel from './bankTransaction.model.js';
+import ChartOfAccountModel from './chartOfAccount.model.js';
+import JournalEntryModel from './journalEntry.model.js';
+import JournalEntryLineModel from './journalEntryLine.model.js';
+import ApprovalRuleModel from './approvalRule.model.js';
+import ApprovalRequestModel from './approvalRequest.model.js';
 import { installAuditHooks } from '../services/audit.service.js';
 export const Role = RoleModel(sequelize);
 export const User = UserModel(sequelize);
@@ -80,6 +105,32 @@ export const Coupon = CouponModel(sequelize);
 export const CouponUsage = CouponUsageModel(sequelize);
 export const LoyaltyTransaction = LoyaltyTransactionModel(sequelize);
 export const ProductBatch = ProductBatchModel(sequelize);
+export const FeatureFlag = FeatureFlagModel(sequelize);
+export const StockTransfer = StockTransferModel(sequelize);
+export const StockTransferItem = StockTransferItemModel(sequelize);
+export const StockAdjustment = StockAdjustmentModel(sequelize);
+export const StockAdjustmentItem = StockAdjustmentItemModel(sequelize);
+export const StockCount = StockCountModel(sequelize);
+export const StockCountItem = StockCountItemModel(sequelize);
+export const PurchaseOrder = PurchaseOrderModel(sequelize);
+export const PurchaseOrderItem = PurchaseOrderItemModel(sequelize);
+export const Grn = GrnModel(sequelize);
+export const GrnItem = GrnItemModel(sequelize);
+export const PurchaseReturn = PurchaseReturnModel(sequelize);
+export const PurchaseReturnItem = PurchaseReturnItemModel(sequelize);
+export const ProductSerial = ProductSerialModel(sequelize);
+export const WarehouseBin = WarehouseBinModel(sequelize);
+export const Expense = ExpenseModel(sequelize);
+export const CashRegister = CashRegisterModel(sequelize);
+export const CashTransaction = CashTransactionModel(sequelize);
+export const BankAccount = BankAccountModel(sequelize);
+export const BankTransaction = BankTransactionModel(sequelize);
+export const ChartOfAccount = ChartOfAccountModel(sequelize);
+export const JournalEntry = JournalEntryModel(sequelize);
+export const JournalEntryLine = JournalEntryLineModel(sequelize);
+export const ApprovalRule = ApprovalRuleModel(sequelize);
+export const ApprovalRequest = ApprovalRequestModel(sequelize);
+
 Role.hasMany(User, { foreignKey: 'roleId', onDelete: 'RESTRICT', onUpdate: 'CASCADE' });
 User.belongsTo(Role, { foreignKey: 'roleId', onDelete: 'RESTRICT', onUpdate: 'CASCADE' });
 
@@ -181,6 +232,116 @@ Branch.hasMany(ProductBatch, { foreignKey: 'branchId' });
 ProductBatch.belongsTo(Branch, { foreignKey: 'branchId' });
 ProductBatch.hasMany(InvoiceItem, { foreignKey: 'batchId' });
 InvoiceItem.belongsTo(ProductBatch, { foreignKey: 'batchId' });
+
+// ---- Warehouse / ERP associations ----
+// Branches and warehouses are both rows in `branches`, so every location link
+// below points at the same model and the stock engine never has to ask which.
+
+// Location hierarchy and internal storage structure.
+Branch.hasMany(Branch, { foreignKey: 'parentId', as: 'childLocations' });
+Branch.belongsTo(Branch, { foreignKey: 'parentId', as: 'parentLocation' });
+Branch.hasMany(WarehouseBin, { foreignKey: 'branchId' });
+WarehouseBin.belongsTo(Branch, { foreignKey: 'branchId' });
+WarehouseBin.hasMany(WarehouseBin, { foreignKey: 'parentId', as: 'children' });
+WarehouseBin.belongsTo(WarehouseBin, { foreignKey: 'parentId', as: 'parent' });
+
+// Transfers move stock between two locations, so both ends are aliased.
+StockTransfer.belongsTo(Branch, { foreignKey: 'fromBranchId', as: 'fromBranch' });
+StockTransfer.belongsTo(Branch, { foreignKey: 'toBranchId', as: 'toBranch' });
+StockTransfer.hasMany(StockTransferItem, { foreignKey: 'transferId', onDelete: 'CASCADE' });
+StockTransferItem.belongsTo(StockTransfer, { foreignKey: 'transferId' });
+StockTransferItem.belongsTo(Product, { foreignKey: 'productId' });
+Product.hasMany(StockTransferItem, { foreignKey: 'productId' });
+StockTransfer.belongsTo(User, { foreignKey: 'requestedBy', as: 'requester' });
+StockTransfer.belongsTo(User, { foreignKey: 'approvedBy', as: 'approver' });
+
+StockAdjustment.belongsTo(Branch, { foreignKey: 'branchId' });
+StockAdjustment.hasMany(StockAdjustmentItem, { foreignKey: 'adjustmentId', onDelete: 'CASCADE' });
+StockAdjustmentItem.belongsTo(StockAdjustment, { foreignKey: 'adjustmentId' });
+StockAdjustmentItem.belongsTo(Product, { foreignKey: 'productId' });
+StockAdjustment.belongsTo(User, { foreignKey: 'approvedBy', as: 'approver' });
+
+StockCount.belongsTo(Branch, { foreignKey: 'branchId' });
+StockCount.hasMany(StockCountItem, { foreignKey: 'countId', onDelete: 'CASCADE' });
+StockCountItem.belongsTo(StockCount, { foreignKey: 'countId' });
+StockCountItem.belongsTo(Product, { foreignKey: 'productId' });
+
+// Purchasing chain: PO -> GRN -> Purchase invoice.
+PurchaseOrder.belongsTo(Supplier, { foreignKey: 'supplierId' });
+Supplier.hasMany(PurchaseOrder, { foreignKey: 'supplierId' });
+PurchaseOrder.belongsTo(Branch, { foreignKey: 'branchId' });
+PurchaseOrder.hasMany(PurchaseOrderItem, { foreignKey: 'poId', onDelete: 'CASCADE' });
+PurchaseOrderItem.belongsTo(PurchaseOrder, { foreignKey: 'poId' });
+PurchaseOrderItem.belongsTo(Product, { foreignKey: 'productId' });
+Product.hasMany(PurchaseOrderItem, { foreignKey: 'productId' });
+PurchaseOrder.belongsTo(User, { foreignKey: 'createdBy', as: 'creator' });
+
+Grn.belongsTo(PurchaseOrder, { foreignKey: 'poId' });
+PurchaseOrder.hasMany(Grn, { foreignKey: 'poId' });
+Grn.belongsTo(Supplier, { foreignKey: 'supplierId' });
+Grn.belongsTo(Branch, { foreignKey: 'branchId' });
+Grn.hasMany(GrnItem, { foreignKey: 'grnId', onDelete: 'CASCADE' });
+GrnItem.belongsTo(Grn, { foreignKey: 'grnId' });
+GrnItem.belongsTo(Product, { foreignKey: 'productId' });
+GrnItem.belongsTo(PurchaseOrderItem, { foreignKey: 'poItemId' });
+Grn.belongsTo(User, { foreignKey: 'receivedBy', as: 'receiver' });
+Grn.belongsTo(Purchase, { foreignKey: 'purchaseId' });
+
+PurchaseReturn.belongsTo(Supplier, { foreignKey: 'supplierId' });
+Supplier.hasMany(PurchaseReturn, { foreignKey: 'supplierId' });
+PurchaseReturn.belongsTo(Purchase, { foreignKey: 'purchaseId' });
+Purchase.hasMany(PurchaseReturn, { foreignKey: 'purchaseId' });
+PurchaseReturn.belongsTo(Branch, { foreignKey: 'branchId' });
+PurchaseReturn.hasMany(PurchaseReturnItem, { foreignKey: 'returnId', onDelete: 'CASCADE' });
+PurchaseReturnItem.belongsTo(PurchaseReturn, { foreignKey: 'returnId' });
+PurchaseReturnItem.belongsTo(Product, { foreignKey: 'productId' });
+Product.hasMany(PurchaseReturnItem, { foreignKey: 'productId' });
+
+// Serials are individual units, so they hang off products and their documents.
+Product.hasMany(ProductSerial, { foreignKey: 'productId' });
+ProductSerial.belongsTo(Product, { foreignKey: 'productId' });
+ProductSerial.belongsTo(Branch, { foreignKey: 'branchId' });
+ProductSerial.belongsTo(Customer, { foreignKey: 'customerId' });
+ProductSerial.belongsTo(Invoice, { foreignKey: 'invoiceId' });
+ProductSerial.belongsTo(ProductBatch, { foreignKey: 'batchId' });
+
+// Money.
+Expense.belongsTo(Branch, { foreignKey: 'branchId' });
+Expense.belongsTo(ExpenseCategory, { foreignKey: 'categoryId' });
+ExpenseCategory.hasMany(Expense, { foreignKey: 'categoryId' });
+Expense.belongsTo(User, { foreignKey: 'createdBy', as: 'creator' });
+
+CashRegister.belongsTo(Branch, { foreignKey: 'branchId' });
+Branch.hasMany(CashRegister, { foreignKey: 'branchId' });
+CashRegister.hasMany(CashTransaction, { foreignKey: 'registerId' });
+CashTransaction.belongsTo(CashRegister, { foreignKey: 'registerId' });
+
+BankAccount.belongsTo(Branch, { foreignKey: 'branchId' });
+BankAccount.hasMany(BankTransaction, { foreignKey: 'bankAccountId' });
+BankTransaction.belongsTo(BankAccount, { foreignKey: 'bankAccountId' });
+
+// Accounting.
+ChartOfAccount.hasMany(ChartOfAccount, { foreignKey: 'parentId', as: 'children' });
+ChartOfAccount.belongsTo(ChartOfAccount, { foreignKey: 'parentId', as: 'parent' });
+JournalEntry.hasMany(JournalEntryLine, { foreignKey: 'entryId', onDelete: 'CASCADE' });
+JournalEntryLine.belongsTo(JournalEntry, { foreignKey: 'entryId' });
+JournalEntryLine.belongsTo(ChartOfAccount, { foreignKey: 'accountId' });
+ChartOfAccount.hasMany(JournalEntryLine, { foreignKey: 'accountId' });
+JournalEntry.belongsTo(Branch, { foreignKey: 'branchId' });
+JournalEntry.belongsTo(User, { foreignKey: 'postedBy', as: 'poster' });
+
+// Approvals.
+ApprovalRequest.belongsTo(ApprovalRule, { foreignKey: 'ruleId' });
+ApprovalRequest.belongsTo(User, { foreignKey: 'requestedBy', as: 'requester' });
+ApprovalRequest.belongsTo(User, { foreignKey: 'decidedBy', as: 'decider' });
+ApprovalRequest.belongsTo(Branch, { foreignKey: 'branchId' });
+
+// Every new document type is branch-scoped like the originals.
+for (const model of [
+  StockAdjustment, StockCount, PurchaseOrder, Grn, PurchaseReturn, Expense,
+]) {
+  Branch.hasMany(model, { foreignKey: 'branchId' });
+}
 
 // Registered once all models exist so every write is captured.
 installAuditHooks(sequelize, AuditLog);

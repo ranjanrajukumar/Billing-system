@@ -1,7 +1,10 @@
 import { DataTypes } from 'sequelize';
 import { enumType, unsignedInteger } from './types.js';
 
-const purchaseStatuses = ['Draft', 'Received', 'Cancelled'];
+// 'Invoiced' is a purchase raised from a GRN: the goods already entered stock
+// when they were received, so this document is financial only. Cancelling one
+// must not reverse stock a second time, which the 'Received' check relies on.
+const purchaseStatuses = ['Draft', 'Received', 'Invoiced', 'Cancelled'];
 const paymentStatuses = ['Unpaid', 'Partially Paid', 'Paid'];
 
 export default (sequelize) => sequelize.define('Purchase', {

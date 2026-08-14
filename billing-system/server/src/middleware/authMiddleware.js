@@ -1,7 +1,8 @@
 import jwt from 'jsonwebtoken';
 import { User, Role } from '../models/index.js';
 import { setContextUser } from '../utils/requestContext.js';
-import { menusForRole } from '../config/menu.js';
+import { visibleMenus } from '../config/menu.js';
+import { getConfig } from '../services/config.service.js';
 
 export async function authenticate(req, res, next) {
   try {
@@ -13,7 +14,13 @@ export async function authenticate(req, res, next) {
     const user = await User.findByPk(decoded.id, { include: Role });
     if (!user || !user.isActive) return res.status(401).json({ message: 'Invalid user' });
 
-    req.user = { 
+    // What this user sees is their role's rights narrowed to the modules the
+    // company has switched on — so a Basic-mode shop never meets GRN or
+    // journals, whatever role they signed in as.
+    const { mode, modules } = await getConfig();
+
+    req.user = {
+      businessMode: mode,
       id: user.id, 
       name: user.name, 
       email: user.email, 
@@ -24,7 +31,8 @@ export async function authenticate(req, res, next) {
       // Needed by resolveBranch to pin this user to their own branch.
       branchId: user.branchId,
       permissions: user.Role?.permissions || {},
-      menus: menusForRole(user.Role)
+      menus: visibleMenus(user.Role, modules),
+      modules: [...modules],
     };
     // Attribute any database writes in this request to the caller.
     setContextUser(req.user);

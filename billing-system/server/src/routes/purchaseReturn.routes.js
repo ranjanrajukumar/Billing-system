@@ -1,0 +1,18 @@
+import { Router } from 'express';
+import * as controller from '../controllers/purchaseReturn.controller.js';
+import { authorize } from '../middleware/authMiddleware.js';
+import { requireModule } from '../services/config.service.js';
+
+const router = Router();
+router.use(requireModule('purchaseReturns'));
+
+const BUYERS = ['Admin', 'Accountant', 'Purchase Manager', 'Warehouse Manager'];
+
+router.get('/', controller.list);
+router.get('/returnable/:purchaseId', controller.returnableItems);
+router.get('/:id', controller.getOne);
+router.post('/', authorize(...BUYERS), controller.create);
+router.post('/:id/confirm', authorize(...BUYERS), controller.confirm);
+router.post('/:id/cancel', authorize('Admin', 'Accountant'), controller.cancel);
+
+export default router;

@@ -3,7 +3,7 @@ import { sequelize, Product, StockMovement, User } from '../models/index.js';
 import { buildInventorySummary } from '../services/product.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { getPagination, paged } from '../utils/pagination.js';
-import { adjustStock as applyStockChange } from '../services/stock.service.js';
+import { postStockTransaction, stockLedger, stockValuation } from '../services/stock.service.js';
 
 export const getSummary = asyncHandler(async (_req, res) => {
   const products = await Product.findAll({
@@ -42,7 +42,7 @@ export const getMovements = asyncHandler(async (req, res) => {
 
 export const adjustStock = asyncHandler(async (req, res) => {
   const { productId, type, quantity, notes } = req.body;
-  if (!['Adjustment In', 'Adjustment Out', 'Opening Stock'].includes(type)) {
+  if (!['Adjustment In', 'Adjustment Out', 'Opening Stock', 'Damage', 'Expired'].includes(type)) {
     return res.status(400).json({ message: 'Invalid adjustment type' });
   }
 
@@ -50,28 +50,39 @@ export const adjustStock = asyncHandler(async (req, res) => {
     const product = await Product.findOne({ where: { id: productId, detstatus: false }, transaction: t, lock: t.LOCK.UPDATE });
     if (!product) throw Object.assign(new Error('Product not found'), { status: 404 });
 
-    const qty = Number(quantity);
+    const qty = Math.abs(Number(quantity));
     const adding = type === 'Adjustment In' || type === 'Opening Stock';
-    await applyStockChange({
+
+    // One call moves the stock and writes the ledger row, so an adjustment can
+    // never land without its movement.
+    return postStockTransaction({
       productId: product.id,
       branchId: req.branchId,
-      delta: adding ? qty : -qty,
+      quantity: adding ? qty : -qty,
+      movementType: type,
+      referenceType: type === 'Opening Stock' ? 'Opening Balance' : 'Manual Adjustment',
+      unitCost: product.purchasePrice,
+      notes: notes || (type === 'Opening Stock' ? 'Initial Stock' : 'Manual adjustment'),
       transaction: t,
       userId: req.user.id,
     });
-
-    const movement = await StockMovement.create({
-      productId: product.id,
-      createdBy: req.user.id,
-      movementType: type,
-      quantity: (type === 'Adjustment In' || type === 'Opening Stock') ? qty : -qty,
-      referenceType: type === 'Opening Stock' ? 'Opening Balance' : 'Manual Adjustment',
-      notes: notes || (type === 'Opening Stock' ? 'Initial Stock' : 'Manual adjustment'),
-      authadd: req.user.id
-    }, { transaction: t });
-
-    return movement;
   });
 
   res.status(201).json(result);
+});
+
+/** The full stock ledger, filterable by product, location and date. */
+export const getLedger = asyncHandler(async (req, res) => {
+  res.json(await stockLedger({
+    productId: req.query.productId,
+    branchId: req.query.branchId || req.branchScope || undefined,
+    from: req.query.from,
+    to: req.query.to,
+    limit: req.query.limit,
+  }));
+});
+
+/** Stock valuation at cost and at sale price, per location. */
+export const getValuation = asyncHandler(async (req, res) => {
+  res.json(await stockValuation(req.query.branchId || req.branchScope || null));
 });

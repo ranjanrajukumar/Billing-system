@@ -12,7 +12,11 @@ export default (sequelize) => sequelize.define('Supplier', {
   city: { type: DataTypes.STRING(80) },
   state: { type: DataTypes.STRING(80) },
   pincode: { type: DataTypes.STRING(10) },
-  isActive: { type: DataTypes.BOOLEAN, defaultValue: true }
+  isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+  // What was already owed to this supplier when they were entered. Positive
+  // means we owe them; the supplier ledger starts from this figure.
+  openingBalance: { type: DataTypes.DECIMAL(14, 2), allowNull: false, defaultValue: 0 },
+  creditDays: { type: DataTypes.INTEGER, allowNull: true }
 ,
   authadd: { type: DataTypes.INTEGER, allowNull: true },
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },

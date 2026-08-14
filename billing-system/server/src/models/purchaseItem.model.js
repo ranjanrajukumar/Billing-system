@@ -15,7 +15,6 @@ export default (sequelize) => sequelize.define('PurchaseItem', {
   gstPercent: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 0 },
   gstAmount: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
   amount: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
-,
   authadd: { type: DataTypes.INTEGER, allowNull: true },
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },
   authdel: { type: DataTypes.INTEGER, allowNull: true },
