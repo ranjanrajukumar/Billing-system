@@ -1,7 +1,7 @@
 import { Op } from 'sequelize';
 import {
-  Branch, BranchStock, Product, sequelize, StockAdjustment, StockAdjustmentItem,
-  StockCount, StockCountItem,
+  BinStock, Branch, BranchStock, Product, sequelize, StockAdjustment,
+  StockAdjustmentItem, StockCount, StockCountItem, WarehouseBin,
 } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { getPagination, paged } from '../utils/pagination.js';
@@ -23,6 +23,23 @@ const ITEM_INCLUDE = {
   model: StockCountItem,
   include: [{ model: Product, attributes: ['id', 'productName', 'sku', 'primaryUnit', 'purchasePrice'] }],
 };
+
+/**
+ * Sets a bin's quantity to what was physically counted.
+ *
+ * Absolute rather than a delta: the counter's figure *is* the truth for that
+ * shelf, and applying a difference would re-introduce whatever the books were
+ * wrong about.
+ */
+async function adjustBinForCount({ binId, branchId, productId, batchId, quantity, transaction, userId }) {
+  const [row] = await BinStock.findOrCreate({
+    where: { binId, productId, batchId: batchId ?? null },
+    defaults: { binId, branchId, productId, batchId: batchId ?? null, quantity: 0, authadd: userId },
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+  });
+  await row.update({ quantity: Math.max(0, Number(quantity)), authlstedit: userId }, { transaction });
+}
 
 async function nextNumber(model, prefix, transaction) {
   const year = new Date().getFullYear();
@@ -66,46 +83,84 @@ export const getOne = asyncHandler(async (req, res) => {
 export const create = asyncHandler(async (req, res) => {
   const created = await sequelize.transaction(async (transaction) => {
     const branchId = Number(req.body.branchId || req.branchId);
+    // A bin-scoped count is a cycle count: one shelf at a time, without
+    // stopping the warehouse to take a full inventory.
+    const binId = req.body.binId ? Number(req.body.binId) : null;
+    const scope = binId ? 'Bin' : 'Location';
 
-    let productIds = (req.body.productIds || []).map(Number).filter(Boolean);
-    if (!productIds.length) {
-      const held = await BranchStock.findAll({
-        where: { branchId },
-        include: [{ model: Product, attributes: ['id'], where: { detstatus: false, isActive: true } }],
+    let lines = [];
+
+    if (binId) {
+      const bin = await WarehouseBin.findOne({
+        where: { id: binId, branchId, detstatus: false },
         transaction,
       });
-      productIds = held.map((row) => row.productId);
-    }
-    if (!productIds.length) {
-      throw Object.assign(new Error('This location holds no stock to count'), { status: 400 });
-    }
+      if (!bin) throw Object.assign(new Error('Bin not found at this location'), { status: 404 });
 
-    const products = await Product.findAll({ where: { id: productIds }, transaction });
-    const byId = new Map(products.map((p) => [p.id, p]));
+      const contents = await BinStock.findAll({
+        where: { binId, detstatus: false },
+        include: [{ model: Product, attributes: ['id', 'purchasePrice'], where: { detstatus: false } }],
+        transaction,
+      });
+      if (!contents.length) {
+        throw Object.assign(new Error(`Bin ${bin.code} is empty — nothing to count`), { status: 400 });
+      }
+
+      lines = contents.map((row) => ({
+        productId: row.productId,
+        binId,
+        batchId: row.batchId,
+        // For a cycle count the system figure is what the *bin* should hold,
+        // not what the whole location does.
+        systemQuantity: Number(row.quantity),
+        unitCost: row.Product?.purchasePrice ?? null,
+      }));
+    } else {
+      let productIds = (req.body.productIds || []).map(Number).filter(Boolean);
+      if (!productIds.length) {
+        const held = await BranchStock.findAll({
+          where: { branchId },
+          include: [{ model: Product, attributes: ['id'], where: { detstatus: false, isActive: true } }],
+          transaction,
+        });
+        productIds = held.map((row) => row.productId);
+      }
+      if (!productIds.length) {
+        throw Object.assign(new Error('This location holds no stock to count'), { status: 400 });
+      }
+
+      const products = await Product.findAll({ where: { id: productIds }, transaction });
+      const byId = new Map(products.map((p) => [p.id, p]));
+
+      for (const productId of productIds) {
+        lines.push({
+          productId,
+          binId: null,
+          systemQuantity: await getBranchStock(productId, branchId, transaction),
+          unitCost: byId.get(productId)?.purchasePrice ?? null,
+        });
+      }
+    }
 
     const count = await StockCount.create({
       countNumber: req.body.countNumber || await nextNumber(StockCount, 'CNT', transaction),
       countDate: req.body.countDate || new Date().toISOString().slice(0, 10),
       branchId,
+      scope,
+      binId,
       status: 'Counting',
       countedBy: req.user.id,
       remarks: req.body.remarks || null,
       authadd: req.user.id,
     }, { transaction });
 
-    const lines = [];
-    for (const productId of productIds) {
-      lines.push({
-        countId: count.id,
-        productId,
-        systemQuantity: await getBranchStock(productId, branchId, transaction),
-        physicalQuantity: null,
-        variance: 0,
-        unitCost: byId.get(productId)?.purchasePrice ?? null,
-        authadd: req.user.id,
-      });
-    }
-    await StockCountItem.bulkCreate(lines, { transaction });
+    await StockCountItem.bulkCreate(lines.map((line) => ({
+      ...line,
+      countId: count.id,
+      physicalQuantity: null,
+      variance: 0,
+      authadd: req.user.id,
+    })), { transaction });
 
     return count;
   });
@@ -236,12 +291,31 @@ export const approve = asyncHandler(async (req, res) => {
           referenceType: 'Stock Count',
           referenceId: count.id,
           referenceNumber: count.countNumber,
+          batchId: item.batchId,
           unitCost: item.unitCost,
           transactionDate: count.countDate,
-          notes: `Counted ${item.physicalQuantity}, system said ${item.systemQuantity}`,
+          notes: item.binId
+            ? `Cycle count: bin held ${item.physicalQuantity}, system said ${item.systemQuantity}`
+            : `Counted ${item.physicalQuantity}, system said ${item.systemQuantity}`,
           transaction,
           userId: req.user.id,
         });
+
+        // A cycle count corrects the shelf as well as the location total.
+        // Correcting only one would leave the bin and the location disagreeing
+        // the moment the count was signed off — the exact drift a count exists
+        // to remove.
+        if (item.binId) {
+          await adjustBinForCount({
+            binId: item.binId,
+            branchId: count.branchId,
+            productId: item.productId,
+            batchId: item.batchId,
+            quantity: Number(item.physicalQuantity),
+            transaction,
+            userId: req.user.id,
+          });
+        }
       }
 
       await postStockAdjustment({ adjustment, value, transaction, userId: req.user.id });

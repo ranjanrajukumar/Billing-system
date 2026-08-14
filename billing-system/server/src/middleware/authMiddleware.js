@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { User, Role } from '../models/index.js';
 import { setContextUser } from '../utils/requestContext.js';
-import { visibleMenus } from '../config/menu.js';
+import { navigationFor, visibleMenus } from '../config/menu.js';
 import { getConfig } from '../services/config.service.js';
 
 export async function authenticate(req, res, next) {
@@ -32,6 +32,7 @@ export async function authenticate(req, res, next) {
       branchId: user.branchId,
       permissions: user.Role?.permissions || {},
       menus: visibleMenus(user.Role, modules),
+      navigation: navigationFor(user.Role, modules),
       modules: [...modules],
     };
     // Attribute any database writes in this request to the caller.

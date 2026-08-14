@@ -18,7 +18,7 @@ import {
 } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import api from '../services/api.js';
 import DataTable from '../components/DataTable.jsx';
 import Loader from '../components/Loader.jsx';
@@ -31,7 +31,8 @@ import InvoiceDetailsModal from '../components/InvoiceDetailsModal.jsx';
 import PaymentsModal from '../components/PaymentsModal.jsx';
 import StatsCard from '../components/StatsCard.jsx';
 import { useToast } from '../context/ToastContext.jsx';
-import { customersApi, invoicesApi, productsApi } from '../services/resource.service.js';
+import { customersApi, invoicesApi, productsApi, settingsApi } from '../services/resource.service.js';
+import CustomerPicker from '../components/CustomerPicker.jsx';
 import { currency, date } from '../utils/formatters.js';
 import { printDocument, printHtml, printPdfBlob } from '../utils/print.js';
 import { confirmAction } from '../utils/alerts.js';
@@ -156,11 +157,12 @@ export default function Invoices() {
   const [applied, setApplied] = useState(null);
   const [redeemPoints, setRedeemPoints] = useState('');
   const [loyalty, setLoyalty] = useState(null);
+  const [companyState, setCompanyState] = useState('');
   const { showToast } = useToast();
   const { user } = useAuth();
   const canEditInvoice = can('editInvoice', user?.role);
   const theme = useTheme();
-  const { register, handleSubmit, reset, watch, formState: { isSubmitting } } = useForm({
+  const { register, handleSubmit, reset, watch, control, formState: { isSubmitting } } = useForm({
     defaultValues: {
       invoiceDate: new Date().toISOString().slice(0, 10), customerId: '', paymentMethod: 'Cash', notes: '',
       orderNumber: '', orderDate: '', dmNumber: '', dmDate: '', manualDm: '', manualDmDate: '',
@@ -264,6 +266,11 @@ export default function Invoices() {
 
   useEffect(() => {
     api.get('/loyalty/settings').then((r) => setLoyalty(r.data)).catch(() => setLoyalty(null));
+    // The company's own state prefills a new customer's, since a walk-in is
+    // almost always local — and it is what decides CGST/SGST versus IGST.
+    settingsApi.get()
+      .then((r) => setCompanyState(r?.company?.state || ''))
+      .catch(() => setCompanyState(''));
   }, []);
 
   const load = async () => {
@@ -572,9 +579,22 @@ export default function Invoices() {
               <TextField fullWidth type="date" label="Invoice Date" InputLabelProps={{ shrink: true }} {...register('invoiceDate', { required: true })} />
             </Grid>
             <Grid item xs={12} sm={4}>
-              <TextField fullWidth select label="Customer" {...register('customerId', { required: true })}>
-                {customers.map((c) => <MenuItem value={c.id} key={c.id}>{c.customerName}</MenuItem>)}
-              </TextField>
+              {/* Tick "New customer" to add one here rather than abandoning
+                  a half-built bill to go to the Customers screen. */}
+              <Controller
+                name="customerId"
+                control={control}
+                rules={{ required: true }}
+                render={({ field }) => (
+                  <CustomerPicker
+                    customers={customers}
+                    value={field.value}
+                    onChange={field.onChange}
+                    onCustomerCreated={(created) => setCustomers((list) => [created, ...list])}
+                    defaultState={companyState}
+                  />
+                )}
+              />
             </Grid>
             <Grid item xs={12} sm={4}>
               <TextField fullWidth select label="Payment Method" {...register('paymentMethod')}>

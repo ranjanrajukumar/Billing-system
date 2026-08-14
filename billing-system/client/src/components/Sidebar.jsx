@@ -1,42 +1,42 @@
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
-import AssessmentIcon from '@mui/icons-material/Assessment';
-import BoltIcon from '@mui/icons-material/Bolt';
-import ScienceIcon from '@mui/icons-material/Science';
-import StorageIcon from '@mui/icons-material/Storage';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import InventoryIcon from '@mui/icons-material/Inventory2';
-import CategoryIcon from '@mui/icons-material/Category';
-import ListAltIcon from '@mui/icons-material/ListAlt';
-import PeopleIcon from '@mui/icons-material/People';
-import ReceiptIcon from '@mui/icons-material/Receipt';
-import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
-import SettingsIcon from '@mui/icons-material/Settings';
-import PersonIcon from '@mui/icons-material/Person';
-import GroupIcon from '@mui/icons-material/Group';
-import ArticleIcon from '@mui/icons-material/Article';
-import StorefrontIcon from '@mui/icons-material/Storefront';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
-import LocalShippingIcon from '@mui/icons-material/LocalShipping';
-import KeyboardReturnIcon from '@mui/icons-material/KeyboardReturn';
-import ShoppingBasketIcon from '@mui/icons-material/ShoppingBasket';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
-import MenuBookIcon from '@mui/icons-material/MenuBook';
-import StoreIcon from '@mui/icons-material/Store';
-import HistoryIcon from '@mui/icons-material/History';
-import LocalOfferIcon from '@mui/icons-material/LocalOffer';
-import AssignmentIcon from '@mui/icons-material/Assignment';
-import MoveToInboxIcon from '@mui/icons-material/MoveToInbox';
-import UndoIcon from '@mui/icons-material/Undo';
-import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
-import TuneIcon from '@mui/icons-material/Tune';
-import FactCheckIcon from '@mui/icons-material/FactCheck';
-import QrCode2Icon from '@mui/icons-material/QrCode2';
-import PaymentsIcon from '@mui/icons-material/Payments';
-import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
-import WarehouseIcon from '@mui/icons-material/Warehouse';
+import ArticleIcon from '@mui/icons-material/Article';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import BoltIcon from '@mui/icons-material/Bolt';
+import CategoryIcon from '@mui/icons-material/Category';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
+import ForkliftIcon from '@mui/icons-material/PrecisionManufacturing';
+import GroupIcon from '@mui/icons-material/Group';
+import HistoryIcon from '@mui/icons-material/History';
+import InventoryIcon from '@mui/icons-material/Inventory2';
+import KeyboardReturnIcon from '@mui/icons-material/KeyboardReturn';
+import ListAltIcon from '@mui/icons-material/ListAlt';
+import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import MoveToInboxIcon from '@mui/icons-material/MoveToInbox';
+import PaymentsIcon from '@mui/icons-material/Payments';
+import PeopleIcon from '@mui/icons-material/People';
+import PersonIcon from '@mui/icons-material/Person';
+import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
+import QrCode2Icon from '@mui/icons-material/QrCode2';
+import ReceiptIcon from '@mui/icons-material/Receipt';
+import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
+import ScienceIcon from '@mui/icons-material/Science';
+import SettingsIcon from '@mui/icons-material/Settings';
+import ShoppingBasketIcon from '@mui/icons-material/ShoppingBasket';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import StorageIcon from '@mui/icons-material/Storage';
+import StoreIcon from '@mui/icons-material/Store';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import TaskAltIcon from '@mui/icons-material/TaskAlt';
+import TuneIcon from '@mui/icons-material/Tune';
+import UndoIcon from '@mui/icons-material/Undo';
+import WarehouseIcon from '@mui/icons-material/Warehouse';
 import {
   alpha,
   Box,
@@ -46,99 +46,77 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Stack,
-  Toolbar,
   Typography,
   useTheme,
 } from '@mui/material';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { canOpen } from '../utils/access.js';
 
 const DRAWER_WIDTH = 256;
 
 /**
- * The navigation, grouped as the work is grouped.
+ * The one thing the sidebar still decides for itself.
  *
- * Every item is filtered through the signed-in user's menu list, which the
- * server has already narrowed to the modules this company runs — so a small
- * shop in Basic mode simply never sees GRN, journals or warehouse transfers,
- * and a large business does. One menu, two very different products.
+ * Grouping, labels, ordering and which pages a user may see all come from the
+ * server with the signed-in user — this used to be a second copy of the menu
+ * kept in step by hand, which is exactly the sort of list that drifts. An icon
+ * is a presentation choice, so it stays here; everything else does not.
  */
-const navGroups = [
-  {
-    label: 'Overview',
-    items: [
-      { label: 'Dashboard', path: '/', icon: <DashboardIcon fontSize="small" /> },
-    ],
-  },
-  {
-    label: 'Sales',
-    items: [
-      { label: 'Quick Bill', path: '/quick-bill', icon: <BoltIcon fontSize="small" /> },
-      { label: 'Invoices', path: '/invoices', icon: <ReceiptIcon fontSize="small" /> },
-      { label: 'Sales Orders', path: '/sales-orders', icon: <ShoppingCartIcon fontSize="small" /> },
-      { label: 'Quotations', path: '/quotations', icon: <RequestQuoteIcon fontSize="small" /> },
-      { label: 'Delivery Challans', path: '/delivery-challans', icon: <LocalShippingIcon fontSize="small" /> },
-      { label: 'Sales Returns', path: '/sales-returns', icon: <KeyboardReturnIcon fontSize="small" /> },
-      { label: 'Customers', path: '/customers', icon: <PeopleIcon fontSize="small" /> },
-      { label: 'Udhar (Credit)', path: '/udhar', icon: <AccountBalanceWalletIcon fontSize="small" /> },
-      { label: 'Khata Book', path: '/khata', icon: <MenuBookIcon fontSize="small" /> },
-      { label: 'Coupons', path: '/coupons', icon: <LocalOfferIcon fontSize="small" /> },
-      { label: 'Reports', path: '/reports', icon: <AssessmentIcon fontSize="small" /> },
-      { label: 'GST & Receivables', path: '/tax-reports', icon: <AccountBalanceIcon fontSize="small" /> },
-    ],
-  },
-  {
-    label: 'Purchasing',
-    items: [
-      { label: 'Purchase Orders', path: '/purchase-orders', icon: <AssignmentIcon fontSize="small" /> },
-      { label: 'Goods Receipt', path: '/grn', icon: <MoveToInboxIcon fontSize="small" /> },
-      { label: 'Purchase Invoices', path: '/purchases', icon: <ShoppingBasketIcon fontSize="small" /> },
-      { label: 'Purchase Returns', path: '/purchase-returns', icon: <UndoIcon fontSize="small" /> },
-      { label: 'Suppliers', path: '/suppliers', icon: <StorefrontIcon fontSize="small" /> },
-    ],
-  },
-  {
-    label: 'Inventory',
-    items: [
-      { label: 'Products', path: '/products', icon: <CategoryIcon fontSize="small" /> },
-      { label: 'Inventory', path: '/inventory', icon: <InventoryIcon fontSize="small" /> },
-      { label: 'Stock Transfers', path: '/stock-transfers', icon: <SwapHorizIcon fontSize="small" /> },
-      { label: 'Stock Adjustments', path: '/stock-adjustments', icon: <TuneIcon fontSize="small" /> },
-      { label: 'Stock Counting', path: '/stock-counts', icon: <FactCheckIcon fontSize="small" /> },
-      { label: 'Batches & Expiry', path: '/batches', icon: <ScienceIcon fontSize="small" /> },
-      { label: 'Serial Numbers', path: '/serials', icon: <QrCode2Icon fontSize="small" /> },
-      { label: 'Masters', path: '/masters', icon: <ListAltIcon fontSize="small" /> },
-    ],
-  },
-  {
-    label: 'Accounts',
-    items: [
-      { label: 'Party Ledgers', path: '/ledgers', icon: <MenuBookIcon fontSize="small" /> },
-      { label: 'Expenses', path: '/expenses', icon: <PaymentsIcon fontSize="small" /> },
-      { label: 'Cash Register', path: '/cash-registers', icon: <PointOfSaleIcon fontSize="small" /> },
-      { label: 'Bank Accounts', path: '/bank-accounts', icon: <AccountBalanceIcon fontSize="small" /> },
-      { label: 'Chart of Accounts', path: '/chart-of-accounts', icon: <AccountTreeIcon fontSize="small" /> },
-      { label: 'Journal Entries', path: '/journal-entries', icon: <ArticleIcon fontSize="small" /> },
-      { label: 'Financial Statements', path: '/financials', icon: <AssessmentIcon fontSize="small" /> },
-    ],
-  },
-  {
-    label: 'Administration',
-    items: [
-      { label: 'Users & Roles', path: '/users', icon: <GroupIcon fontSize="small" /> },
-      { label: 'Branches', path: '/branches', icon: <StoreIcon fontSize="small" /> },
-      { label: 'Warehouses', path: '/warehouses', icon: <WarehouseIcon fontSize="small" /> },
-      { label: 'Approvals', path: '/approvals', icon: <TaskAltIcon fontSize="small" /> },
-      { label: 'Audit Logs', path: '/audit-logs', icon: <HistoryIcon fontSize="small" /> },
-      { label: 'Backup & Restore', path: '/backups', icon: <StorageIcon fontSize="small" /> },
-      { label: 'Invoice Templates', path: '/invoice-templates', icon: <ArticleIcon fontSize="small" /> },
-      { label: 'Settings', path: '/settings', icon: <SettingsIcon fontSize="small" /> },
-      { label: 'Profile', path: '/profile', icon: <PersonIcon fontSize="small" /> },
-    ],
-  },
-];
+const ICONS = {
+  dashboard: <DashboardIcon fontSize="small" />,
+
+  quickBill: <BoltIcon fontSize="small" />,
+  invoices: <ReceiptIcon fontSize="small" />,
+  salesOrders: <ShoppingCartIcon fontSize="small" />,
+  quotations: <RequestQuoteIcon fontSize="small" />,
+  deliveryChallans: <LocalShippingIcon fontSize="small" />,
+  salesReturns: <KeyboardReturnIcon fontSize="small" />,
+  customers: <PeopleIcon fontSize="small" />,
+  udhar: <AccountBalanceWalletIcon fontSize="small" />,
+  khata: <MenuBookIcon fontSize="small" />,
+  coupons: <LocalOfferIcon fontSize="small" />,
+  reports: <AssessmentIcon fontSize="small" />,
+  taxReports: <AccountBalanceIcon fontSize="small" />,
+
+  purchaseOrders: <AssignmentIcon fontSize="small" />,
+  grn: <MoveToInboxIcon fontSize="small" />,
+  purchases: <ShoppingBasketIcon fontSize="small" />,
+  purchaseReturns: <UndoIcon fontSize="small" />,
+  suppliers: <StorefrontIcon fontSize="small" />,
+
+  products: <CategoryIcon fontSize="small" />,
+  inventory: <InventoryIcon fontSize="small" />,
+  batches: <ScienceIcon fontSize="small" />,
+  stockAudit: <FactCheckIcon fontSize="small" />,
+  masters: <ListAltIcon fontSize="small" />,
+
+  warehouses: <WarehouseIcon fontSize="small" />,
+  warehouseOps: <ForkliftIcon fontSize="small" />,
+  stockTransfers: <SwapHorizIcon fontSize="small" />,
+  stockAdjustments: <TuneIcon fontSize="small" />,
+  stockCounts: <FactCheckIcon fontSize="small" />,
+  serials: <QrCode2Icon fontSize="small" />,
+
+  ledgers: <MenuBookIcon fontSize="small" />,
+  expenses: <PaymentsIcon fontSize="small" />,
+  cashFlow: <AccountBalanceWalletIcon fontSize="small" />,
+  cashRegisters: <PointOfSaleIcon fontSize="small" />,
+  bankAccounts: <AccountBalanceIcon fontSize="small" />,
+  chartOfAccounts: <AccountTreeIcon fontSize="small" />,
+  journalEntries: <ArticleIcon fontSize="small" />,
+  financials: <AssessmentIcon fontSize="small" />,
+
+  users: <GroupIcon fontSize="small" />,
+  branches: <StoreIcon fontSize="small" />,
+  approvals: <TaskAltIcon fontSize="small" />,
+  auditLogs: <HistoryIcon fontSize="small" />,
+  backups: <StorageIcon fontSize="small" />,
+  invoiceTemplates: <ArticleIcon fontSize="small" />,
+  settings: <SettingsIcon fontSize="small" />,
+  profile: <PersonIcon fontSize="small" />,
+};
+
+const FALLBACK_ICON = <ListAltIcon fontSize="small" />;
 
 function NavItem({ label, path, icon, onClose }) {
   const theme = useTheme();
@@ -198,11 +176,9 @@ function SidebarContent({ onClose }) {
   const isDark = theme.palette.mode === 'dark';
   const { user } = useAuth();
 
-  // Hide what this role cannot open, so the menu never offers a page that
-  // answers with "Forbidden". The server still enforces the real rules.
-  const visibleGroups = navGroups
-    .map((group) => ({ ...group, items: group.items.filter((item) => canOpen(item.path, user?.role, user?.menus)) }))
-    .filter((group) => group.items.length > 0);
+  // Already filtered by role and by the modules this company runs, so there is
+  // nothing left to decide here.
+  const groups = user?.navigation || [];
 
   return (
     <Box sx={{ width: DRAWER_WIDTH, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -251,15 +227,15 @@ function SidebarContent({ onClose }) {
             ShopBill Pro
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
-            Inventory & Billing
+            {user?.businessMode === 'Advanced' ? 'Business Management' : 'Inventory & Billing'}
           </Typography>
         </Box>
       </Box>
 
       {/* Nav Groups */}
       <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', px: 1.5, py: 1.5 }}>
-        {visibleGroups.map((group, gi) => (
-          <Box key={group.label} sx={{ mb: 1.5 }}>
+        {groups.map((group, index) => (
+          <Box key={group.group} sx={{ mb: 1.5 }}>
             <Typography
               variant="caption"
               sx={{
@@ -273,14 +249,20 @@ function SidebarContent({ onClose }) {
                 color: 'text.disabled',
               }}
             >
-              {group.label}
+              {group.group}
             </Typography>
             <List disablePadding>
               {group.items.map((item) => (
-                <NavItem key={item.path} {...item} onClose={onClose} />
+                <NavItem
+                  key={item.key}
+                  label={item.label}
+                  path={item.path}
+                  icon={ICONS[item.key] || FALLBACK_ICON}
+                  onClose={onClose}
+                />
               ))}
             </List>
-            {gi < visibleGroups.length - 1 && (
+            {index < groups.length - 1 && (
               <Divider sx={{ mt: 1.5, opacity: 0.5 }} />
             )}
           </Box>

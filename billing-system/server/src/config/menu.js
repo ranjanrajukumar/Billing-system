@@ -35,19 +35,31 @@ export const MENU_CATALOGUE = [
     { key: 'purchaseReturns', label: 'Purchase Returns', path: '/purchase-returns' },
     { key: 'suppliers', label: 'Suppliers', path: '/suppliers' },
   ]},
+  // Inventory answers "what do we sell and how much is there" — the questions
+  // a shop with a single room still has.
   { group: 'Inventory', items: [
     { key: 'products', label: 'Products', path: '/products' },
     { key: 'inventory', label: 'Inventory', path: '/inventory' },
+    { key: 'batches', label: 'Batches & Expiry', path: '/batches' },
+    { key: 'stockAudit', label: 'Stock Audit', path: '/stock-audit' },
+    { key: 'masters', label: 'Masters', path: '/masters' },
+  ]},
+  // Warehouse is the building and what physically happens inside it. Kept
+  // separate because these are jobs somebody walks around doing, not figures
+  // somebody looks up — and because a shop without a godown never sees any of
+  // it once the module is off.
+  { group: 'Warehouse', items: [
+    { key: 'warehouses', label: 'Warehouses & Bins', path: '/warehouses' },
+    { key: 'warehouseOps', label: 'Warehouse Floor', path: '/warehouse-floor' },
     { key: 'stockTransfers', label: 'Stock Transfers', path: '/stock-transfers' },
     { key: 'stockAdjustments', label: 'Stock Adjustments', path: '/stock-adjustments' },
     { key: 'stockCounts', label: 'Stock Counting', path: '/stock-counts' },
-    { key: 'batches', label: 'Batches & Expiry', path: '/batches' },
     { key: 'serials', label: 'Serial Numbers', path: '/serials' },
-    { key: 'masters', label: 'Masters', path: '/masters' },
   ]},
   { group: 'Accounts', items: [
     { key: 'ledgers', label: 'Party Ledgers', path: '/ledgers' },
     { key: 'expenses', label: 'Expenses', path: '/expenses' },
+    { key: 'cashFlow', label: 'Cash Flow', path: '/cash-flow' },
     { key: 'cashRegisters', label: 'Cash Register', path: '/cash-registers' },
     { key: 'bankAccounts', label: 'Bank Accounts', path: '/bank-accounts' },
     { key: 'chartOfAccounts', label: 'Chart of Accounts', path: '/chart-of-accounts' },
@@ -57,7 +69,6 @@ export const MENU_CATALOGUE = [
   { group: 'Administration', items: [
     { key: 'users', label: 'Users & Roles', path: '/users' },
     { key: 'branches', label: 'Branches', path: '/branches' },
-    { key: 'warehouses', label: 'Warehouses', path: '/warehouses' },
     { key: 'approvals', label: 'Approvals', path: '/approvals' },
     { key: 'auditLogs', label: 'Audit Logs', path: '/audit-logs' },
     { key: 'backups', label: 'Backup & Restore', path: '/backups' },
@@ -88,12 +99,12 @@ export const DEFAULT_MENUS_BY_ROLE = {
   ],
   'Warehouse Manager': [
     'dashboard', 'inventory', 'stockTransfers', 'stockAdjustments', 'stockCounts',
-    'batches', 'serials', 'grn', 'products', 'warehouses', 'approvals', 'profile',
+    'batches', 'serials', 'grn', 'products', 'warehouses', 'warehouseOps', 'stockAudit', 'approvals', 'profile',
   ],
   'Branch Manager': [
     'dashboard', 'quickBill', 'invoices', 'salesReturns', 'customers', 'udhar', 'khata',
     'ledgers', 'products', 'inventory', 'stockTransfers', 'expenses', 'cashRegisters',
-    'reports', 'approvals', 'profile',
+    'cashFlow', 'stockAudit', 'reports', 'approvals', 'profile',
   ],
   Cashier: [
     'dashboard', 'quickBill', 'invoices', 'customers', 'udhar', 'khata',
@@ -101,7 +112,7 @@ export const DEFAULT_MENUS_BY_ROLE = {
   ],
   Auditor: [
     'dashboard', 'reports', 'taxReports', 'ledgers', 'financials', 'journalEntries',
-    'chartOfAccounts', 'auditLogs', 'inventory', 'profile',
+    'chartOfAccounts', 'auditLogs', 'inventory', 'stockAudit', 'cashFlow', 'profile',
   ],
 };
 
@@ -128,6 +139,26 @@ export function menusForRole(role) {
 export function visibleMenus(role, enabledModuleKeys) {
   const allowed = menusForModules(enabledModuleKeys);
   return menusForRole(role).filter((key) => allowed.has(key) || ALWAYS_VISIBLE.includes(key));
+}
+
+/**
+ * The navigation this user actually gets: the catalogue, grouped, trimmed to
+ * their rights and to the modules the company runs.
+ *
+ * Sent with the signed-in user so the sidebar renders from this rather than
+ * keeping its own copy of the menu. The client supplies icons and nothing
+ * else — grouping, labels, ordering and gating are decided here, once, so the
+ * two can no longer drift apart.
+ */
+export function navigationFor(role, enabledModuleKeys) {
+  const visible = new Set(visibleMenus(role, enabledModuleKeys));
+
+  return MENU_CATALOGUE
+    .map((group) => ({
+      group: group.group,
+      items: group.items.filter((item) => visible.has(item.key)),
+    }))
+    .filter((group) => group.items.length > 0);
 }
 
 /** The catalogue trimmed to enabled modules, for the menu-rights screen. */

@@ -12,6 +12,7 @@
     "start": "npm run start --prefix server",
     "build": "npm run build --prefix client",
     "build:client": "npm run build --prefix client",
-    "db:migrate": "npm run db:migrate --prefix server"
+    "db:migrate": "npm run db:migrate --prefix server",
+    "db:seed-demo": "npm run db:seed-demo --prefix server"
   }
 }

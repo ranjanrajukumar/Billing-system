@@ -41,6 +41,12 @@ import cashRoutes from './cash.routes.js';
 import accountingRoutes from './accounting.routes.js';
 import approvalRoutes from './approval.routes.js';
 import ledgerRoutes from './ledger.routes.js';
+// Available in both modes: costs, cash and stock integrity are not advanced
+// questions, whatever the size of the business asking them.
+import cashFlowRoutes from './cashflow.routes.js';
+import stockAuditRoutes from './stockAudit.routes.js';
+import warehouseOpsRoutes from './warehouseOps.routes.js';
+import fulfilmentRoutes from './fulfilment.routes.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { resolveBranch } from '../middleware/branchContext.js';
 
@@ -92,5 +98,11 @@ router.use('/accounting', accountingRoutes);
 router.use('/approvals', approvalRoutes);
 // Party ledgers work in both modes — a small shop needs them most of all.
 router.use('/ledgers', ledgerRoutes);
+router.use('/cash-flow', cashFlowRoutes);
+router.use('/stock-audit', stockAuditRoutes);
+// Put-away, picking and packing — the warehouse floor.
+router.use('/warehouse-ops', warehouseOpsRoutes);
+// Allocate, pick, pack and dispatch a sales order.
+router.use('/fulfilment', fulfilmentRoutes);
 
 export default router;

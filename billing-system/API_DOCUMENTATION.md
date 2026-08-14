@@ -181,6 +181,185 @@ Records expose a ready-made `imageUrl` / `logoUrl` / `profileImageUrl` pointing 
 | PUT | `/invoice-templates/:id/set-default` | Admin, Accountant | Make it the default. |
 | DELETE | `/invoice-templates/:id` | Admin | Delete. Returns `400` for the current default. |
 
+## Business Mode & Modules
+
+The application runs in one of two modes. **Basic** is a shop: POS, inventory, party
+ledgers. **Advanced** adds the full ERP workflow. Switching mode changes only what is
+shown and what the API accepts — no data is added, moved or deleted, so it is reversible.
+
+Every Advanced router is gated on its module. A request to a disabled module returns
+`403` with `{ "message": "...", "module": "<key>" }`, so a disabled feature is genuinely
+unreachable rather than merely hidden from the sidebar.
+
+| Method | Endpoint | Roles | Description |
+| --- | --- | --- | --- |
+| GET | `/settings/modules` | All | Current mode, every module's state, and the menu catalogue trimmed to match. The sidebar is built from this. |
+| PUT | `/settings/mode` | Admin | Switch between `Basic` and `Advanced`. Going Advanced also seeds the chart of accounts. |
+| PUT | `/settings/modules/:key` | Admin | Turn one optional module on or off. Core modules are refused. |
+
+## Locations (Branches & Warehouses)
+
+Branches and warehouses are both rows in `branches`, distinguished by `locationType`.
+They behave identically for stock, so transfers, receipts and counts work against either
+without a second code path. A warehouse has `canSell: false` and stays out of billing pickers.
+
+| Method | Endpoint | Roles | Description |
+| --- | --- | --- | --- |
+| GET | `/warehouses?locationType=Warehouse\|Branch\|all` | All | Locations with their total stock. |
+| GET | `/warehouses/:id` | All | One location plus its zone/rack/bin tree. |
+| GET | `/warehouses/:id/contents` | All | What the location holds, product by product. |
+| GET | `/warehouses/:id/valuation` | All | Stock value at cost and at sale price. |
+| POST | `/warehouses` | Admin, Accountant, Warehouse Manager | Create a location. |
+| PUT | `/warehouses/:id` | Admin, Accountant, Warehouse Manager | Update. Changing the type is refused while stock is held. |
+| DELETE | `/warehouses/:id` | Admin | Refused while stock is held. |
+| GET/POST | `/warehouses/:id/bins` | All / Managers | Zone → rack → shelf → bin tree. Entirely optional. |
+
+Send `X-Branch-Id: <id>` (or `?branchId=`) to act on a specific location. Admins may do
+this in any mode; non-admins are pinned to their own branch when multi-branch is on.
+
+## Serial Numbers
+
+| Method | Endpoint | Roles | Description |
+| --- | --- | --- | --- |
+| GET | `/warehouses/serials?productId=&status=&branchId=&search=` | All | Tracked units. |
+| GET | `/warehouses/serials/:serialNumber` | All | One unit's whole history, for warranty claims. |
+| POST | `/warehouses/serials` | Managers, Inventory Staff | Add serials in bulk (newline or comma separated). |
+
+## Stock Transfers
+
+Stock leaves the source at dispatch and arrives at the destination at receipt. In between
+it is *in transit* — counted at neither end, which is what makes a branch's figure the
+stock it can actually sell.
+
+Statuses: `Draft → Pending → Approved → Picked → Dispatched/InTransit → PartiallyReceived → Received`, plus `Cancelled` and `Rejected`.
+
+| Method | Endpoint | Roles | Description |
+| --- | --- | --- | --- |
+| GET | `/stock-transfers?status=&direction=incoming\|outgoing` | All | List. |
+| POST | `/stock-transfers` | All | Raise a transfer. Moves no stock. |
+| POST | `/stock-transfers/:id/approve` | Managers | |
+| POST | `/stock-transfers/:id/dispatch` | Managers, Inventory Staff | Stock leaves the source. Availability is re-checked here. |
+| POST | `/stock-transfers/:id/receive` | Managers, Inventory Staff | Stock arrives. A short receipt stays `PartiallyReceived`. |
+| POST | `/stock-transfers/:id/cancel` | Managers | Anything already dispatched is returned to source. |
+
+## Stock Adjustments & Counting
+
+An adjustment moves no stock until it is approved — writing inventory off always leaves a
+named approver behind it.
+
+| Method | Endpoint | Roles | Description |
+| --- | --- | --- | --- |
+| GET/POST | `/stock-adjustments` | All | Signed quantities: negative writes off, positive adds back. |
+| POST | `/stock-adjustments/:id/approve` | Managers | Applies the quantities and books the value. |
+| POST | `/stock-adjustments/:id/reject` | Managers | |
+| POST | `/stock-counts` | All | Opens a sheet, freezing the system quantity onto every line. |
+| PUT | `/stock-counts/:id/counts` | All | Save counted figures; `submit: true` sends it for approval. |
+| POST | `/stock-counts/:id/approve` | Managers | Posts the variance as a stock adjustment. |
+
+## Purchase Orders & GRN
+
+A PO is a commitment and moves no stock. Goods arrive through a GRN, which is what lets
+one order be delivered in parts: ordered 100, received 90, 10 still outstanding.
+
+| Method | Endpoint | Roles | Description |
+| --- | --- | --- | --- |
+| GET/POST | `/purchase-orders` | Buyers | List / create. |
+| GET | `/purchase-orders/:id/pending-items` | All | What is still outstanding, used to prefill a GRN. |
+| POST | `/purchase-orders/:id/submit` | Buyers | Raises an approval request, or approves outright when no rule applies. |
+| POST | `/purchase-orders/:id/approve` \| `/reject` | Admin, Accountant | |
+| POST | `/purchase-orders/:id/close` | Buyers | Close short — the balance is not coming. |
+| GET/POST | `/grn` | Receivers | Received / accepted / rejected / damaged per line. |
+| POST | `/grn/:id/post` | Receivers | **Only the accepted quantity enters stock.** One-way. |
+| POST | `/grn/:id/invoice` | Admin, Accountant, Purchase Manager | Raises the supplier's invoice. Does not move stock again. |
+
+Over-receiving beyond the order's outstanding balance is refused with `400`.
+
+## Purchase Returns
+
+| Method | Endpoint | Roles | Description |
+| --- | --- | --- | --- |
+| GET | `/purchase-returns/returnable/:purchaseId` | All | Lines still available to return. |
+| POST | `/purchase-returns` | Buyers | Draft. Moves no stock. |
+| POST | `/purchase-returns/:id/confirm` | Buyers | Stock out, debit note raised, supplier ledger adjusted. |
+| POST | `/purchase-returns/:id/cancel` | Admin, Accountant | Restores stock and reverses the accounting entry. |
+
+## Party Ledgers
+
+Assembled from the documents themselves rather than from a stored balance, so they cannot
+drift away from the invoices they describe. Available in both modes.
+
+| Method | Endpoint | Roles | Description |
+| --- | --- | --- | --- |
+| GET | `/ledgers/customer/:id?from=&to=` | All | Running ledger with opening balance, debits, credits and outstanding. |
+| GET | `/ledgers/supplier/:id?from=&to=` | All | Same for a supplier; the balance is what we owe. |
+| GET | `/ledgers/receivables` | All | Every customer with a balance. |
+| GET | `/ledgers/payables` | All | Every supplier we owe. |
+
+## Expenses, Cash & Bank
+
+Recording an expense and paying it are separate steps, so what is committed but not yet
+paid stays visible.
+
+| Method | Endpoint | Roles | Description |
+| --- | --- | --- | --- |
+| GET/POST | `/expenses` | All | List / record. |
+| GET | `/expenses/summary` | All | Totals by category. |
+| POST | `/expenses/:id/approve` \| `/reject` | Admin, Accountant, Branch Manager | |
+| POST | `/expenses/:id/pay` | Admin, Accountant, Branch Manager, Cashier | Pays from a cash register or bank account. |
+| GET | `/cash/registers` | All | Tills. |
+| POST | `/cash/registers/open` | All | Opens a shift. One open register per location. |
+| POST | `/cash/registers/:id/close` | All | Closes against a physical count; the variance is recorded, not absorbed. |
+| POST | `/cash/registers/:id/entries` | All | Cash in/out not tied to a sale. |
+| GET | `/cash/registers/reconciliation?date=` | All | The day's cash position per till. |
+| GET/POST | `/cash/banks` | All / Admin, Accountant | Bank accounts. Balances follow transactions and cannot be typed over. |
+| POST | `/cash/banks/:id/entries` | Admin, Accountant | Deposit, withdrawal, charges, interest. |
+
+## Accounting
+
+All statements are derived from posted journal lines, never from stored totals. A posted
+entry is never edited or deleted — corrections are made by posting a reversal.
+
+| Method | Endpoint | Roles | Description |
+| --- | --- | --- | --- |
+| GET | `/accounting/accounts` \| `/accounts/tree` | Admin, Accountant, Auditor | Chart of accounts. |
+| POST | `/accounting/accounts/seed` | Admin, Accountant | Seeds the standard chart. Idempotent. |
+| GET/POST | `/accounting/entries` | Admin, Accountant, Auditor | Journal. A manual entry is refused unless debits equal credits. |
+| POST | `/accounting/entries/:id/reverse` | Admin, Accountant | Posts an equal and opposite entry. |
+| GET | `/accounting/ledger/:accountId` | Admin, Accountant, Auditor | General ledger with a running balance. |
+| GET | `/accounting/trial-balance` | Admin, Accountant, Auditor | Includes a `balanced` flag. |
+| GET | `/accounting/profit-loss` | Admin, Accountant, Auditor | Gross and net profit. |
+| GET | `/accounting/balance-sheet?asOn=` | Admin, Accountant, Auditor | Retained earnings computed from profit to date. |
+| POST | `/accounting/rebuild-balances` | Admin | Repair tool for imported data. |
+
+Sales, purchases, payments, expenses, returns and stock adjustments post automatically.
+Posting is skipped silently when the accounting module is off, so a shop's billing is
+never blocked by a missing ledger account.
+
+## Approval Workflow
+
+Thresholds are configuration, not code — a ₹100,000 order is routine for one business and
+exceptional for another. Starter rules are seeded **inactive**.
+
+| Method | Endpoint | Roles | Description |
+| --- | --- | --- | --- |
+| GET | `/approvals?status=&mine=true` | All | The queue. |
+| GET | `/approvals/pending-count` | All | Badge count for the current user's role. |
+| POST | `/approvals/:id/approve` \| `/reject` | Whoever the rule names (Admin always) | Records the decision and moves the document's own status. |
+| GET | `/approvals/rules/options` | All | The document types, operators and fields a rule may use. |
+| GET/POST | `/approvals/rules` | All / Admin, Accountant | Rules. |
+
+Testable fields: `grandTotal`, `totalAmount`, `amount`, `quantity`, `totalQuantity`,
+`discountPercent`, `discountAmount`, `varianceQty`, `varianceValue`. Anything else is
+refused — a rule is user configuration and must not reach into arbitrary document state.
+
+## Inventory Reporting
+
+| Method | Endpoint | Roles | Description |
+| --- | --- | --- | --- |
+| GET | `/inventory/ledger?productId=&branchId=&from=&to=` | All | The stock ledger: every movement with the balance before and after it. |
+| GET | `/inventory/valuation?branchId=` | All | Stock value at cost and at sale price. |
+| GET | `/branches/stock/:productId` | All | One product's quantity at every location. |
+
 ## Rate Limits
 
 | Scope | Default | Variable |

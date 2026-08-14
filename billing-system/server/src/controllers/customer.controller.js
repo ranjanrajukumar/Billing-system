@@ -27,24 +27,40 @@ export const getCustomer = asyncHandler(async (req, res) => {
   res.json(customer);
 });
 
+const TEXT_FIELDS = ['customerName', 'mobileNumber', 'address', 'city', 'state', 'pincode'];
+
+/** Tiers a customer may be put on; anything else falls back to Retail. */
+const PRICE_TIERS = ['Retail', 'Wholesale', 'Dealer'];
+
+const trimmed = (value) => (typeof value === 'string' ? value.trim() : '');
+
+/**
+ * Builds the customer columns from a request.
+ *
+ * A whitelist rather than a spread of the request body: the form posts back
+ * everything it read, and a spread would let a caller set the loyalty balance,
+ * the audit columns or the soft-delete flag by simply including them.
+ */
 function sanitizeCustomer(data) {
-  const payload = { ...data };
-  if (!payload.email || typeof payload.email !== 'string' || !payload.email.trim()) {
-    delete payload.email;
-  } else {
-    payload.email = payload.email.trim();
+  const payload = {};
+
+  for (const field of TEXT_FIELDS) payload[field] = trimmed(data[field]);
+
+  // Blank optional identifiers are omitted rather than written as '', so a
+  // unique index does not see a crowd of empty strings.
+  if (trimmed(data.email)) payload.email = trimmed(data.email);
+  if (trimmed(data.gstNumber)) payload.gstNumber = trimmed(data.gstNumber);
+
+  if (data.openingBalance !== undefined && data.openingBalance !== '') {
+    payload.openingBalance = Number(data.openingBalance) || 0;
   }
-  if (!payload.gstNumber || typeof payload.gstNumber !== 'string' || !payload.gstNumber.trim()) {
-    delete payload.gstNumber;
-  } else {
-    payload.gstNumber = payload.gstNumber.trim();
+  if (data.creditLimit !== undefined) {
+    payload.creditLimit = data.creditLimit === '' ? null : Number(data.creditLimit);
   }
-  payload.customerName = (payload.customerName && typeof payload.customerName === 'string') ? payload.customerName.trim() : '';
-  payload.mobileNumber = (payload.mobileNumber && typeof payload.mobileNumber === 'string') ? payload.mobileNumber.trim() : '';
-  payload.address = (payload.address && typeof payload.address === 'string') ? payload.address.trim() : '';
-  payload.city = (payload.city && typeof payload.city === 'string') ? payload.city.trim() : '';
-  payload.state = (payload.state && typeof payload.state === 'string') ? payload.state.trim() : '';
-  payload.pincode = (payload.pincode && typeof payload.pincode === 'string') ? payload.pincode.trim() : '';
+  if (data.priceTier !== undefined) {
+    payload.priceTier = PRICE_TIERS.includes(data.priceTier) ? data.priceTier : 'Retail';
+  }
+
   return payload;
 }
 

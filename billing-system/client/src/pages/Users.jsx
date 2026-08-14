@@ -20,6 +20,7 @@ import SearchBox from '../components/SearchBox.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import MenuOpenIcon from '@mui/icons-material/MenuOpen';
 import MenuRights from '../components/MenuRights.jsx';
+import LocationRights from '../components/LocationRights.jsx';
 import api from '../services/api.js';
 import { useFetch } from '../hooks/useFetch.js';
 import { usersApi } from '../services/resource.service.js';
@@ -196,6 +197,8 @@ function UserManager() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  // Which user's branch and warehouse rights are being edited.
+  const [locationsFor, setLocationsFor] = useState(null);
   const { showToast } = useToast();
   const theme = useTheme();
   const { register, handleSubmit, formState: { errors }, reset } = useForm();
@@ -256,6 +259,9 @@ function UserManager() {
           { field: 'actions', headerName: 'Actions', render: (r) => (
             <Stack direction="row" spacing={0.5}>
               <Tooltip title="Edit"><Button size="small" onClick={() => handleOpen(r)} variant="outlined" sx={{ borderRadius: 1.5, minWidth: 0, px: 1.5 }}>Edit</Button></Tooltip>
+              <Tooltip title="Which branches and warehouses this user may work at">
+                <Button size="small" onClick={() => setLocationsFor(r)} variant="outlined" sx={{ borderRadius: 1.5, minWidth: 0, px: 1.5 }}>Locations</Button>
+              </Tooltip>
               <Tooltip title="Delete"><Button size="small" color="error" onClick={() => setDeleting(r)} variant="outlined" sx={{ borderRadius: 1.5, minWidth: 0, px: 1.5 }}>Delete</Button></Tooltip>
             </Stack>
           )},
@@ -295,6 +301,12 @@ function UserManager() {
           </Stack>
         </form>
       </Modal>
+
+      <LocationRights
+        user={locationsFor}
+        open={Boolean(locationsFor)}
+        onClose={(saved) => { setLocationsFor(null); if (saved) mutate(); }}
+      />
 
       <ConfirmDialog open={Boolean(deleting)} title="Delete User" message={`Delete user "${deleting?.name}"? This cannot be undone.`} onCancel={() => setDeleting(null)} onConfirm={handleDelete} />
     </Stack>

@@ -41,6 +41,9 @@ export const DEFAULT_ACCOUNTS = [
   { code: '4200', name: 'Sales Returns', accountType: 'Income', normalBalance: 'Debit', parent: '4000', system: true },
   { code: '4300', name: 'Discounts Allowed', accountType: 'Income', normalBalance: 'Debit', parent: '4000', system: true },
   { code: '4400', name: 'Other Income', accountType: 'Income', normalBalance: 'Credit', parent: '4000' },
+  // An invoice total is rounded to the rupee, so the few paise between the
+  // computed total and the amount actually charged have to land somewhere.
+  { code: '4500', name: 'Rounding Difference', accountType: 'Income', normalBalance: 'Credit', parent: '4000', system: true },
 
   // ---- Expenses (5xxx) ----
   { code: '5000', name: 'Expenses', accountType: 'Expense', normalBalance: 'Debit', isGroup: true },
@@ -72,6 +75,7 @@ export const ACCOUNTS = {
   SALES: '4100',
   SALES_RETURNS: '4200',
   DISCOUNTS: '4300',
+  ROUNDING: '4500',
   COGS: '5100',
   PURCHASE_RETURNS: '5150',
   OTHER_EXPENSE: '5290',

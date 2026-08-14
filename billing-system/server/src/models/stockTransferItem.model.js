@@ -15,6 +15,29 @@ export default (sequelize) => sequelize.define('StockTransferItem', {
   serialNumber: { type: DataTypes.STRING(120), allowNull: true },
 
   quantity: { type: DataTypes.DECIMAL(14, 3), allowNull: false },
+  // Taken off the shelves and onto the packing bench. Distinct from dispatched:
+  // picked stock has left its bin but not the building, so the location total
+  // still includes it.
+  pickedQty: { type: DataTypes.DECIMAL(14, 3), allowNull: false, defaultValue: 0 },
+  // Which bins the picker actually took it from, as [{binId, batchId, quantity}].
+  // Recorded so a cancellation can put the goods back exactly where they came
+  // from rather than guessing at a bin — and so the transfer can answer "which
+  // shelf did this leave from" months later.
+  //
+  // Stored as text and parsed here rather than as a JSON column, because the
+  // application also supports SQL Server, where JSON support differs.
+  pickedFrom: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    get() {
+      const raw = this.getDataValue('pickedFrom');
+      if (!raw) return [];
+      try { return JSON.parse(raw); } catch { return []; }
+    },
+    set(value) {
+      this.setDataValue('pickedFrom', value?.length ? JSON.stringify(value) : null);
+    },
+  },
   dispatchedQty: { type: DataTypes.DECIMAL(14, 3), allowNull: false, defaultValue: 0 },
   receivedQty: { type: DataTypes.DECIMAL(14, 3), allowNull: false, defaultValue: 0 },
   damagedQty: { type: DataTypes.DECIMAL(14, 3), allowNull: false, defaultValue: 0 },

@@ -14,6 +14,10 @@ export default (sequelize) => sequelize.define('InvoiceItem', {
   primaryQty: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
   quantity:{ type: DataTypes.DECIMAL(10, 2), allowNull: false },
   rate: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
+  // Printed price at the time of sale. Snapshotted rather than read from the
+  // product later, because "MRP ₹120, you paid ₹99" has to stay true on a
+  // reprint even after the product's MRP has moved on.
+  mrp: { type: DataTypes.DECIMAL(12, 2), allowNull: true },
   discount: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
   gstPercent: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 0 },
   gstAmount: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },

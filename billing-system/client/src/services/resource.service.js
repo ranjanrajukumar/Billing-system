@@ -45,6 +45,9 @@ export const paymentsApi = {
 
 export const usersApi = {
   ...makeResource('/users'),
+  // Which branches and warehouses a user may work at.
+  locations:     (id)       => api.get(`/users/${id}/locations`).then((r) => r.data ?? {}),
+  saveLocations: (id, body) => api.put(`/users/${id}/locations`, body).then((r) => r.data ?? {}),
   roles: {
     list:   ()           => api.get('/users/roles').then((r) => r.data ?? []),
     create: (payload)    => api.post('/users/roles', payload).then((r) => r.data ?? {}),
@@ -194,6 +197,73 @@ export const approvalsApi = {
   createRule:   (body)       => api.post('/approvals/rules', body).then((r) => r.data),
   updateRule:   (id, body)   => api.put(`/approvals/rules/${id}`, body).then((r) => r.data),
   removeRule:   (id)         => api.delete(`/approvals/rules/${id}`).then((r) => r.data),
+};
+
+export const notificationsApi = {
+  // What needs attention right now, scoped to the caller's location and role.
+  alerts: () => api.get('/notifications').then((r) => r.data ?? { alerts: [], counts: {} }),
+  count:  () => api.get('/notifications/count').then((r) => r.data ?? {}),
+  daily:  (params) => api.get('/notifications/daily', { params }).then((r) => r.data ?? {}),
+};
+
+// Cash flow and stock audit run in both modes — costs, cash and stock
+// integrity are not advanced questions.
+export const cashFlowApi = {
+  overview: (params) => api.get('/cash-flow', { params }).then((r) => r.data ?? {}),
+  summary:  (params) => api.get('/cash-flow/summary', { params }).then((r) => r.data ?? {}),
+  position: (params) => api.get('/cash-flow/position', { params }).then((r) => r.data ?? {}),
+  daily:    (params) => api.get('/cash-flow/daily', { params }).then((r) => r.data ?? []),
+};
+
+// Put-away, picking and packing. Bins are optional, so every one of these
+// degrades to a no-op at a location that does not use them.
+export const warehouseOpsApi = {
+  overview:      (params)    => api.get('/warehouse-ops', { params }).then((r) => r.data ?? {}),
+  occupancy:     (params)    => api.get('/warehouse-ops/occupancy', { params }).then((r) => r.data ?? {}),
+  replenishment: (params)    => api.get('/warehouse-ops/replenishment', { params }).then((r) => r.data ?? {}),
+
+  queue:         (params)    => api.get('/warehouse-ops/put-away/queue', { params }).then((r) => r.data ?? {}),
+  putAwayForGrn: (grnId)     => api.get(`/warehouse-ops/put-away/grn/${grnId}`).then((r) => r.data ?? {}),
+  putAway:       (body)      => api.post('/warehouse-ops/put-away', body).then((r) => r.data ?? {}),
+
+  pickList:      (id)        => api.get(`/warehouse-ops/transfers/${id}/pick-list`).then((r) => r.data ?? {}),
+  confirmPick:   (id, body)  => api.post(`/warehouse-ops/transfers/${id}/pick`, body).then((r) => r.data ?? {}),
+
+  packages:      (id)        => api.get(`/warehouse-ops/transfers/${id}/packages`).then((r) => r.data ?? []),
+  packCarton:    (id, body)  => api.post(`/warehouse-ops/transfers/${id}/packages`, body).then((r) => r.data ?? {}),
+  cancelPackage: (packageId) => api.post(`/warehouse-ops/packages/${packageId}/cancel`).then((r) => r.data ?? {}),
+
+  // Put-away rules: where each kind of product should be stored.
+  rules:         (params)    => api.get('/warehouse-ops/rules', { params }).then((r) => r.data ?? {}),
+  createRule:    (body)      => api.post('/warehouse-ops/rules', body).then((r) => r.data ?? {}),
+  updateRule:    (id, body)  => api.put(`/warehouse-ops/rules/${id}`, body).then((r) => r.data ?? {}),
+  removeRule:    (id)        => api.delete(`/warehouse-ops/rules/${id}`).then((r) => r.data ?? {}),
+  whereToPut:    (productId, params) => api.get(`/warehouse-ops/where-to-put/${productId}`, { params }).then((r) => r.data ?? []),
+
+  binContents:   (binId)     => api.get(`/warehouse-ops/bins/${binId}/contents`).then((r) => r.data ?? []),
+  locate:        (productId, params) => api.get(`/warehouse-ops/locate/${productId}`, { params }).then((r) => r.data ?? []),
+  move:          (body)      => api.post('/warehouse-ops/move', body).then((r) => r.data ?? {}),
+  reconcile:     (params)    => api.get('/warehouse-ops/reconcile', { params }).then((r) => r.data ?? {}),
+};
+
+// Allocate, pick, pack and dispatch a sales order.
+export const fulfilmentApi = {
+  queue:      (params)    => api.get('/fulfilment/queue', { params }).then((r) => r.data ?? { data: [] }),
+  pickList:   (id)        => api.get(`/fulfilment/${id}/pick-list`).then((r) => r.data ?? {}),
+  packages:   (id)        => api.get(`/fulfilment/${id}/packages`).then((r) => r.data ?? []),
+  allocate:   (id, body)  => api.post(`/fulfilment/${id}/allocate`, body).then((r) => r.data ?? {}),
+  pick:       (id, body)  => api.post(`/fulfilment/${id}/pick`, body).then((r) => r.data ?? {}),
+  packCarton: (id, body)  => api.post(`/fulfilment/${id}/packages`, body).then((r) => r.data ?? {}),
+  dispatch:   (id, body)  => api.post(`/fulfilment/${id}/dispatch`, body).then((r) => r.data ?? {}),
+  shipping:   (id, body)  => api.put(`/fulfilment/${id}/shipping`, body).then((r) => r.data ?? {}),
+  cancel:     (id)        => api.post(`/fulfilment/${id}/cancel`).then((r) => r.data ?? {}),
+};
+
+export const stockAuditApi = {
+  overview:       (params)     => api.get('/stock-audit', { params }).then((r) => r.data ?? {}),
+  reconciliation: (params)     => api.get('/stock-audit/reconciliation', { params }).then((r) => r.data ?? {}),
+  exceptions:     (params)     => api.get('/stock-audit/exceptions', { params }).then((r) => r.data ?? {}),
+  location:       (id, params) => api.get(`/stock-audit/location/${id}`, { params }).then((r) => r.data ?? {}),
 };
 
 export const ledgersApi = {

@@ -76,6 +76,9 @@ export const MENU_KEY_BY_PATH = {
   '/journal-entries': 'journalEntries',
   '/financials': 'financials',
   '/approvals': 'approvals',
+  '/cash-flow': 'cashFlow',
+  '/stock-audit': 'stockAudit',
+  '/warehouse-floor': 'warehouseOps',
 };
 
 /** Pages that must stay reachable whatever the rights say. */

@@ -1,4 +1,6 @@
+import { Op } from 'sequelize';
 import { Branch, Company } from '../models/index.js';
+import { accessMap, levelAllows, primaryLocationId } from '../services/locationAccess.service.js';
 
 let cached = { branchId: null, multiBranch: null, checkedAt: 0 };
 const CACHE_MS = 30_000;
@@ -25,54 +27,82 @@ export function clearBranchCache() {
   cached = { branchId: null, multiBranch: null, checkedAt: 0 };
 }
 
+/** Methods that change something and therefore need more than View. */
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
 /**
- * Decides which location this request acts on.
+ * Decides which location this request acts on, and whether the caller is
+ * entitled to act on it.
  *
- * Two separate questions, which used to be conflated:
+ * Three separate questions, kept separate on purpose:
  *
- *   - *Which* location am I acting on? Answered by `X-Branch-Id` (or
- *     `?branchId=`) when the caller is entitled to target one. A warehouse is a
- *     location, so this has to work even for a business that has not turned on
- *     multi-branch scoping — otherwise receiving goods into a warehouse would
- *     silently put them in the shop.
+ *   - *Which* location am I acting on? `X-Branch-Id` (or `?branchId=`) when the
+ *     caller may target one, otherwise their primary location. Writes land here.
  *
- *   - *What may I see*? Answered by `branchScope`, which multi-branch mode
- *     turns on. In single-location mode there is nothing to filter, so it stays
- *     null and every existing list behaves exactly as it did before.
+ *   - *May I?* Checked against the user's granted locations. Requesting one they
+ *     hold nothing at is refused outright rather than silently redirected to
+ *     somewhere they do have access — a silent redirect writes real documents to
+ *     the wrong branch.
+ *
+ *   - *What may I see?* `visibleBranchIds` — every location they hold anything
+ *     at — which is what list queries filter on. Distinct from the acting
+ *     location, because an area manager reads three branches but bills at one.
  */
 export async function resolveBranch(req, _res, next) {
   try {
     const { branchId: defaultBranchId, multiBranch } = await branchSettings();
     const isAdmin = req.user?.role === 'Admin';
     const requested = req.get('x-branch-id') || req.query.branchId;
+    const wantsAll = String(requested).toLowerCase() === 'all';
 
     req.multiBranch = multiBranch;
 
-    if (!multiBranch) {
-      // An Admin may still name the location to act on — warehouses depend on
-      // it — but nothing is filtered, so reads stay unchanged.
-      const explicit = isAdmin && requested && String(requested).toLowerCase() !== 'all'
-        ? Number(requested)
-        : null;
-      req.branchId = Number.isFinite(explicit) && explicit ? explicit : defaultBranchId;
-      req.branchScope = null; // no filtering; there is only one selling location
-      return next();
+    // Null means every location; a Map means exactly these.
+    const access = await accessMap(req.user);
+    req.locationAccess = access;
+    req.visibleBranchIds = access === null ? null : [...access.keys()];
+
+    const home = (await primaryLocationId(req.user)) || defaultBranchId;
+
+    // A caller may name a location when they are an Admin, or when they hold
+    // more than one — otherwise there is nothing to choose between.
+    const mayTarget = isAdmin || (access !== null && access.size > 1);
+    const target = mayTarget && requested && !wantsAll ? Number(requested) : null;
+
+    if (target && access !== null && !access.has(target)) {
+      return next(Object.assign(
+        new Error('You do not have access to that location'),
+        { status: 403 },
+      ));
     }
 
-    if (isAdmin) {
-      // 'all' lets an Admin read across every branch.
-      if (String(requested).toLowerCase() === 'all') {
-        req.branchId = defaultBranchId;
-        req.branchScope = null;
-        return next();
+    req.branchId = Number.isFinite(target) && target ? target : home;
+
+    // Changing something needs more than the right to look at it.
+    if (WRITE_METHODS.has(req.method) && access !== null) {
+      const held = access.get(Number(req.branchId))?.level;
+      if (held && !levelAllows(held, 'Operate')) {
+        return next(Object.assign(
+          new Error('You may only view this location, not change anything here'),
+          { status: 403 },
+        ));
       }
-      req.branchId = requested ? Number(requested) : (req.user?.branchId || defaultBranchId);
-      req.branchScope = req.branchId;
+    }
+
+    if (!multiBranch) {
+      // One selling location: nothing to filter, exactly as before.
+      req.branchScope = null;
       return next();
     }
 
-    // Everyone else is pinned to their assigned branch.
-    req.branchId = req.user?.branchId || defaultBranchId;
+    if (isAdmin && (wantsAll || !requested)) {
+      // Admins read across everything unless they pick a location.
+      req.branchScope = requested && !wantsAll ? req.branchId : null;
+      return next();
+    }
+
+    // Reads are scoped to the acting location; `visibleBranchIds` widens lists
+    // to every location this user may see.
     req.branchScope = req.branchId;
     return next();
   } catch (error) {
@@ -80,7 +110,19 @@ export async function resolveBranch(req, _res, next) {
   }
 }
 
-/** Adds the branch filter to a `where` clause when scoping applies. */
+/**
+ * Adds the location filter to a `where` clause.
+ *
+ * Filters to every location the caller may see, not merely the one they are
+ * acting on — an area manager over three branches should find all three in a
+ * list. Falls back to the acting location when there is no explicit grant, and
+ * to no filter at all in single-location mode.
+ */
 export function scopedWhere(req, where = {}) {
+  const visible = req.visibleBranchIds;
+
+  if (Array.isArray(visible) && visible.length > 1) {
+    return { ...where, branchId: { [Op.in]: visible } };
+  }
   return req.branchScope ? { ...where, branchId: req.branchScope } : where;
 }

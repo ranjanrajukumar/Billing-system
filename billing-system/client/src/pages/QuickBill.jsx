@@ -9,7 +9,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PageHeader from '../components/PageHeader.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import api from '../services/api.js';
-import { customersApi, invoicesApi, productsApi } from '../services/resource.service.js';
+import { customersApi, invoicesApi, productsApi, settingsApi } from '../services/resource.service.js';
+import CustomerPicker from '../components/CustomerPicker.jsx';
 import { currency } from '../utils/formatters.js';
 import { printPdfBlob } from '../utils/print.js';
 
@@ -46,6 +47,7 @@ export default function QuickBill() {
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [saving, setSaving] = useState(false);
   const [lastAdded, setLastAdded] = useState(null);
+  const [companyState, setCompanyState] = useState('');
 
   useEffect(() => {
     customersApi.list({ limit: 200 }).then((r) => {
@@ -54,6 +56,10 @@ export default function QuickBill() {
       if (list.length) setCustomerId(list[0].id);
     }).catch(() => setCustomers([]));
     productsApi.list({ limit: 500 }).then((r) => setProducts(r?.data || [])).catch(() => setProducts([]));
+    // Prefills the state on a new walk-in, which is what decides CGST/SGST.
+    settingsApi.get()
+      .then((r) => setCompanyState(r?.company?.state || ''))
+      .catch(() => setCompanyState(''));
   }, []);
 
   const focusScan = useCallback(() => scanRef.current?.focus(), []);
@@ -231,13 +237,16 @@ export default function QuickBill() {
             />
           </Grid>
           <Grid item xs={12} sm={6} md={4}>
-            <TextField
-              fullWidth select id="quickbill-customer" label="Customer"
-              value={customerId} onChange={(e) => setCustomerId(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-            >
-              {customers.map((c) => <MenuItem key={c.id} value={c.id}>{c.customerName}</MenuItem>)}
-            </TextField>
+            {/* A walk-in who is not on file is the normal case at a counter,
+                so they can be added here without losing the bill. */}
+            <CustomerPicker
+              inputId="quickbill-customer"
+              customers={customers}
+              value={customerId}
+              onChange={setCustomerId}
+              onCustomerCreated={(created) => setCustomers((list) => [created, ...list])}
+              defaultState={companyState}
+            />
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
             <TextField

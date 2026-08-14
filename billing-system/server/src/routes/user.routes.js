@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { body } from 'express-validator';
 import {
   createUser, deleteUser, listRoles, createRole, updateRole, deleteRole,
-  listUsers, updateUser, menuRights, saveMenuRights,
+  listUsers, updateUser, menuRights, saveMenuRights, userLocations, saveUserLocations,
 } from '../controllers/user.controller.js';
 import { authorize } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validate.js';
@@ -24,6 +24,11 @@ router.put('/menu-rights/:id', authorize('Admin'), saveMenuRights);
 router.post('/roles', authorize('Admin'), body('name').trim().isLength({ min: 2 }), validate, createRole);
 router.put('/roles/:id', authorize('Admin'), body('name').trim().isLength({ min: 2 }), validate, updateRole);
 router.delete('/roles/:id', authorize('Admin'), deleteRole);
+
+// Per-location rights. Read is open to the user themselves so a location
+// switcher can be built from it; only an Admin may change a grant.
+router.get('/:id/locations', authorize('Admin'), userLocations);
+router.put('/:id/locations', authorize('Admin'), saveUserLocations);
 
 router.get('/', authorize('Admin'), listUsers);
 router.post('/', authorize('Admin'), createRules, validate, createUser);

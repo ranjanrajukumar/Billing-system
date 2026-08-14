@@ -1,7 +1,8 @@
 import AddIcon from '@mui/icons-material/Add';
 import MoveToInboxIcon from '@mui/icons-material/MoveToInbox';
 import {
-  Alert, Box, Button, Grid, MenuItem, Stack, TextField, Typography,
+  Alert, Box, Button, Grid, MenuItem, Stack, Table, TableBody, TableCell,
+  TableHead, TableRow, TextField, Typography,
 } from '@mui/material';
 import { useEffect, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
@@ -13,7 +14,7 @@ import StatsCard from '../components/StatsCard.jsx';
 import StatusChip from '../components/StatusChip.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import {
-  branchesApi, grnApi, productsApi, purchaseOrdersApi, suppliersApi,
+  branchesApi, grnApi, productsApi, purchaseOrdersApi, suppliersApi, warehouseOpsApi,
 } from '../services/resource.service.js';
 
 /**
@@ -34,6 +35,7 @@ export default function Grn() {
   const [creating, setCreating] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [putAway, setPutAway] = useState(null);
   const { showToast } = useToast();
 
   const load = async () => {
@@ -126,6 +128,59 @@ export default function Grn() {
     setBusy(false);
   };
 
+  /**
+   * Hands a posted receipt straight to put-away.
+   *
+   * Goods that are in stock but not on a shelf are the commonest way a
+   * warehouse loses track of something, so the step that fixes it belongs on
+   * the receipt itself rather than on a screen somebody has to remember.
+   */
+  const openPutAway = async (row) => {
+    try {
+      const plan = await warehouseOpsApi.putAwayForGrn(row.id);
+      setPutAway({
+        ...plan,
+        lines: plan.items.map((item) => ({
+          ...item,
+          binId: item.suggestedBins?.[0]?.binId || '',
+          quantity: item.toPutAway,
+        })),
+      });
+    } catch (err) {
+      // A shop with no bins has nothing to put away into; say so plainly.
+      showToast(
+        err.response?.status === 403
+          ? 'Bins are not enabled for this company, so there is nothing to put away'
+          : err.response?.data?.message || 'Could not open put-away',
+        err.response?.status === 403 ? 'info' : 'error',
+      );
+    }
+  };
+
+  const confirmPutAway = async () => {
+    setBusy(true);
+    try {
+      const lines = putAway.lines.filter((l) => l.binId && Number(l.quantity) > 0);
+      if (!lines.length) { showToast('Choose a bin and a quantity first', 'error'); setBusy(false); return; }
+
+      const result = await warehouseOpsApi.putAway({
+        branchId: putAway.branchId,
+        items: lines.map((l) => ({
+          binId: Number(l.binId),
+          productId: l.productId,
+          batchId: l.batchId || null,
+          quantity: Number(l.quantity),
+        })),
+      });
+      showToast(result.warning || `Put away ${lines.length} line(s)`);
+      setPutAway(null);
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Could not put it away', 'error');
+    }
+    setBusy(false);
+  };
+
   const act = async (row, action) => {
     setBusy(true);
     try {
@@ -205,6 +260,9 @@ export default function Grn() {
                       Cancel
                     </Button>
                   </>
+                )}
+                {r.postedAt && (
+                  <Button size="small" onClick={() => openPutAway(r)}>Put away</Button>
                 )}
                 {r.postedAt && !r.purchaseId && (
                   <Button size="small" variant="outlined" disabled={busy} onClick={() => act(r, 'invoice')}>
@@ -315,6 +373,81 @@ export default function Grn() {
                 onClick={submit}
               >
                 {busy ? 'Saving…' : 'Save Receipt'}
+              </Button>
+            </Stack>
+          </Stack>
+        )}
+      </Modal>
+
+      {/* Put-away straight from the receipt */}
+      <Modal open={Boolean(putAway)} title={`Put away — ${putAway?.grnNumber || ''}`}
+        onClose={() => setPutAway(null)} maxWidth="md">
+        {putAway && (
+          <Stack spacing={2}>
+            {!putAway.bins?.length ? (
+              <Alert severity="info" sx={{ borderRadius: 2 }}>
+                This location has no bins set up, so the stock simply sits at the location. Add zones and
+                bins under Warehouses if you want to record whereabouts in the building it is kept.
+              </Alert>
+            ) : (
+              <Alert severity="info" sx={{ borderRadius: 2 }}>
+                The stock is already counted at this location — this only records which shelf it went on.
+              </Alert>
+            )}
+
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700 }}>Product</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700 }}>To put away</TableCell>
+                  <TableCell sx={{ fontWeight: 700, minWidth: 200 }}>Into bin</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700 }}>Quantity</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {putAway.lines.map((line, index) => (
+                  <TableRow key={line.productId}>
+                    <TableCell>
+                      <Typography variant="body2">{line.productName}</Typography>
+                      {line.sku && <Typography variant="caption" color="text.secondary">{line.sku}</Typography>}
+                    </TableCell>
+                    <TableCell align="right">{line.toPutAway}</TableCell>
+                    <TableCell>
+                      <TextField
+                        select fullWidth size="small" value={line.binId}
+                        disabled={!putAway.bins?.length || line.toPutAway <= 0}
+                        onChange={(e) => setPutAway({
+                          ...putAway,
+                          lines: putAway.lines.map((l, i) => (i === index ? { ...l, binId: e.target.value } : l)),
+                        })}
+                      >
+                        <MenuItem value=""><em>Leave loose</em></MenuItem>
+                        {(putAway.bins || []).map((bin) => (
+                          <MenuItem key={bin.id} value={bin.id}>{bin.code} — {bin.name || bin.level}</MenuItem>
+                        ))}
+                      </TextField>
+                    </TableCell>
+                    <TableCell align="right">
+                      <TextField
+                        size="small" type="number" sx={{ width: 110 }} value={line.quantity}
+                        disabled={line.toPutAway <= 0}
+                        onChange={(e) => setPutAway({
+                          ...putAway,
+                          lines: putAway.lines.map((l, i) => (i === index ? { ...l, quantity: e.target.value } : l)),
+                        })}
+                        inputProps={{ min: 0, max: line.toPutAway, step: 'any', style: { textAlign: 'right' } }}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+
+            <Stack direction="row" spacing={1} justifyContent="flex-end">
+              <Button onClick={() => setPutAway(null)} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+              <Button variant="contained" disabled={busy || !putAway.bins?.length}
+                onClick={confirmPutAway} sx={{ borderRadius: 2 }}>
+                {busy ? 'Placing…' : 'Put away'}
               </Button>
             </Stack>
           </Stack>

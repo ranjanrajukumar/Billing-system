@@ -1,9 +1,11 @@
 import bcrypt from 'bcrypt';
-import { Branch, Role, User } from '../models/index.js';
+import { Branch, Role, User, UserLocation } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { getPagination, paged } from '../utils/pagination.js';
 import { ALL_MENU_KEYS, ALWAYS_VISIBLE, catalogueForModules, visibleMenus } from '../config/menu.js';
 import { getConfig } from '../services/config.service.js';
+import { ACCESS_LEVELS, ACCESS_MEANING } from '../models/userLocation.model.js';
+import { primaryLocationId, setUserLocations } from '../services/locationAccess.service.js';
 
 const publicUser = (user) => ({ id: user.id, name: user.name, email: user.email, mobile: user.mobile, isActive: user.isActive, role: user.Role?.name, roleId: user.roleId, branchId: user.branchId, branchName: user.Branch?.branchName, profileImagePath: user.profileImagePath, profileImageUrl: user.profileImageUrl });
 
@@ -38,6 +40,75 @@ export const menuRights = asyncHandler(async (_req, res) => {
       isAdmin: role.name === 'Admin',
       menus: visibleMenus(role, modules),
     })),
+  });
+});
+
+/**
+ * Which locations a user may work at, and at what level.
+ *
+ * Returns every location alongside the grant, so the screen shows the whole
+ * picture rather than only what has already been granted — otherwise adding a
+ * location means knowing it exists before you can find it.
+ */
+export const userLocations = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ where: { id: req.params.id, detstatus: false } });
+  if (!user) return res.status(404).json({ message: 'User not found' });
+
+  const [locations, grants] = await Promise.all([
+    Branch.findAll({
+      where: { detstatus: false },
+      attributes: ['id', 'branchName', 'branchCode', 'locationType', 'isActive'],
+      order: [['locationType', 'ASC'], ['branchName', 'ASC']],
+    }),
+    UserLocation.findAll({ where: { userId: user.id, detstatus: false }, raw: true }),
+  ]);
+
+  const byBranch = new Map(grants.map((g) => [Number(g.branchId), g]));
+
+  res.json({
+    userId: user.id,
+    userName: user.name,
+    // An Admin's access is not editable here; it is inherent to the role.
+    isAdmin: (await Role.findByPk(user.roleId))?.name === 'Admin',
+    // No grants at all means the user still falls back to their home branch.
+    usingFallback: grants.length === 0,
+    homeBranchId: user.branchId,
+    levels: ACCESS_LEVELS.map((level) => ({ level, meaning: ACCESS_MEANING[level] })),
+    locations: locations.map((location) => ({
+      ...location.toJSON(),
+      granted: byBranch.has(location.id),
+      accessLevel: byBranch.get(location.id)?.accessLevel || null,
+      isPrimary: Boolean(byBranch.get(location.id)?.isPrimary),
+    })),
+  });
+});
+
+/** Replaces a user's location grants with the set the screen is showing. */
+export const saveUserLocations = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ where: { id: req.params.id, detstatus: false } });
+  if (!user) return res.status(404).json({ message: 'User not found' });
+
+  const role = await Role.findByPk(user.roleId);
+  if (role?.name === 'Admin') {
+    return res.status(400).json({
+      message: 'An Admin works at every location by definition; there is nothing to grant.',
+    });
+  }
+
+  const count = await setUserLocations(user.id, req.body.locations || [], req.user?.id);
+
+  // The user's home branch follows their primary grant, so the next sign-in
+  // lands somewhere they can actually work.
+  const primary = await primaryLocationId({ id: user.id, role: role?.name, branchId: user.branchId });
+  if (primary && primary !== user.branchId) {
+    await user.update({ branchId: primary, authlstedit: req.user?.id });
+  }
+
+  res.json({
+    message: count
+      ? `${count} location${count === 1 ? '' : 's'} granted`
+      : 'All grants removed — this user falls back to their home branch',
+    granted: count,
   });
 });
 

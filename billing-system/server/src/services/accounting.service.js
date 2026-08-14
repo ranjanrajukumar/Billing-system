@@ -263,6 +263,21 @@ export async function postSale({ invoice, items = [], costOfGoods = 0, transacti
     lines.push({ code: ACCOUNTS.SALES, debit: 0, credit: discount, narration: 'Discount gross-up' });
   }
 
+  // The invoice total is rounded to the rupee while revenue and GST are not,
+  // so the difference has to be booked or the entry cannot balance. Derived
+  // from the lines rather than read from `roundOff`, so anything else that
+  // lands on the total — cess, a stored total corrected by hand — is caught
+  // here too instead of silently breaking the posting.
+  const rounding = money(total - revenue - gst);
+  if (rounding !== 0) {
+    lines.push({
+      code: ACCOUNTS.ROUNDING,
+      debit: rounding < 0 ? -rounding : 0,
+      credit: rounding > 0 ? rounding : 0,
+      narration: `Rounding on ${invoice.invoiceNumber}`,
+    });
+  }
+
   const cogs = money(costOfGoods || items.reduce(
     (sum, item) => sum + Number(item.unitCost || 0) * Number(item.quantity || 0), 0,
   ));

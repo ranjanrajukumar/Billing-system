@@ -35,16 +35,24 @@ export const MODULES = [
   { key: 'coupons', label: 'Coupons & Loyalty', mode: 'Basic', menus: ['coupons'] },
   { key: 'batches', label: 'Batch & Expiry Tracking', mode: 'Basic', menus: ['batches'] },
 
+  // Running costs and the day's cash are things the smallest shop tracks —
+  // rent, electricity, what is in the drawer at closing. Only double-entry
+  // bookkeeping is genuinely advanced, so these belong in both modes.
+  { key: 'expenses', label: 'Expenses', mode: 'Basic', menus: ['expenses'] },
+  { key: 'cashBank', label: 'Cash & Bank', mode: 'Basic', menus: ['cashRegisters', 'bankAccounts'] },
+  { key: 'cashFlow', label: 'Cash Flow', mode: 'Basic', menus: ['cashFlow'] },
+  { key: 'stockAudit', label: 'Stock Audit', mode: 'Basic', menus: ['stockAudit'] },
+
   // ---- Advanced only ----
-  { key: 'warehouses', label: 'Warehouses & Locations', mode: 'Advanced', menus: ['warehouses'] },
+  { key: 'warehouses', label: 'Warehouses & Locations', mode: 'Advanced', menus: ['warehouses', 'warehouseOps'] },
   { key: 'stockTransfers', label: 'Stock Transfers', mode: 'Advanced', menus: ['stockTransfers'] },
   { key: 'stockAdjustments', label: 'Stock Adjustments & Counting', mode: 'Advanced', menus: ['stockAdjustments', 'stockCounts'] },
   { key: 'purchaseOrders', label: 'Purchase Orders & GRN', mode: 'Advanced', menus: ['purchaseOrders', 'grn'] },
   { key: 'purchaseReturns', label: 'Purchase Returns', mode: 'Advanced', menus: ['purchaseReturns'] },
   { key: 'serials', label: 'Serial Number Tracking', mode: 'Advanced', menus: ['serials'] },
-  { key: 'expenses', label: 'Expenses', mode: 'Advanced', menus: ['expenses'] },
-  { key: 'cashBank', label: 'Cash & Bank', mode: 'Advanced', menus: ['cashRegisters', 'bankAccounts'] },
-  { key: 'accounting', label: 'Accounting', mode: 'Advanced', menus: ['chartOfAccounts', 'journalEntries', 'financials'] },
+  // Double-entry bookkeeping is the genuinely advanced part: a shop can track
+  // every rupee of cost and cash without ever meeting a journal voucher.
+  { key: 'accounting', label: 'Accounting (double-entry)', mode: 'Advanced', menus: ['chartOfAccounts', 'journalEntries', 'financials'] },
   { key: 'approvals', label: 'Approval Workflow', mode: 'Advanced', menus: ['approvals'] },
 ];
 

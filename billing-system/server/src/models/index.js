@@ -54,6 +54,11 @@ import PurchaseReturnModel from './purchaseReturn.model.js';
 import PurchaseReturnItemModel from './purchaseReturnItem.model.js';
 import ProductSerialModel from './productSerial.model.js';
 import WarehouseBinModel from './warehouseBin.model.js';
+import BinStockModel from './binStock.model.js';
+import PutAwayRuleModel from './putAwayRule.model.js';
+import UserLocationModel from './userLocation.model.js';
+import PackingSlipModel from './packingSlip.model.js';
+import PackingSlipItemModel from './packingSlipItem.model.js';
 import ExpenseModel from './expense.model.js';
 import CashRegisterModel from './cashRegister.model.js';
 import CashTransactionModel from './cashTransaction.model.js';
@@ -120,6 +125,11 @@ export const PurchaseReturn = PurchaseReturnModel(sequelize);
 export const PurchaseReturnItem = PurchaseReturnItemModel(sequelize);
 export const ProductSerial = ProductSerialModel(sequelize);
 export const WarehouseBin = WarehouseBinModel(sequelize);
+export const BinStock = BinStockModel(sequelize);
+export const PutAwayRule = PutAwayRuleModel(sequelize);
+export const UserLocation = UserLocationModel(sequelize);
+export const PackingSlip = PackingSlipModel(sequelize);
+export const PackingSlipItem = PackingSlipItemModel(sequelize);
 export const Expense = ExpenseModel(sequelize);
 export const CashRegister = CashRegisterModel(sequelize);
 export const CashTransaction = CashTransactionModel(sequelize);
@@ -244,6 +254,31 @@ Branch.hasMany(WarehouseBin, { foreignKey: 'branchId' });
 WarehouseBin.belongsTo(Branch, { foreignKey: 'branchId' });
 WarehouseBin.hasMany(WarehouseBin, { foreignKey: 'parentId', as: 'children' });
 WarehouseBin.belongsTo(WarehouseBin, { foreignKey: 'parentId', as: 'parent' });
+
+// The rung that completes Warehouse → Zone → Rack → Bin → Product.
+// Per-location rights: which locations a user may work at, and how.
+User.hasMany(UserLocation, { foreignKey: 'userId', onDelete: 'CASCADE' });
+UserLocation.belongsTo(User, { foreignKey: 'userId' });
+Branch.hasMany(UserLocation, { foreignKey: 'branchId', onDelete: 'CASCADE' });
+UserLocation.belongsTo(Branch, { foreignKey: 'branchId' });
+
+WarehouseBin.hasMany(BinStock, { foreignKey: 'binId' });
+BinStock.belongsTo(WarehouseBin, { foreignKey: 'binId' });
+Product.hasMany(BinStock, { foreignKey: 'productId' });
+BinStock.belongsTo(Product, { foreignKey: 'productId' });
+BinStock.belongsTo(Branch, { foreignKey: 'branchId' });
+BinStock.belongsTo(ProductBatch, { foreignKey: 'batchId' });
+
+// Put-away rules point at the bin they send stock to.
+PutAwayRule.belongsTo(WarehouseBin, { foreignKey: 'targetBinId', as: 'targetBin' });
+PutAwayRule.belongsTo(Branch, { foreignKey: 'branchId' });
+
+// Packing: cartons prepared for dispatch, and what went into each.
+PackingSlip.hasMany(PackingSlipItem, { foreignKey: 'packageId', onDelete: 'CASCADE' });
+PackingSlipItem.belongsTo(PackingSlip, { foreignKey: 'packageId' });
+PackingSlipItem.belongsTo(Product, { foreignKey: 'productId' });
+PackingSlipItem.belongsTo(ProductBatch, { foreignKey: 'batchId' });
+PackingSlip.belongsTo(Branch, { foreignKey: 'branchId' });
 
 // Transfers move stock between two locations, so both ends are aliased.
 StockTransfer.belongsTo(Branch, { foreignKey: 'fromBranchId', as: 'fromBranch' });

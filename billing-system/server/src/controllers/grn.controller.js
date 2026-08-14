@@ -9,6 +9,7 @@ import { withDateRange } from '../utils/dateRange.js';
 import { scopedWhere } from '../middleware/branchContext.js';
 import { postStockTransaction } from '../services/stock.service.js';
 import { postPurchase } from '../services/accounting.service.js';
+import { primaryQtyFromLine, resolveUnits } from '../utils/units.js';
 
 /**
  * Goods Receipt Note.
@@ -154,6 +155,7 @@ export const create = asyncHandler(async (req, res) => {
 
       const poItem = item.poItemId ? poItemsById.get(Number(item.poItemId)) : null;
       const { received, accepted, rejected, damaged } = resolveQuantities(item);
+      const units = resolveUnits(product, item.um || poItem?.um);
 
       // Over-delivery is refused rather than absorbed: goods nobody ordered
       // should be a conversation with the supplier, not a silent stock increase.
@@ -178,9 +180,9 @@ export const create = asyncHandler(async (req, res) => {
         damagedQty: damaged,
         rate: Number(item.rate ?? poItem?.rate ?? product.purchasePrice ?? 0),
         gstPercent: Number(item.gstPercent ?? poItem?.gstPercent ?? product.gstPercent ?? 0),
-        um: item.um || poItem?.um || product.primaryUnit || null,
-        primaryUnit: product.primaryUnit || null,
-        unitConversionFactor: Number(product.unitConversionFactor || 1),
+        um: units.billedUnit,
+        primaryUnit: units.primaryUnit,
+        unitConversionFactor: units.factor,
         batchNumber: item.batchNumber || null,
         manufacturingDate: item.manufacturingDate || null,
         expiryDate: item.expiryDate || null,
@@ -219,9 +221,10 @@ export const post = asyncHandler(async (req, res) => {
 
     for (const item of grn.GrnItems) {
       const accepted = Number(item.acceptedQty || 0);
-      const factor = Number(item.unitConversionFactor || 1);
-      // Stock is always held in the primary unit.
-      const primaryQty = item.um && item.um !== item.primaryUnit && factor > 1 ? accepted * factor : accepted;
+      // Stock is always held in the primary unit. The line's own snapshot is
+      // used rather than the product's current units, so posting a receipt
+      // keyed last week converts the way it did when it was entered.
+      const primaryQty = primaryQtyFromLine(item, accepted);
 
       if (primaryQty > 0) {
         // A batch is created before the movement so the ledger row can point at it.
@@ -377,7 +380,6 @@ export const createInvoice = asyncHandler(async (req, res) => {
       .map((item) => {
         const quantity = Number(item.acceptedQty);
         const rate = Number(item.rate);
-        const factor = Number(item.unitConversionFactor || 1);
         const taxable = quantity * rate;
         const gstAmount = taxable * Number(item.gstPercent) / 100;
         return {
@@ -389,8 +391,10 @@ export const createInvoice = asyncHandler(async (req, res) => {
           amount: taxable + gstAmount,
           um: item.um,
           primaryUnit: item.primaryUnit,
-          unitConversionFactor: factor,
-          primaryQty: item.um && item.um !== item.primaryUnit && factor > 1 ? quantity * factor : quantity,
+          unitConversionFactor: Number(item.unitConversionFactor || 1),
+          // Carried over from the receipt so the invoice agrees with the stock
+          // the GRN actually moved.
+          primaryQty: primaryQtyFromLine(item, quantity),
           batchNumber: item.batchNumber,
           expiryDate: item.expiryDate,
           germinationPercent: item.germinationPercent,

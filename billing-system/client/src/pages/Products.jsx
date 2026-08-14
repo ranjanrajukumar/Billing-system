@@ -37,10 +37,14 @@ const DEFAULT_UNITS = [
 ];
 
 const empty = {
-  productName: '', categoryId: '', hsnCode: '', purchasePrice: 0,
-  sellingPrice: 0, gstPercent: 18, stock: 0, barcode: '',
-  lowStockThreshold: 5, primaryUnit: 'PCS', secondaryUnit: '',
-  unitConversionFactor: 1, secondarySellingPrice: '', isActive: true,
+  productName: '', sku: '', categoryId: '', hsnCode: '', purchasePrice: 0,
+  sellingPrice: 0, mrp: '', wholesalePrice: '', dealerPrice: '',
+  gstPercent: 18, stock: 0, barcode: '',
+  lowStockThreshold: 5, minimumStock: 0, reorderLevel: '', reorderQuantity: '',
+  primaryUnit: 'PCS', secondaryUnit: '',
+  unitConversionFactor: 1, secondarySellingPrice: '',
+  batchRequired: false, expiryRequired: false, serialRequired: false, warrantyMonths: '',
+  size: '', color: '', isActive: true,
 };
 
 function ProductImage({ row }) {
@@ -115,20 +119,45 @@ export default function Products() {
   const metrics = useMemo(() => {
     const totalUnits = rows.reduce((s, r) => s + Number(r.stock || 0), 0);
     const retailValue = rows.reduce((s, r) => s + Number(r.stock || 0) * Number(r.sellingPrice || 0), 0);
-    const lowStock = rows.filter((r) => Number(r.stock || 0) <= Number(r.lowStockThreshold || 0)).length;
+    // Reorder level is the buying trigger where one is set; the low-stock
+    // threshold is the fallback warning line.
+    const lowStock = rows.filter((r) => (
+      Number(r.stock || 0) <= Number(r.reorderLevel ?? r.lowStockThreshold ?? 0)
+    )).length;
     return { totalUnits, retailValue, lowStock };
   }, [rows]);
 
   const openForm = (row = null) => {
     setEditing(row || {});
-    reset(row ? {
+    if (!row) { reset(empty); return; }
+
+    // Optional columns come back as null; a null in a TextField makes it an
+    // uncontrolled input, so they are blanked to '' on the way in and read back
+    // as "not set" on the way out.
+    const blankIfNull = (value) => (value === null || value === undefined ? '' : value);
+
+    reset({
       ...row,
       categoryId: row.categoryId || '',
+      sku: blankIfNull(row.sku),
+      mrp: blankIfNull(row.mrp),
+      wholesalePrice: blankIfNull(row.wholesalePrice),
+      dealerPrice: blankIfNull(row.dealerPrice),
+      secondarySellingPrice: blankIfNull(row.secondarySellingPrice),
+      reorderLevel: blankIfNull(row.reorderLevel),
+      reorderQuantity: blankIfNull(row.reorderQuantity),
+      warrantyMonths: blankIfNull(row.warrantyMonths),
+      size: blankIfNull(row.size),
+      color: blankIfNull(row.color),
+      minimumStock: row.minimumStock ?? 0,
       primaryUnit: row.primaryUnit || 'PCS',
       secondaryUnit: row.secondaryUnit || '',
       unitConversionFactor: row.unitConversionFactor ?? 1,
+      batchRequired: Boolean(row.batchRequired),
+      expiryRequired: Boolean(row.expiryRequired),
+      serialRequired: Boolean(row.serialRequired),
       isActive: row.isActive !== false,
-    } : empty);
+    });
   };
 
   const submit = async (values) => {
@@ -202,13 +231,24 @@ export default function Products() {
                 ? <Chip label={row.barcode} size="small" icon={<QrCodeIcon sx={{ fontSize: '14px !important' }} />} variant="outlined" sx={{ fontFamily: 'monospace', fontSize: '0.72rem' }} />
                 : <Typography variant="caption" color="text.disabled">—</Typography>
               },
-              { field: 'sellingPrice', headerName: 'Price', render: (row) => <Typography fontWeight={700}>{currency(row.sellingPrice)}</Typography> },
+              { field: 'sellingPrice', headerName: 'Price', render: (row) => (
+                <Box>
+                  <Typography fontWeight={700}>{currency(row.sellingPrice)}</Typography>
+                  {Number(row.mrp) > 0 && Number(row.mrp) !== Number(row.sellingPrice) && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      MRP <s>{currency(row.mrp)}</s>
+                    </Typography>
+                  )}
+                </Box>
+              )},
               { field: 'unit', headerName: 'Unit / Conversion', render: (row) => (
                 <Box>
                   <Typography variant="body2" fontWeight={600}>{row.primaryUnit || 'PCS'}</Typography>
+                  {/* Written the way the stock engine applies it: one secondary
+                      unit contains `factor` primary units. */}
                   {row.secondaryUnit && Number(row.unitConversionFactor) > 1 && (
                     <Typography variant="caption" color="text.secondary" display="block">
-                      1 {row.primaryUnit} = {row.unitConversionFactor} {row.secondaryUnit}
+                      1 {row.secondaryUnit} = {row.unitConversionFactor} {row.primaryUnit}
                     </Typography>
                   )}
                 </Box>
@@ -258,19 +298,97 @@ export default function Products() {
               {categories.map((c) => <MenuItem value={c.id} key={c.id}>{c.name}</MenuItem>)}
             </TextField>
           </Grid>
-          <Grid item xs={12} sm={6}><TextField fullWidth label="HSN/SAC Code" {...register('hsnCode')} InputLabelProps={{ shrink: true }} /></Grid>
-          <Grid item xs={12} sm={6}><TextField fullWidth label="Barcode / SKU" {...register('barcode')} InputLabelProps={{ shrink: true }} /></Grid>
-          {[
-            ['purchasePrice', 'Purchase Price (₹)'],
-            ['sellingPrice', 'Selling Price (₹)'],
-            ['gstPercent', 'GST %'],
-            ['stock', 'Opening Stock'],
-            ['lowStockThreshold', 'Low Stock Alert At'],
-          ].map(([name, label]) => (
-            <Grid item xs={12} sm={6} key={name}>
-              <TextField fullWidth type="number" label={label} {...register(name)} InputLabelProps={{ shrink: true }} />
-            </Grid>
-          ))}
+          <Grid item xs={12} sm={4}><TextField fullWidth label="SKU" {...register('sku')} InputLabelProps={{ shrink: true }} helperText="Your own code for this item" /></Grid>
+          <Grid item xs={12} sm={4}><TextField fullWidth label="HSN/SAC Code" {...register('hsnCode')} InputLabelProps={{ shrink: true }} /></Grid>
+          <Grid item xs={12} sm={4}><TextField fullWidth label="Barcode" {...register('barcode')} InputLabelProps={{ shrink: true }} /></Grid>
+
+          {/* Pricing. MRP is the printed price; the tiers are what different
+              kinds of customer actually pay. */}
+          <Grid item xs={12}>
+            <Box sx={{ p: 2, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5, color: 'primary.main' }}>
+                Pricing
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth type="number" label="Purchase Price (₹)" inputProps={{ min: 0, step: 'any' }}
+                    {...register('purchasePrice')} InputLabelProps={{ shrink: true }} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth type="number" label="MRP (₹)" inputProps={{ min: 0, step: 'any' }}
+                    {...register('mrp')} InputLabelProps={{ shrink: true }}
+                    helperText="Printed price. Leave blank if the item has none." />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth type="number" label="Selling Price — Retail (₹)" inputProps={{ min: 0, step: 'any' }}
+                    {...register('sellingPrice')} InputLabelProps={{ shrink: true }}
+                    error={Number(formValues.mrp) > 0 && Number(formValues.sellingPrice) > Number(formValues.mrp)}
+                    helperText={
+                      Number(formValues.mrp) > 0 && Number(formValues.sellingPrice) > Number(formValues.mrp)
+                        ? 'Cannot be more than the MRP'
+                        : ' '
+                    }
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth type="number" label="Wholesale Price (₹)" inputProps={{ min: 0, step: 'any' }}
+                    {...register('wholesalePrice')} InputLabelProps={{ shrink: true }}
+                    helperText="Blank falls back to retail" />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth type="number" label="Dealer Price (₹)" inputProps={{ min: 0, step: 'any' }}
+                    {...register('dealerPrice')} InputLabelProps={{ shrink: true }}
+                    helperText="Blank falls back to retail" />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth type="number" label="GST %" inputProps={{ min: 0, max: 100, step: 'any' }}
+                    {...register('gstPercent')} InputLabelProps={{ shrink: true }} />
+                </Grid>
+                {Number(formValues.sellingPrice) > 0 && Number(formValues.purchasePrice) > 0 && (
+                  <Grid item xs={12}>
+                    <Typography variant="caption" color="text.secondary">
+                      Margin at retail:{' '}
+                      <strong>
+                        {currency(Number(formValues.sellingPrice) - Number(formValues.purchasePrice))}
+                        {' '}({(((Number(formValues.sellingPrice) - Number(formValues.purchasePrice)) / Number(formValues.purchasePrice)) * 100).toFixed(1)}%)
+                      </strong>
+                    </Typography>
+                  </Grid>
+                )}
+              </Grid>
+            </Box>
+          </Grid>
+
+          {/* Stock levels and reordering. */}
+          <Grid item xs={12}>
+            <Box sx={{ p: 2, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5, color: 'primary.main' }}>
+                Stock & Reordering
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={3}>
+                  <TextField fullWidth type="number" label="Opening Stock" inputProps={{ min: 0, step: 'any' }}
+                    {...register('stock')} InputLabelProps={{ shrink: true }}
+                    helperText="At the current location" />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <TextField fullWidth type="number" label="Low Stock Alert At" inputProps={{ min: 0 }}
+                    {...register('lowStockThreshold')} InputLabelProps={{ shrink: true }} />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <TextField fullWidth type="number" label="Reorder Level" inputProps={{ min: 0 }}
+                    {...register('reorderLevel')} InputLabelProps={{ shrink: true }}
+                    helperText="Trigger to buy more" />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <TextField fullWidth type="number" label="Reorder Quantity" inputProps={{ min: 0 }}
+                    {...register('reorderQuantity')} InputLabelProps={{ shrink: true }}
+                    helperText="How much to buy" />
+                </Grid>
+              </Grid>
+            </Box>
+          </Grid>
 
           {/* Unit & Unit Conversion Section */}
           <Grid item xs={12}>
@@ -300,17 +418,74 @@ export default function Products() {
                     helperText="e.g. 1 BOX = 10 PCS"
                   />
                 </Grid>
-                {formValues.secondaryUnit && Number(formValues.unitConversionFactor) > 0 && (
+                {/* Stated in the direction the stock engine actually applies:
+                    one secondary unit contains `factor` primary units. */}
+                {formValues.secondaryUnit && Number(formValues.unitConversionFactor) > 1 && (
                   <Grid item xs={12}>
                     <Chip
-                      label={`Conversion Rule: 1 ${formValues.primaryUnit || 'Unit'} = ${formValues.unitConversionFactor} ${formValues.secondaryUnit}`}
+                      label={`Conversion Rule: 1 ${formValues.secondaryUnit} = ${formValues.unitConversionFactor} ${formValues.primaryUnit || 'Unit'}`}
                       color="primary" variant="outlined" sx={{ fontWeight: 700 }}
                     />
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.75 }}>
+                      Stock is always counted in {formValues.primaryUnit || 'the primary unit'}. Selling
+                      1 {formValues.secondaryUnit} removes {formValues.unitConversionFactor} {formValues.primaryUnit || 'units'} from the shelf.
+                    </Typography>
                   </Grid>
                 )}
+                {formValues.secondaryUnit && !(Number(formValues.unitConversionFactor) > 1) && (
+                  <Grid item xs={12}>
+                    <Typography variant="caption" color="error.main">
+                      A secondary unit needs a conversion factor greater than 1, or it converts nothing.
+                    </Typography>
+                  </Grid>
+                )}
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth type="number" label={`Price per ${formValues.secondaryUnit || 'secondary unit'} (₹)`}
+                    inputProps={{ min: 0, step: 'any' }}
+                    disabled={!formValues.secondaryUnit}
+                    {...register('secondarySellingPrice')}
+                    InputLabelProps={{ shrink: true }}
+                    helperText="Leave blank to charge the primary price × factor"
+                  />
+                </Grid>
               </Grid>
             </Box>
           </Grid>
+          {/* Tracking is opt-in per product: a shop selling loose grain wants
+              none of it, an electronics dealer wants serials on everything. */}
+          <Grid item xs={12}>
+            <Box sx={{ p: 2, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5, color: 'primary.main' }}>
+                Tracking
+              </Typography>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                Turn these on only where they earn their keep — each one adds a step when receiving goods.
+              </Typography>
+              <Grid container spacing={1} alignItems="center">
+                <Grid item xs={12} sm={3}>
+                  <FormControlLabel control={<Switch {...register('batchRequired')} />} label="Batch / lot" />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <FormControlLabel control={<Switch {...register('expiryRequired')} />} label="Expiry date" />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <FormControlLabel control={<Switch {...register('serialRequired')} />} label="Serial numbers" />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <TextField fullWidth size="small" type="number" label="Warranty (months)" inputProps={{ min: 0 }}
+                    {...register('warrantyMonths')} InputLabelProps={{ shrink: true }} />
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <TextField fullWidth size="small" label="Size" {...register('size')} InputLabelProps={{ shrink: true }} />
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <TextField fullWidth size="small" label="Colour" {...register('color')} InputLabelProps={{ shrink: true }} />
+                </Grid>
+              </Grid>
+            </Box>
+          </Grid>
+
           <Grid item xs={12}>
             <FormControlLabel control={<Switch defaultChecked {...register('isActive')} />} label="Active for billing" />
           </Grid>

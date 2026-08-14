@@ -18,7 +18,12 @@ const COLOURS = {
 
   // In motion.
   Approved: 'info',
+  Allocated: 'info',
+  Picking: 'info',
   Picked: 'info',
+  Packed: 'info',
+  ReadyToShip: 'info',
+  Sealed: 'info',
   Dispatched: 'info',
   InTransit: 'info',
   'Partially Received': 'info',
@@ -33,6 +38,7 @@ const COLOURS = {
   Posted: 'success',
   Paid: 'success',
   Closed: 'success',
+  Delivered: 'success',
   'In Stock': 'success',
 
   // Stopped.

@@ -10,6 +10,7 @@ import {
   alpha,
   AppBar,
   Avatar,
+  Badge,
   Box,
   Divider,
   IconButton,
@@ -22,13 +23,15 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { mediaUrl } from '../utils/formatters.js';
 import CalculatorDialog from './CalculatorDialog.jsx';
 import DailyBriefing, { shouldShowBriefing } from './DailyBriefing.jsx';
 import BranchSwitcher from './BranchSwitcher.jsx';
+import NotificationCentre from './NotificationCentre.jsx';
+import { notificationsApi } from '../services/resource.service.js';
 
 export default function Navbar({ onMenu, mode, onToggleMode }) {
   const { user, logout } = useAuth();
@@ -38,11 +41,44 @@ export default function Navbar({ onMenu, mode, onToggleMode }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [briefingOpen, setBriefingOpen] = useState(false);
+  const [bellAnchor, setBellAnchor] = useState(null);
+  const [alerts, setAlerts] = useState([]);
+  const [alertCounts, setAlertCounts] = useState({});
+  const [alertsLoading, setAlertsLoading] = useState(false);
 
   // Opens by itself the first time this user loads the app on a given day.
   useEffect(() => {
     if (user?.id && shouldShowBriefing(user.id)) setBriefingOpen(true);
   }, [user?.id]);
+
+  const loadAlerts = useCallback(async () => {
+    if (!user?.id) return;
+    setAlertsLoading(true);
+    try {
+      const data = await notificationsApi.alerts();
+      setAlerts(data.alerts || []);
+      setAlertCounts(data.counts || {});
+    } catch {
+      // A failing bell must never break the header; it just shows nothing.
+      setAlerts([]);
+      setAlertCounts({});
+    }
+    setAlertsLoading(false);
+  }, [user?.id]);
+
+  // Refreshed on load and every few minutes. Not a live feed — these are
+  // situations that build over hours, and polling harder would cost more than
+  // the freshness is worth.
+  useEffect(() => {
+    loadAlerts();
+    const timer = setInterval(loadAlerts, 5 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [loadAlerts]);
+
+  // Critical items drive the badge colour, so an urgent one is never hidden
+  // behind a pile of routine ones.
+  const badgeCount = alertCounts.total || 0;
+  const badgeColour = alertCounts.critical ? 'error' : 'warning';
 
   const initials = user?.name
     ? user.name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -105,10 +141,10 @@ export default function Navbar({ onMenu, mode, onToggleMode }) {
             <BranchSwitcher />
           </Box>
 
-          {/* Daily summary */}
-          <Tooltip title="Daily summary">
+          {/* Alerts */}
+          <Tooltip title={badgeCount ? `${badgeCount} thing${badgeCount === 1 ? '' : 's'} need attention` : 'Nothing outstanding'}>
             <IconButton
-              onClick={() => setBriefingOpen(true)}
+              onClick={(e) => setBellAnchor(e.currentTarget)}
               size="small"
               sx={{
                 color: 'text.secondary',
@@ -120,7 +156,14 @@ export default function Navbar({ onMenu, mode, onToggleMode }) {
                 '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.12) },
               }}
             >
-              <NotificationsIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
+              <Badge
+                badgeContent={badgeCount}
+                color={badgeColour}
+                max={99}
+                sx={{ '& .MuiBadge-badge': { fontSize: '0.6rem', height: 16, minWidth: 16 } }}
+              >
+                <NotificationsIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
+              </Badge>
             </IconButton>
           </Tooltip>
 
@@ -281,6 +324,17 @@ export default function Navbar({ onMenu, mode, onToggleMode }) {
       </Menu>
 
       <CalculatorDialog open={calculatorOpen} onClose={() => setCalculatorOpen(false)} />
+      <NotificationCentre
+        anchorEl={bellAnchor}
+        open={Boolean(bellAnchor)}
+        onClose={() => setBellAnchor(null)}
+        alerts={alerts}
+        counts={alertCounts}
+        loading={alertsLoading}
+        onRefresh={loadAlerts}
+        onOpenBriefing={() => setBriefingOpen(true)}
+      />
+
       <DailyBriefing open={briefingOpen} onClose={() => setBriefingOpen(false)} />
     </AppBar>
   );

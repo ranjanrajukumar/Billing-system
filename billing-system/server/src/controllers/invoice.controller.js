@@ -8,6 +8,7 @@ import { buildInvoicePdf } from '../services/pdf.service.js';
 import { renderInvoiceHtml } from '../services/invoiceHtml.service.js';
 import { assertAvailable, postStockTransaction } from '../services/stock.service.js';
 import { postSale, reverseEntry } from '../services/accounting.service.js';
+import { priceFor, unitSnapshot } from '../utils/units.js';
 import { recordCouponUse, releaseCouponUse, validateCoupon } from '../services/coupon.service.js';
 import { allocate, consume, restoreFromItems } from '../services/batch.service.js';
 import { withDateRange } from '../utils/dateRange.js';
@@ -73,26 +74,16 @@ export const createInvoice = asyncHandler(async (req, res) => {
       const product = byId.get(Number(item.productId));
       if (!product) throw Object.assign(new Error(`Product ${item.productId} not found`), { status: 404 });
 
-      // Unit conversion: determine how many primary-unit items this line represents.
-      const billedUnit = item.um || product.primaryUnit || 'PCS';
-      const primaryUnit = product.primaryUnit || 'PCS';
-      const factor = Number(product.unitConversionFactor || 1);
-      const qty = Number(item.quantity);
-      // If the billed unit is the primary unit, primaryQty = qty directly.
-      // If it's the secondary unit, multiply by the conversion factor (e.g. 2 BOX × 10 = 20 PCS).
-      // If it IS the primary unit or no conversion applies, primaryQty = qty.
-      const primaryQty = (billedUnit !== primaryUnit && factor > 1)
-        ? qty * factor
-        : qty;
-
+      // Stock is held in the primary unit, so every line carries what it costs
+      // in that unit alongside what the customer was billed.
       return {
         ...item,
-        rate: item.rate ?? product.sellingPrice,
+        // An unpriced line falls back to this customer's tier, and to the
+        // secondary-unit price when they are buying by the box.
+        rate: item.rate ?? priceFor(product, { tier: customer.priceTier, billedUnit: item.um }),
         gstPercent: item.gstPercent ?? product.gstPercent,
-        um: billedUnit,
-        primaryUnit,
-        unitConversionFactor: factor,
-        primaryQty,
+        mrp: item.mrp ?? product.mrp ?? null,
+        ...unitSnapshot(product, item.um, item.quantity),
       };
     });
 
@@ -200,6 +191,7 @@ export const createInvoice = asyncHandler(async (req, res) => {
         amount: Number(item.amount) * share,
         packing: item.packing || null,
         um: item.um || null,
+        mrp: item.mrp ?? null,
         // Unit conversion snapshot for audit trail.
         primaryUnit: item.primaryUnit || null,
         unitConversionFactor: item.unitConversionFactor || 1,
@@ -359,12 +351,25 @@ export const updateInvoice = asyncHandler(async (req, res) => {
     const items = req.body.items.map((item) => {
       const product = byId.get(Number(item.productId));
       if (!product) throw Object.assign(new Error(`Product ${item.productId} not found`), { status: 404 });
-      return { ...item, rate: item.rate ?? product.sellingPrice, gstPercent: item.gstPercent ?? product.gstPercent };
+      return {
+        ...item,
+        rate: item.rate ?? priceFor(product, { tier: customer.priceTier, billedUnit: item.um }),
+        gstPercent: item.gstPercent ?? product.gstPercent,
+        mrp: item.mrp ?? product.mrp ?? null,
+        // An edit converts units exactly as the original sale did. Without this
+        // a bill raised in BOX and later corrected would deduct BOX-many
+        // primary units, drifting stock a little further with every correction.
+        ...unitSnapshot(product, item.um, item.quantity),
+      };
     });
 
     // Checked after the reversal, so an edit that merely moves a line around
-    // is not refused for stock the invoice itself was holding.
-    await assertAvailable(items, branchId, transaction);
+    // is not refused for stock the invoice itself was holding. Availability is
+    // judged in the primary unit, which is what the shelf is counted in.
+    await assertAvailable(
+      items.map((it) => ({ ...it, quantity: it.primaryQty })),
+      branchId, transaction,
+    );
 
     const grossTaxable = items.reduce(
       (sum, item) => sum + Math.max(Number(item.quantity) * Number(item.rate) - Number(item.discount || 0), 0),
@@ -463,6 +468,12 @@ export const updateInvoice = asyncHandler(async (req, res) => {
         amount: Number(item.amount) * share,
         packing: item.packing || null,
         um: item.um || null,
+        mrp: item.mrp ?? null,
+        // The same unit snapshot the original sale stored, so a reprint of an
+        // edited invoice still shows how the quantity was converted.
+        primaryUnit: item.primaryUnit || null,
+        unitConversionFactor: item.unitConversionFactor || 1,
+        primaryQty: Number(item.primaryQty || item.quantity) * share,
         batchId: batch?.id || null,
         batchNumber: batch?.batchNumber || null,
         germinationPercent: batch?.germinationPercent ?? null,
@@ -474,7 +485,7 @@ export const updateInvoice = asyncHandler(async (req, res) => {
       await postStockTransaction({
         productId: item.productId,
         branchId,
-        quantity: -Number(item.quantity),
+        quantity: -Number(item.primaryQty || item.quantity),
         movementType: 'Sale',
         referenceType: 'Invoice Edit',
         referenceId: existing.id,

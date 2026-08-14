@@ -50,6 +50,9 @@ import ChartOfAccounts from '../pages/ChartOfAccounts.jsx';
 import JournalEntries from '../pages/JournalEntries.jsx';
 import Financials from '../pages/Financials.jsx';
 import Approvals from '../pages/Approvals.jsx';
+import CashFlow from '../pages/CashFlow.jsx';
+import StockAudit from '../pages/StockAudit.jsx';
+import WarehouseFloor from '../pages/WarehouseFloor.jsx';
 
 export default function AppRoutes({ mode, onToggleMode }) {
   return (
@@ -103,6 +106,9 @@ export default function AppRoutes({ mode, onToggleMode }) {
           <Route path="journal-entries" element={<JournalEntries />} />
           <Route path="financials" element={<Financials />} />
           <Route path="approvals" element={<Approvals />} />
+          <Route path="cash-flow" element={<CashFlow />} />
+          <Route path="stock-audit" element={<StockAudit />} />
+          <Route path="warehouse-floor" element={<WarehouseFloor />} />
         </Route>
       </Route>
       <Route path="/404" element={<NotFound />} />

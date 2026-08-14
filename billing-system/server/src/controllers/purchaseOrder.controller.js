@@ -7,6 +7,7 @@ import { getPagination, paged } from '../utils/pagination.js';
 import { withDateRange } from '../utils/dateRange.js';
 import { scopedWhere } from '../middleware/branchContext.js';
 import { cancelFor, requestApproval } from '../services/approval.service.js';
+import { unitSnapshot } from '../utils/units.js';
 
 /**
  * Purchase orders.
@@ -42,6 +43,7 @@ function priceItems(items, byId) {
     const taxable = Math.max(quantity * rate - discount, 0);
     const gstAmount = taxable * gstPercent / 100;
 
+    const { primaryQty, ...units } = unitSnapshot(product, item.um, quantity);
     return {
       productId: Number(item.productId),
       quantity,
@@ -50,9 +52,9 @@ function priceItems(items, byId) {
       gstPercent,
       gstAmount,
       amount: taxable + gstAmount,
-      um: item.um || product?.primaryUnit || null,
-      primaryUnit: product?.primaryUnit || null,
-      unitConversionFactor: Number(product?.unitConversionFactor || 1),
+      // An order records what was asked for in the unit it was ordered in;
+      // the conversion matters when the goods arrive, not when they are ordered.
+      ...units,
       remarks: item.remarks || null,
     };
   });

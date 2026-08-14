@@ -3,8 +3,40 @@ import {
   Customer, Invoice, Payment, Product, Purchase, SalesReturn,
 } from '../models/index.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { buildAlerts, summarise } from '../services/notification.service.js';
 
 const round2 = (value) => Math.round(Number(value || 0) * 100) / 100;
+
+/**
+ * The alert feed behind the bell: what needs attention right now.
+ *
+ * Scoped to the caller — their location, their approval queue, and only the
+ * modules this company runs — so nobody is told about a workflow they do not
+ * have or cannot act on.
+ */
+export const alerts = asyncHandler(async (req, res) => {
+  const list = await buildAlerts({
+    branchId: req.branchScope || null,
+    role: req.user?.role,
+    menus: req.user?.menus || [],
+  });
+
+  res.json({ alerts: list, counts: summarise(list) });
+});
+
+/**
+ * Just the badge numbers. Split from the feed because the bell polls this and
+ * the full list is considerably more work to build.
+ */
+export const alertCount = asyncHandler(async (req, res) => {
+  const list = await buildAlerts({
+    branchId: req.branchScope || null,
+    role: req.user?.role,
+    menus: req.user?.menus || [],
+  });
+
+  res.json(summarise(list));
+});
 const isoDate = (date) => date.toISOString().slice(0, 10);
 
 function previousDay() {

@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import { Op } from 'sequelize';
 import { AuditLog, Role, User } from '../models/index.js';
 import { recordAudit } from '../services/audit.service.js';
-import { visibleMenus } from '../config/menu.js';
+import { navigationFor, visibleMenus } from '../config/menu.js';
 import { getConfig } from '../services/config.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { imageColumns } from '../utils/imageUpload.js';
@@ -29,6 +29,8 @@ const buildAuthResponse = async (user) => {
       profileImageUrl: user.profileImageUrl,
       // Menu rights travel with the user so the sidebar can render correctly.
       menus: visibleMenus(user.Role, modules),
+      // The sidebar renders from this, so grouping lives on the server only.
+      navigation: navigationFor(user.Role, modules),
       modules: [...modules],
       businessMode: mode,
     }

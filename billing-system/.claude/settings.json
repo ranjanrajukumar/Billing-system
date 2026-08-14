@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed -n '/export const listSuppliers/,/^}\\);/p' supplier.controller.js)",
+      "Bash(sed -n '/export const listPurchases/,/findAndCountAll/p' purchase.controller.js)",
+      "Bash(curl -s -o /dev/null http://127.0.0.1:4999/api/health)",
+      "Bash(break)"
+    ]
+  }
+}

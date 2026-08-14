@@ -12,6 +12,7 @@ export const listProducts = asyncHandler(async (req, res) => {
   if (req.query.search) {
     where[Op.or] = [
       { productName: { [Op.like]: `%${req.query.search}%` } },
+      { sku: { [Op.like]: `%${req.query.search}%` } },
       { hsnCode: { [Op.like]: `%${req.query.search}%` } },
       { barcode: { [Op.like]: `%${req.query.search}%` } }
     ];

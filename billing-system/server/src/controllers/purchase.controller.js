@@ -6,6 +6,7 @@ import { withDateRange } from '../utils/dateRange.js';
 import { getPagination, paged } from '../utils/pagination.js';
 import { assertAvailable, postStockTransaction } from '../services/stock.service.js';
 import { postPurchase, reverseEntry } from '../services/accounting.service.js';
+import { unitSnapshot } from '../utils/units.js';
 
 async function nextPurchaseNumber(transaction) {
   const year = new Date().getFullYear();
@@ -15,16 +16,7 @@ async function nextPurchaseNumber(transaction) {
 
 function calculateItems(items, byId) {
   const calculated = items.map((item) => {
-    const p = byId.get(Number(item.productId));
-    const primaryUnit = p?.primaryUnit || 'PCS';
-    const secondaryUnit = p?.secondaryUnit || '';
-    const factor = Number(p?.unitConversionFactor || 1);
-    const billedUnit = item.um || primaryUnit;
-
-    const primaryQty = (billedUnit === secondaryUnit && factor > 1)
-      ? Number(item.quantity || 0) * factor
-      : Number(item.quantity || 0);
-
+    const product = byId.get(Number(item.productId));
     const quantity = Number(item.quantity || 0);
     const rate = Number(item.rate || 0);
     const gstPercent = Number(item.gstPercent || 0);
@@ -33,10 +25,9 @@ function calculateItems(items, byId) {
 
     return {
       ...item,
-      um: billedUnit,
-      primaryUnit,
-      unitConversionFactor: factor,
-      primaryQty,
+      // One shared conversion, so a purchase and a sale of the same product in
+      // the same unit always move the same quantity of stock.
+      ...unitSnapshot(product, item.um, quantity),
       quantity,
       rate,
       gstPercent,

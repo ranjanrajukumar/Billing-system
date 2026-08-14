@@ -8,6 +8,7 @@ import { getPagination, paged } from '../utils/pagination.js';
 import { withDateRange } from '../utils/dateRange.js';
 import { scopedWhere } from '../middleware/branchContext.js';
 import { assertAvailable, postStockTransaction } from '../services/stock.service.js';
+import { unitSnapshot } from '../utils/units.js';
 import { postPurchaseReturn, reverseEntry } from '../services/accounting.service.js';
 
 /**
@@ -114,8 +115,6 @@ export const create = asyncHandler(async (req, res) => {
       const gstPercent = Number(item.gstPercent ?? source?.gstPercent ?? product.gstPercent ?? 0);
       const taxable = quantity * rate;
       const gstAmount = taxable * gstPercent / 100;
-      const factor = Number(product.unitConversionFactor || 1);
-      const um = item.um || source?.um || product.primaryUnit;
 
       return {
         productId: product.id,
@@ -127,10 +126,8 @@ export const create = asyncHandler(async (req, res) => {
         gstPercent,
         gstAmount,
         amount: taxable + gstAmount,
-        um,
-        primaryUnit: product.primaryUnit || null,
-        unitConversionFactor: factor,
-        primaryQty: um && um !== product.primaryUnit && factor > 1 ? quantity * factor : quantity,
+        // Returned in whatever unit it was bought in, converted the same way.
+        ...unitSnapshot(product, item.um || source?.um, quantity),
         reason: item.reason || null,
         authadd: req.user.id,
       };

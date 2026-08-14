@@ -9,7 +9,8 @@
     "server": "nodemon src/index.js",
     "start": "node src/index.js",
     "db:sync": "node src/sync.js",
-    "db:migrate": "node src/sync.js"
+    "db:migrate": "node src/sync.js",
+    "db:seed-demo": "node src/seedDemo.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

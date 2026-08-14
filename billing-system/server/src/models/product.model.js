@@ -31,6 +31,11 @@ export default (sequelize) => sequelize.define('Product', {
   serialRequired: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   warrantyMonths: { type: DataTypes.INTEGER, allowNull: true },
 
+  // How this product needs to be stored, which is what put-away rules match on.
+  // 'Standard' for almost everything; the rest exist because a warehouse
+  // genuinely cannot put them just anywhere.
+  storageClass: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'Standard' },
+
   // Variants, kept as plain attributes rather than a variant table: most shops
   // want "red, large" on the product, not a second entity to maintain.
   size: { type: DataTypes.STRING(40), allowNull: true },

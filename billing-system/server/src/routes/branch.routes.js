@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import {
-  createBranch, getBranch, listBranches, productStock, removeBranch, transfer, updateBranch,
+  createBranch, getBranch, listBranches, myLocations, productStock, removeBranch, transfer, updateBranch,
 } from '../controllers/branch.controller.js';
 import { authorize } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validate.js';
@@ -16,6 +16,8 @@ const branchRules = [
 ];
 
 router.get('/', listBranches);
+// Where the signed-in user may work — drives the location switcher.
+router.get('/my-locations', myLocations);
 router.get('/stock/:productId', productStock);
 router.get('/:id', getBranch);
 router.post('/', authorize('Admin', 'Accountant'), branchRules, validate, createBranch);

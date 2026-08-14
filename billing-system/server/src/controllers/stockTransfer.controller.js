@@ -7,6 +7,7 @@ import { getPagination, paged } from '../utils/pagination.js';
 import { withDateRange } from '../utils/dateRange.js';
 import { assertAvailable, postStockTransaction } from '../services/stock.service.js';
 import { cancelFor, isCleared, requestApproval } from '../services/approval.service.js';
+import { returnToBins } from '../services/binStock.service.js';
 
 /**
  * Stock transfers between locations.
@@ -204,11 +205,21 @@ export const reject = asyncHandler(async (req, res) => {
   res.json(result);
 });
 
-/** Marks the goods as picked — no stock moves yet, only the workflow advances. */
+/**
+ * Marks the goods as picked without walking a pick list.
+ *
+ * The bin-aware route (`/warehouse-ops/transfers/:id/pick`) is the real one
+ * where a location uses bins; this stays for locations that do not, and for
+ * correcting a transfer whose picking was done on paper.
+ */
 export const pick = asyncHandler(async (req, res) => {
   const result = await sequelize.transaction(async (transaction) => {
     const transfer = await loadTransfer(req.params.id, transaction, true);
     assertStatus(transfer, ['Approved']);
+
+    for (const item of transfer.StockTransferItems) {
+      await item.update({ pickedQty: Number(item.quantity), authlstedit: req.user.id }, { transaction });
+    }
     await transfer.update({ status: 'Picked', authlstedit: req.user.id }, { transaction });
     return transfer;
   });
@@ -410,6 +421,39 @@ export const cancel = asyncHandler(async (req, res) => {
     const transfer = await loadTransfer(req.params.id, transaction, true);
     if (['Received', 'Cancelled'].includes(transfer.status)) {
       throw Object.assign(new Error(`A ${transfer.status.toLowerCase()} transfer cannot be cancelled`), { status: 409 });
+    }
+
+    // Stock picked but never dispatched is still in the building, on the
+    // packing bench. Cancelling has to put it back on its shelf, or the bins
+    // permanently understate what the location is holding.
+    for (const item of transfer.StockTransferItems) {
+      const onBench = Number(item.pickedQty || 0) - Number(item.dispatchedQty || 0);
+      const takenFrom = item.pickedFrom || [];
+      if (onBench <= 0 || !takenFrom.length) continue;
+
+      // Back to the exact bins it was taken from. Only the portion still on the
+      // bench goes back — anything already dispatched has left the building and
+      // is handled by the stock reversal below.
+      let remaining = onBench;
+      const returning = [];
+      for (const allocation of takenFrom) {
+        if (remaining <= 0) break;
+        const amount = Math.min(Number(allocation.quantity), remaining);
+        returning.push({ ...allocation, pick: amount });
+        remaining -= amount;
+      }
+
+      await returnToBins({
+        branchId: transfer.fromBranchId,
+        productId: item.productId,
+        picks: returning,
+        transaction,
+        userId: req.user.id,
+      });
+      await item.update({
+        pickedQty: Number(item.dispatchedQty || 0),
+        pickedFrom: [],
+      }, { transaction });
     }
 
     for (const item of transfer.StockTransferItems) {

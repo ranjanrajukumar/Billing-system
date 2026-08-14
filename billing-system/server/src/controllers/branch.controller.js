@@ -3,6 +3,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { getPagination, paged } from '../utils/pagination.js';
 import { clearBranchCache } from '../middleware/branchContext.js';
 import { branchTotals, stockByBranch, transferStock } from '../services/stock.service.js';
+import { locationsFor } from '../services/locationAccess.service.js';
 
 export const listBranches = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
@@ -67,6 +68,24 @@ export const removeBranch = asyncHandler(async (req, res) => {
   await branch.update({ detstatus: true, authdel: req.user?.id, delondt: new Date() });
   clearBranchCache();
   res.status(204).send();
+});
+
+/**
+ * The locations the signed-in user may work at.
+ *
+ * Drives the location switcher. Distinct from the full branch list, which an
+ * Admin uses to administer places they may never trade at — offering a user a
+ * location they cannot write to only produces a 403 one click later.
+ */
+export const myLocations = asyncHandler(async (req, res) => {
+  const locations = await locationsFor(req.user);
+  res.json({
+    locations,
+    current: req.branchId,
+    // An Admin may read across everything at once; a granted user works at one
+    // location at a time, so the switcher hides the "all" option for them.
+    canViewAll: req.user?.role === 'Admin',
+  });
 });
 
 /** Per-branch quantities for one product. */

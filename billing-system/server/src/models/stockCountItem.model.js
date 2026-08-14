@@ -6,6 +6,8 @@ export default (sequelize) => sequelize.define('StockCountItem', {
   countId: { type: unsignedInteger(sequelize), allowNull: false },
   productId: { type: unsignedInteger(sequelize), allowNull: false },
   batchId: { type: unsignedInteger(sequelize), allowNull: true },
+  // Set on a cycle count: the line is about this bin, not the whole location.
+  binId: { type: unsignedInteger(sequelize), allowNull: true },
 
   // Frozen when the sheet was created.
   systemQuantity: { type: DataTypes.DECIMAL(14, 3), allowNull: false, defaultValue: 0 },
