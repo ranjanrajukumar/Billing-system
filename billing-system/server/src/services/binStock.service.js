@@ -1,7 +1,9 @@
 import { Op, fn, col } from 'sequelize';
 import {
-  BinStock, BranchStock, Product, ProductBatch, PutAwayRule, WarehouseBin,
+  BinStock, BranchStock, Product, ProductBatch, PutAwayRule, StockOwner, WarehouseBin,
 } from '../models/index.js';
+import { houseOwnerId } from './stockOwner.service.js';
+import { orderByRoute } from '../utils/pickRoute.js';
 
 /**
  * Where in the building the stock is.
@@ -29,9 +31,10 @@ export async function usesBins(branchId, transaction) {
 }
 
 /** Total binned quantity for a product at a location. */
-export async function binnedQty(productId, branchId, transaction) {
+export async function binnedQty(productId, branchId, transaction, ownerId = null) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
   const total = await BinStock.sum('quantity', {
-    where: { productId, branchId, detstatus: false },
+    where: { productId, branchId, ownerId: owner, detstatus: false },
     transaction,
   });
   return qty(total || 0);
@@ -41,39 +44,58 @@ export async function binnedQty(productId, branchId, transaction) {
  * Stock that has arrived at the location but is not in a bin yet — the
  * receiving bay. This is what put-away works through.
  */
-export async function unassignedQty(productId, branchId, transaction) {
-  const held = await BranchStock.findOne({ where: { productId, branchId }, transaction });
-  return qty(Number(held?.stock || 0) - await binnedQty(productId, branchId, transaction));
+export async function unassignedQty(productId, branchId, transaction, ownerId = null) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
+  // Per owner on both sides. Comparing one owner's binned quantity against the
+  // location's combined total would report a client's goods as room to put away
+  // more of ours, and vice versa.
+  const held = await BranchStock.findOne({
+    where: { productId, branchId, ownerId: owner },
+    transaction,
+  });
+  return qty(Number(held?.stock || 0) - await binnedQty(productId, branchId, transaction, owner));
 }
 
 /** Everything waiting to be put away at a location. */
 export async function putAwayQueue(branchId) {
+  // Deliberately across every owner. The storeman puts away whatever arrived
+  // today, and a client's pallet on the receiving bay is just as much in the
+  // way as our own — hiding it would leave work nobody is told about.
   const held = await BranchStock.findAll({
     where: { branchId, stock: { [Op.gt]: 0 } },
-    include: [{
-      model: Product,
-      attributes: ['id', 'productName', 'sku', 'primaryUnit'],
-      where: { detstatus: false },
-    }],
+    include: [
+      {
+        model: Product,
+        attributes: ['id', 'productName', 'sku', 'primaryUnit'],
+        where: { detstatus: false },
+      },
+      { model: StockOwner, attributes: ['id', 'ownerName', 'ownerCode', 'isHouse'], required: false },
+    ],
   });
 
   const binned = await BinStock.findAll({
     where: { branchId, detstatus: false },
-    attributes: ['productId', [fn('SUM', col('quantity')), 'total']],
-    group: ['product_id'],
+    attributes: ['productId', 'ownerId', [fn('SUM', col('quantity')), 'total']],
+    group: ['product_id', 'owner_id'],
     raw: true,
   });
-  const binnedBy = new Map(binned.map((row) => [Number(row.productId), qty(row.total)]));
+  const binnedBy = new Map(binned.map((row) => [`${row.productId}:${row.ownerId}`, qty(row.total)]));
 
   return held
     .map((row) => {
       const onHand = qty(row.stock);
-      const placed = binnedBy.get(row.productId) || 0;
+      const placed = binnedBy.get(`${row.productId}:${row.ownerId}`) || 0;
       return {
+        // Product alone no longer identifies a row: the same product may be
+        // waiting for two different owners.
+        key: `${row.productId}:${row.ownerId}`,
         productId: row.productId,
         productName: row.Product?.productName,
         sku: row.Product?.sku,
         unit: row.Product?.primaryUnit,
+        ownerId: row.ownerId,
+        ownerName: row.StockOwner?.ownerName,
+        isHouse: row.StockOwner?.isHouse !== false,
         onHand,
         binned: placed,
         toPutAway: qty(onHand - placed),
@@ -84,10 +106,11 @@ export async function putAwayQueue(branchId) {
 }
 
 /** Adds to a bin's quantity, creating the row on first use. */
-async function adjustBin({ binId, branchId, productId, batchId = null, delta, transaction, userId }) {
+async function adjustBin({ binId, branchId, productId, batchId = null, delta, transaction, userId, ownerId = null }) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
   const [row] = await BinStock.findOrCreate({
-    where: { binId, productId, batchId: batchId ?? null },
-    defaults: { binId, branchId, productId, batchId: batchId ?? null, quantity: 0, authadd: userId },
+    where: { binId, productId, batchId: batchId ?? null, ownerId: owner },
+    defaults: { binId, branchId, productId, batchId: batchId ?? null, ownerId: owner, quantity: 0, authadd: userId },
     transaction,
     lock: transaction ? transaction.LOCK.UPDATE : undefined,
   });
@@ -111,7 +134,8 @@ async function adjustBin({ binId, branchId, productId, batchId = null, delta, tr
  * quantities could otherwise exceed the location total and start lying about
  * what is in the building.
  */
-export async function putAway({ branchId, binId, productId, batchId = null, quantity: amount, transaction, userId }) {
+export async function putAway({ branchId, binId, productId, batchId = null, quantity: amount, transaction, userId, ownerId = null }) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
   const placing = qty(amount);
   if (!(placing > 0)) {
     throw Object.assign(new Error('Put-away quantity must be greater than zero'), { status: 400 });
@@ -123,7 +147,7 @@ export async function putAway({ branchId, binId, productId, batchId = null, quan
   });
   if (!bin) throw Object.assign(new Error('Bin not found at this location'), { status: 404 });
 
-  const available = await unassignedQty(productId, branchId, transaction);
+  const available = await unassignedQty(productId, branchId, transaction, owner);
   if (placing > available) {
     throw Object.assign(
       new Error(`Only ${available} left to put away — the rest is already binned`),
@@ -133,14 +157,15 @@ export async function putAway({ branchId, binId, productId, batchId = null, quan
 
   // Capacity is advisory: a real warehouse overfills a bin rather than stopping
   // work, so this warns in the response instead of refusing the put-away.
-  const after = await adjustBin({ binId, branchId, productId, batchId, delta: placing, transaction, userId });
+  const after = await adjustBin({ binId, branchId, productId, batchId, delta: placing, transaction, userId, ownerId: owner });
   const overCapacity = bin.capacity !== null && after > Number(bin.capacity);
 
   return { binId, binCode: bin.code, quantity: after, overCapacity };
 }
 
 /** Moves stock from one bin to another within the same location. */
-export async function moveBetweenBins({ branchId, fromBinId, toBinId, productId, batchId = null, quantity: amount, transaction, userId }) {
+export async function moveBetweenBins({ branchId, fromBinId, toBinId, productId, batchId = null, quantity: amount, transaction, userId, ownerId = null }) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
   if (Number(fromBinId) === Number(toBinId)) {
     throw Object.assign(new Error('Source and destination bins must differ'), { status: 400 });
   }
@@ -149,24 +174,43 @@ export async function moveBetweenBins({ branchId, fromBinId, toBinId, productId,
     throw Object.assign(new Error('Move quantity must be greater than zero'), { status: 400 });
   }
 
-  await adjustBin({ binId: fromBinId, branchId, productId, batchId, delta: -moving, transaction, userId });
-  await adjustBin({ binId: toBinId, branchId, productId, batchId, delta: moving, transaction, userId });
+  await adjustBin({ binId: fromBinId, branchId, productId, batchId, delta: -moving, transaction, userId, ownerId: owner });
+  await adjustBin({ binId: toBinId, branchId, productId, batchId, delta: moving, transaction, userId, ownerId: owner });
   return { moved: moving };
 }
 
 /**
  * Suggests where to pick a quantity from.
  *
- * Ordered by expiry first so the oldest lot leaves the building first — in a
- * seed or agri warehouse, picking newest-first is how stock ends up expiring on
- * the shelf. Bin code breaks ties, which keeps a picker walking in a
- * predictable order rather than criss-crossing the building.
+ * Two orderings are at work here and they are kept strictly apart.
+ *
+ * **Which stock to take** is decided by expiry, oldest first, so the lot nearest
+ * its date leaves the building first — in a seed or agri warehouse, picking
+ * newest-first is how stock ends up written off on the shelf. That decision is
+ * made in the allocation loop below and is not negotiable.
+ *
+ * **What order to visit the chosen bins in** is decided afterwards, by the
+ * warehouse's own walking sequence. It changes nothing about what is picked,
+ * only the order the picker collects it in.
+ *
+ * Folding the second into the first would let a shorter walk quietly outrank the
+ * expiry rule, so the allocation runs to completion before the route is applied.
  */
-export async function suggestPick({ branchId, productId, quantity: needed, transaction }) {
+export async function suggestPick({ branchId, productId, quantity: needed, transaction, ownerId = null }) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
   const rows = await BinStock.findAll({
-    where: { branchId, productId, detstatus: false, quantity: { [Op.gt]: 0 } },
+    // Only this owner's goods are pickable. A picker sent to a bin holding a
+    // client's stock would take goods the order has no claim on.
+    where: { branchId, productId, ownerId: owner, detstatus: false, quantity: { [Op.gt]: 0 } },
     include: [
-      { model: WarehouseBin, attributes: ['id', 'code', 'name', 'level'], where: { detstatus: false } },
+      {
+        model: WarehouseBin,
+        // pickSequence comes back on the join that was already being made. The
+        // alternative — reading the bin per suggested pick — is an N+1 on the
+        // hottest query in the building.
+        attributes: ['id', 'code', 'name', 'level', 'pickSequence'],
+        where: { detstatus: false },
+      },
       { model: ProductBatch, attributes: ['id', 'batchNumber', 'expiryDate'], required: false },
     ],
     transaction,
@@ -190,6 +234,10 @@ export async function suggestPick({ branchId, productId, quantity: needed, trans
       binId: row.binId,
       binCode: row.WarehouseBin?.code,
       binName: row.WarehouseBin?.name,
+      // The bin's fixed position in the building's walk. Null where the layout
+      // has not been sequenced yet, which routing handles rather than rejects.
+      pickSequence: row.WarehouseBin?.pickSequence ?? null,
+      productId,
       batchId: row.batchId,
       batchNumber: row.ProductBatch?.batchNumber || null,
       expiryDate: row.ProductBatch?.expiryDate || null,
@@ -199,10 +247,12 @@ export async function suggestPick({ branchId, productId, quantity: needed, trans
     outstanding = qty(outstanding - take);
   }
 
+  // The walk is applied only now, to picks the expiry rule has already chosen.
+  // Quantities and lots are untouched; only the order changes.
+  const routed = orderByRoute(picks);
+
   return {
-    picks,
-    // A shortfall usually means stock arrived and was never put away, so the
-    // message points at that rather than implying the stock is missing.
+    picks: routed,
     shortfall: outstanding,
     complete: outstanding <= 0,
   };
@@ -213,7 +263,8 @@ export async function suggestPick({ branchId, productId, quantity: needed, trans
  * the packing bench, still inside the building, so the location total is
  * untouched until they are actually dispatched.
  */
-export async function pick({ branchId, productId, picks = [], transaction, userId }) {
+export async function pick({ branchId, productId, picks = [], transaction, userId, ownerId = null }) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
   let picked = 0;
   for (const line of picks) {
     const amount = qty(line.pick ?? line.quantity);
@@ -226,14 +277,88 @@ export async function pick({ branchId, productId, picks = [], transaction, userI
       delta: -amount,
       transaction,
       userId,
+      ownerId: owner,
     });
     picked = qty(picked + amount);
   }
   return { picked };
 }
 
+/**
+ * Brings bins back within the location total after stock has left.
+ *
+ * The invariant is `sum(bin_stock) ≤ branch_stock`, and there are two ways
+ * goods leave a location. One picks them off a shelf first — the bin is reduced
+ * at pick time, and by the time the location total falls the two already agree.
+ * The other does not: a transfer dispatch, a damage write-off, a return to a
+ * supplier all reduce the location directly, and the bins are left insisting
+ * they hold stock the building no longer has.
+ *
+ * That second case is the bug this exists to close. It cannot be fixed by
+ * remembering to release bins in each of those callers, because the next
+ * outbound path somebody writes will forget — so it is enforced centrally, at
+ * the one place stock is allowed to move.
+ *
+ * Written as a clamp rather than a deduction, which makes it safe on every
+ * path: it acts only when the bins genuinely exceed the total, so the
+ * already-picked case is a no-op and nothing is ever taken off a shelf twice.
+ *
+ * Loose stock in the receiving bay absorbs the loss first — it is not in a bin,
+ * so it needs no releasing, and it is what a store hand would reach for anyway
+ * rather than breaking down a put-away pallet.
+ */
+export async function releaseExcessFromBins({
+  branchId, productId, ownerId = null, transaction, userId = null,
+}) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
+  if (!await usesBins(branchId, transaction)) return { released: 0 };
+
+  const held = await BranchStock.findOne({
+    where: { branchId, productId, ownerId: owner },
+    transaction,
+  });
+  const onHand = qty(held?.stock || 0);
+  const binned = await binnedQty(productId, branchId, transaction, owner);
+
+  let excess = qty(binned - onHand);
+  if (excess <= 0) return { released: 0 };
+
+  // Oldest lot first, matching the pick rule — the goods leaving the building
+  // should be the same ones a picker would have taken.
+  const rows = await BinStock.findAll({
+    where: { branchId, productId, ownerId: owner, detstatus: false, quantity: { [Op.gt]: 0 } },
+    include: [
+      { model: WarehouseBin, attributes: ['id', 'code'], where: { detstatus: false } },
+      { model: ProductBatch, attributes: ['id', 'expiryDate'], required: false },
+    ],
+    transaction,
+  });
+
+  const sorted = rows.sort((a, b) => {
+    const aExpiry = a.ProductBatch?.expiryDate || '9999-12-31';
+    const bExpiry = b.ProductBatch?.expiryDate || '9999-12-31';
+    if (aExpiry !== bExpiry) return aExpiry < bExpiry ? -1 : 1;
+    return String(a.WarehouseBin?.code || '').localeCompare(String(b.WarehouseBin?.code || ''));
+  });
+
+  const from = [];
+  for (const row of sorted) {
+    if (excess <= 0) break;
+    const take = Math.min(qty(row.quantity), excess);
+    await row.update({
+      quantity: qty(Number(row.quantity) - take),
+      authlstedit: userId ?? null,
+    }, { transaction });
+    from.push({ binId: row.binId, binCode: row.WarehouseBin?.code, quantity: take });
+    excess = qty(excess - take);
+  }
+
+  return { released: from.reduce((s, f) => s + f.quantity, 0), from };
+}
+
 /** Puts picked stock back on the shelves, when a pick is undone or cancelled. */
-export async function returnToBins({ branchId, productId, picks = [], transaction, userId }) {
+export async function returnToBins({ branchId, productId, picks = [], transaction, userId, ownerId = null }) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
   for (const line of picks) {
     const amount = qty(line.pick ?? line.quantity);
     if (!(amount > 0)) continue;
@@ -245,6 +370,7 @@ export async function returnToBins({ branchId, productId, picks = [], transactio
       delta: amount,
       transaction,
       userId,
+      ownerId: owner,
     });
   }
 }
@@ -459,15 +585,18 @@ export async function reconcileBins(branchId = null) {
 
   const binned = await BinStock.findAll({
     where,
-    attributes: ['productId', 'branchId', [fn('SUM', col('quantity')), 'total']],
-    group: ['product_id', 'branch_id'],
+    attributes: ['productId', 'branchId', 'ownerId', [fn('SUM', col('quantity')), 'total']],
+    group: ['product_id', 'branch_id', 'owner_id'],
     raw: true,
   });
 
   const rows = [];
   for (const row of binned) {
+    // Owner is part of the comparison. Summing every owner's binned quantity
+    // against one owner's location balance would report perfectly correct
+    // stock as drift the moment a second owner stored the same product.
     const held = await BranchStock.findOne({
-      where: { productId: row.productId, branchId: row.branchId },
+      where: { productId: row.productId, branchId: row.branchId, ownerId: row.ownerId },
     });
     const onHand = qty(held?.stock || 0);
     const placed = qty(row.total);
@@ -479,6 +608,7 @@ export async function reconcileBins(branchId = null) {
       productName: product?.productName,
       sku: product?.sku,
       branchId: Number(row.branchId),
+      ownerId: Number(row.ownerId),
       onHand,
       binned: placed,
       excess: qty(placed - onHand),

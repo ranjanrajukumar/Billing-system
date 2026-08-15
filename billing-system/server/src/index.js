@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import app from './app.js';
 import { sequelize } from './models/index.js';
 import { migrateDatabase } from './config/migration.js';
+import { startScheduler } from './jobs/scheduler.js';
 import { initBackupSchedule } from './services/backupScheduler.js';
 
 dotenv.config();
@@ -33,6 +34,7 @@ async function start() {
   try {
     if (process.env.AUTO_MIGRATE !== 'false') {
       await migrateDatabase();
+      startScheduler();
     } else {
       await sequelize.authenticate();
     }

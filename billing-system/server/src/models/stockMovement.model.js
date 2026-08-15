@@ -31,6 +31,11 @@ export default (sequelize) => sequelize.define('StockMovement', {
   // backward compatibility; locationType says whether it is a branch or a
   // warehouse, both of which live in the `branches` table.
   locationType: { ...enumType(sequelize, ['Branch', 'Warehouse']), allowNull: true, defaultValue: 'Branch' },
+  // Whose stock moved. Without it the ledger cannot answer "what did we handle
+  // for this client last month", which is the question a 3PL invoice is built
+  // from — and it is the only record of that, since balances show the present
+  // and say nothing about how much passed through.
+  ownerId: { type: unsignedInteger(sequelize), allowNull: false, defaultValue: 1 },
   unitCost: { type: DataTypes.DECIMAL(14, 4), allowNull: true },
   batchId: { type: unsignedInteger(sequelize), allowNull: true },
   serialNumber: { type: DataTypes.STRING(120), allowNull: true },
@@ -54,6 +59,9 @@ export default (sequelize) => sequelize.define('StockMovement', {
     { fields: ['movement_type'] },
     { fields: ['reference_type', 'reference_id'] },
     { fields: ['product_id', 'branch_id'] },
-    { fields: ['transaction_date'] }
+    { fields: ['transaction_date'] },
+    // Handling charges are billed from this: every in and out for one client
+    // over a period.
+    { fields: ['owner_id', 'transaction_date'] }
   ]
 });

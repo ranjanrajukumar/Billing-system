@@ -35,6 +35,11 @@ import AuditLogModel from './auditLog.model.js';
 import KhataEntryModel from './khataEntry.model.js';
 import BranchModel from './branch.model.js';
 import BranchStockModel from './branchStock.model.js';
+import StockOwnerModel from './stockOwner.model.js';
+import IdempotencyKeyModel from './idempotencyKey.model.js';
+import WarehouseExceptionModel from './warehouseException.model.js';
+import WarehouseTaskModel from './warehouseTask.model.js';
+import WarehouseStorageSnapshotModel from './warehouseStorageSnapshot.model.js';
 import CouponModel from './coupon.model.js';
 import CouponUsageModel from './couponUsage.model.js';
 import LoyaltyTransactionModel from './loyaltyTransaction.model.js';
@@ -105,6 +110,11 @@ export const InvoiceTemplate = InvoiceTemplateModel(sequelize);
 export const AuditLog = AuditLogModel(sequelize);
 export const KhataEntry = KhataEntryModel(sequelize);
 export const Branch = BranchModel(sequelize);
+export const StockOwner = StockOwnerModel(sequelize);
+export const IdempotencyKey = IdempotencyKeyModel(sequelize);
+export const WarehouseException = WarehouseExceptionModel(sequelize);
+export const WarehouseTask = WarehouseTaskModel(sequelize);
+export const WarehouseStorageSnapshot = WarehouseStorageSnapshotModel(sequelize);
 export const BranchStock = BranchStockModel(sequelize);
 export const Coupon = CouponModel(sequelize);
 export const CouponUsage = CouponUsageModel(sequelize);
@@ -218,6 +228,43 @@ User.belongsTo(Branch, { foreignKey: 'branchId' });
 
 Branch.hasMany(BranchStock, { foreignKey: 'branchId' });
 BranchStock.belongsTo(Branch, { foreignKey: 'branchId' });
+// ---- Foundation: exceptions, tasks, snapshots ----
+WarehouseException.belongsTo(Branch, { foreignKey: 'branchId' });
+WarehouseException.belongsTo(WarehouseBin, { foreignKey: 'binId' });
+WarehouseException.belongsTo(Product, { foreignKey: 'productId' });
+WarehouseException.belongsTo(ProductBatch, { foreignKey: 'batchId' });
+WarehouseException.belongsTo(StockOwner, { foreignKey: 'ownerId' });
+WarehouseException.belongsTo(User, { foreignKey: 'assignedUserId', as: 'assignedTo' });
+WarehouseException.belongsTo(User, { foreignKey: 'reportedByUserId', as: 'reportedBy' });
+WarehouseException.belongsTo(User, { foreignKey: 'resolvedByUserId', as: 'resolvedBy' });
+
+WarehouseTask.belongsTo(Branch, { foreignKey: 'branchId' });
+WarehouseTask.belongsTo(WarehouseBin, { foreignKey: 'sourceBinId', as: 'sourceBin' });
+WarehouseTask.belongsTo(WarehouseBin, { foreignKey: 'destinationBinId', as: 'destinationBin' });
+WarehouseTask.belongsTo(Product, { foreignKey: 'productId' });
+WarehouseTask.belongsTo(ProductBatch, { foreignKey: 'batchId' });
+WarehouseTask.belongsTo(StockOwner, { foreignKey: 'ownerId' });
+WarehouseTask.belongsTo(User, { foreignKey: 'assignedUserId', as: 'assignedTo' });
+
+WarehouseStorageSnapshot.belongsTo(Branch, { foreignKey: 'branchId' });
+WarehouseStorageSnapshot.belongsTo(Product, { foreignKey: 'productId' });
+WarehouseStorageSnapshot.belongsTo(StockOwner, { foreignKey: 'ownerId' });
+// binId and batchId are deliberately plain columns with no foreign key.
+//
+// A snapshot is a historical billing record and has to outlive the things it
+// describes: a bin can be renamed away or a warehouse reorganised years after
+// an invoice was sent, and none of that may make the invoice unreproducible or
+// block the deletion. They also carry 0 rather than NULL when absent, so the
+// unique key on the snapshot grain behaves the same on every database — and a
+// foreign key would reject that sentinel outright.
+
+IdempotencyKey.belongsTo(User, { foreignKey: 'userId' });
+
+StockOwner.hasMany(BranchStock, { foreignKey: 'ownerId' });
+BranchStock.belongsTo(StockOwner, { foreignKey: 'ownerId' });
+StockOwner.hasMany(BinStock, { foreignKey: 'ownerId' });
+BinStock.belongsTo(StockOwner, { foreignKey: 'ownerId' });
+StockMovement.belongsTo(StockOwner, { foreignKey: 'ownerId' });
 Product.hasMany(BranchStock, { foreignKey: 'productId' });
 BranchStock.belongsTo(Product, { foreignKey: 'productId' });
 

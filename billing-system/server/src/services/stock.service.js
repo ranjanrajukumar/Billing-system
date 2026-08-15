@@ -1,6 +1,7 @@
 import { fn, col, Op } from 'sequelize';
 import { Branch, BranchStock, Product, StockMovement } from '../models/index.js';
 import { getConfig } from './config.service.js';
+import { houseOwnerId } from './stockOwner.service.js';
 
 /**
  * The stock engine.
@@ -17,19 +18,31 @@ import { getConfig } from './config.service.js';
  * the one bug an inventory system cannot recover from.
  */
 
-async function stockRow(productId, branchId, transaction) {
+async function stockRow(productId, branchId, ownerId, transaction) {
   const [row] = await BranchStock.findOrCreate({
-    where: { branchId, productId },
-    defaults: { branchId, productId, stock: 0 },
+    where: { branchId, productId, ownerId },
+    defaults: { branchId, productId, ownerId, stock: 0 },
     transaction,
     lock: transaction ? transaction.LOCK.UPDATE : undefined,
   });
   return row;
 }
 
-/** Recomputes the product's mirrored total from its location rows. */
+/**
+ * Recomputes the product's mirrored total from its location rows.
+ *
+ * House stock only, deliberately. `products.stock` is what the catalogue, the
+ * low-stock alert and the dashboard read, and all three mean "how much can we
+ * sell". Counting a client's goods there would put a warehouse full of somebody
+ * else's stock into your own availability, silence reorder alerts on goods you
+ * have none of, and value another company's inventory as your asset.
+ */
 async function syncProductTotal(productId, transaction) {
-  const total = await BranchStock.sum('stock', { where: { productId }, transaction });
+  const house = await houseOwnerId(transaction);
+  const total = await BranchStock.sum('stock', {
+    where: { productId, ownerId: house },
+    transaction,
+  });
   await Product.update(
     { stock: Number(total || 0) },
     { where: { id: productId }, transaction },
@@ -37,9 +50,34 @@ async function syncProductTotal(productId, transaction) {
   return Number(total || 0);
 }
 
-export async function getBranchStock(productId, branchId, transaction) {
-  const row = await BranchStock.findOne({ where: { branchId, productId }, transaction });
+/**
+ * One owner's balance at one location. Defaults to the house, so every caller
+ * that predates ownership keeps asking the same question and getting the same
+ * answer.
+ */
+export async function getBranchStock(productId, branchId, transaction, ownerId = null) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
+  const row = await BranchStock.findOne({
+    where: { branchId, productId, ownerId: owner },
+    transaction,
+  });
   return Number(row?.stock || 0);
+}
+
+/**
+ * Everything physically at a location, whoever owns it.
+ *
+ * This is the figure a stock-take produces — a counter walking the aisles
+ * counts what is on the shelf and cannot see ownership — so reconciliation and
+ * capacity checks use it, while anything about selling or valuing uses the
+ * house balance instead.
+ */
+export async function getPhysicalStock(productId, branchId, transaction) {
+  const total = await BranchStock.sum('stock', {
+    where: { branchId, productId },
+    transaction,
+  });
+  return Number(total || 0);
 }
 
 /**
@@ -48,8 +86,9 @@ export async function getBranchStock(productId, branchId, transaction) {
  * Refuses to go negative unless the company has allowed it, or the caller has
  * already validated availability and says so with `allowNegative`.
  */
-export async function adjustStock({ productId, branchId, delta, transaction, userId, allowNegative = false }) {
-  const row = await stockRow(productId, branchId, transaction);
+export async function adjustStock({ productId, branchId, delta, transaction, userId, allowNegative = false, ownerId = null }) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
+  const row = await stockRow(productId, branchId, owner, transaction);
   const previous = Number(row.stock);
   const next = previous + Number(delta);
 
@@ -92,6 +131,7 @@ export async function postStockTransaction({
   transaction,
   userId = null,
   allowNegative = false,
+  ownerId = null,
 }) {
   const qty = Number(quantity);
   if (!Number.isFinite(qty)) {
@@ -99,15 +139,36 @@ export async function postStockTransaction({
   }
   if (qty === 0) return null;
 
+  // Resolved once and used for both the balance and the ledger row, so the two
+  // can never disagree about whose goods moved.
+  const owner = ownerId ?? await houseOwnerId(transaction);
+
   const { previous, current } = await adjustStock({
-    productId, branchId, delta: qty, transaction, userId, allowNegative,
+    productId, branchId, delta: qty, transaction, userId, allowNegative, ownerId: owner,
   });
+
+  // Goods that left the building must leave their shelves too.
+  //
+  // Some outbound paths pick from a bin first and have already done this; a
+  // transfer dispatch, a damage write-off or a supplier return do not, and would
+  // otherwise leave the bins claiming stock the location no longer holds. Doing
+  // it here rather than in each of those callers is deliberate — the next
+  // outbound path somebody writes would forget, and the resulting drift only
+  // shows up weeks later at a stock count.
+  //
+  // Safe on every path because it clamps rather than deducts: where the pick
+  // already reduced the bin, there is no excess and nothing happens.
+  if (qty < 0) {
+    const { releaseExcessFromBins } = await import('./binStock.service.js');
+    await releaseExcessFromBins({ branchId, productId, ownerId: owner, transaction, userId });
+  }
 
   const location = await Branch.findByPk(branchId, { transaction, attributes: ['id', 'locationType'] });
 
   return StockMovement.create({
     productId,
     branchId,
+    ownerId: owner,
     locationType: location?.locationType || 'Branch',
     movementType,
     quantity: qty,
@@ -133,8 +194,9 @@ export async function postStockTransaction({
  * Used when a product is created or its stock is edited directly, where the
  * number given is the new truth rather than a delta.
  */
-export async function setBranchStock({ productId, branchId, quantity, transaction, userId, movementType = 'Opening Stock', notes = null }) {
-  const row = await stockRow(productId, branchId, transaction);
+export async function setBranchStock({ productId, branchId, quantity, transaction, userId, movementType = 'Opening Stock', notes = null, ownerId = null }) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
+  const row = await stockRow(productId, branchId, owner, transaction);
   const previous = Number(row.stock);
   const next = Number(quantity) || 0;
   await row.update({ stock: next, authlstedit: userId ?? null }, { transaction });
@@ -145,6 +207,7 @@ export async function setBranchStock({ productId, branchId, quantity, transactio
     await StockMovement.create({
       productId,
       branchId,
+      ownerId: owner,
       locationType: location?.locationType || 'Branch',
       movementType,
       quantity: next - previous,
@@ -163,13 +226,21 @@ export async function setBranchStock({ productId, branchId, quantity, transactio
   return total;
 }
 
-/** Checks availability for several lines at once before any of them are applied. */
-export async function assertAvailable(items, branchId, transaction) {
+/**
+ * Checks availability for several lines at once before any of them are applied.
+ *
+ * Availability is per owner. A client's forty units sitting on the next shelf
+ * do not make your sixty into a hundred, and a check that summed them would let
+ * a bill be raised against goods that are not yours to sell.
+ */
+export async function assertAvailable(items, branchId, transaction, ownerId = null) {
   const { allowNegativeStock } = await getConfig();
   if (allowNegativeStock) return;
 
+  const owner = ownerId ?? await houseOwnerId(transaction);
+
   for (const item of items) {
-    const available = await getBranchStock(item.productId, branchId, transaction);
+    const available = await getBranchStock(item.productId, branchId, transaction, owner);
     if (available < Number(item.quantity)) {
       const product = await Product.findByPk(item.productId, { transaction });
       throw Object.assign(
@@ -188,6 +259,10 @@ export async function assertAvailable(items, branchId, transaction) {
 export async function transferStock({
   productId, fromBranchId, toBranchId, quantity, transaction, userId,
   referenceType = 'Stock Transfer', referenceId = null, referenceNumber = null, batchId = null, unitCost = null,
+  // Moving goods between your own buildings does not change who owns them, so
+  // both legs carry the same owner. A transfer that changed ownership would be
+  // a sale or a handover, not a transfer.
+  ownerId = null,
 }) {
   if (Number(fromBranchId) === Number(toBranchId)) {
     throw Object.assign(new Error('Source and destination locations must differ'), { status: 400 });
@@ -196,29 +271,40 @@ export async function transferStock({
     throw Object.assign(new Error('Transfer quantity must be greater than zero'), { status: 400 });
   }
 
+  const owner = ownerId ?? await houseOwnerId(transaction);
+
   await postStockTransaction({
     productId, branchId: fromBranchId, quantity: -Number(quantity), movementType: 'Transfer Out',
-    referenceType, referenceId, referenceNumber, batchId, unitCost, transaction, userId,
+    referenceType, referenceId, referenceNumber, batchId, unitCost, transaction, userId, ownerId: owner,
   });
   await postStockTransaction({
     productId, branchId: toBranchId, quantity: Number(quantity), movementType: 'Transfer In',
-    referenceType, referenceId, referenceNumber, batchId, unitCost, transaction, userId,
+    referenceType, referenceId, referenceNumber, batchId, unitCost, transaction, userId, ownerId: owner,
   });
 }
 
 /** Per-location breakdown for one product, used by the inventory screens. */
-export async function stockByBranch(productId) {
+export async function stockByBranch(productId, ownerId = null) {
+  const owner = ownerId ?? await houseOwnerId();
   return BranchStock.findAll({
-    where: { productId },
+    where: { productId, ownerId: owner },
     attributes: ['branchId', 'stock'],
     include: [{ model: Branch, attributes: ['branchName', 'branchCode', 'locationType'] }],
     order: [['branchId', 'ASC']],
   });
 }
 
-/** Totals per location across all products, for location-level summaries. */
-export async function branchTotals() {
+/**
+ * Totals per location across all products, for location-level summaries.
+ *
+ * House goods only, matching what these summaries are read as — "how much stock
+ * do we have here". `physical: true` gives what is actually in the building
+ * instead, which is what a capacity or stock-take view wants.
+ */
+export async function branchTotals({ physical = false } = {}) {
+  const where = physical ? {} : { ownerId: await houseOwnerId() };
   return BranchStock.findAll({
+    where,
     attributes: ['branchId', [fn('SUM', col('stock')), 'totalStock']],
     group: ['branchId'],
     raw: true,
@@ -229,10 +315,15 @@ export async function branchTotals() {
  * The stock ledger for a product, optionally at one location — the audit trail
  * that turns a number on screen back into the documents that produced it.
  */
-export async function stockLedger({ productId, branchId, from, to, limit = 500 }) {
+export async function stockLedger({ productId, branchId, from, to, limit = 500, ownerId = null }) {
   const where = { detstatus: false };
   if (productId) where.productId = productId;
   if (branchId) where.branchId = branchId;
+  // Unfiltered on purpose when no owner is named: the ledger is the audit
+  // trail of what physically happened in the building, and hiding a client's
+  // movements from it by default would make the record incomplete. Callers that
+  // mean "our stock only" say so.
+  if (ownerId) where.ownerId = Number(ownerId);
   if (from || to) {
     where.addondt = {};
     if (from) where.addondt[Op.gte] = new Date(from);
@@ -250,9 +341,20 @@ export async function stockLedger({ productId, branchId, from, to, limit = 500 }
   });
 }
 
-/** Stock valuation at cost, per location and in total. */
-export async function stockValuation(branchId = null) {
-  const where = {};
+/**
+ * Stock valuation at cost, per location and in total.
+ *
+ * House goods only unless an owner is named. This is the figure that reaches
+ * the balance sheet, and a client's goods in your warehouse are not your asset
+ * however much floor space they take up — valuing them would overstate the
+ * company by the whole of somebody else's inventory.
+ *
+ * Passing an owner values that client's holding instead, which is what an
+ * insurance declaration or a client statement needs; it is never added to
+ * the company's own figure.
+ */
+export async function stockValuation(branchId = null, ownerId = null) {
+  const where = { ownerId: ownerId ?? await houseOwnerId() };
   if (branchId) where.branchId = branchId;
 
   const rows = await BranchStock.findAll({

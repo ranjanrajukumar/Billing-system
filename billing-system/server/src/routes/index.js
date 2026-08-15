@@ -36,6 +36,8 @@ import purchaseOrderRoutes from './purchaseOrder.routes.js';
 import grnRoutes from './grn.routes.js';
 import purchaseReturnRoutes from './purchaseReturn.routes.js';
 import warehouseRoutes from './warehouse.routes.js';
+import stockOwnerRoutes from './stockOwner.routes.js';
+import warehouseFoundationRoutes from './warehouseFoundation.routes.js';
 import expenseRoutes from './expense.routes.js';
 import cashRoutes from './cash.routes.js';
 import accountingRoutes from './accounting.routes.js';
@@ -92,6 +94,11 @@ router.use('/purchase-orders', purchaseOrderRoutes);
 router.use('/grn', grnRoutes);
 router.use('/purchase-returns', purchaseReturnRoutes);
 router.use('/warehouses', warehouseRoutes);
+// Whose goods are on the shelf — one row for a shop, one per client for a 3PL.
+router.use('/stock-owners', stockOwnerRoutes);
+// Bin routing, exceptions, tasks and storage snapshots — the layer picking,
+// replenishment, packing and billing are built on.
+router.use('/warehouse', warehouseFoundationRoutes);
 router.use('/expenses', expenseRoutes);
 router.use('/cash', cashRoutes);
 router.use('/accounting', accountingRoutes);

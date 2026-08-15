@@ -64,6 +64,10 @@ export const productRules = [
 
   // Storage. A class the warehouse does not recognise would silently never
   // match a put-away rule, so it is refused rather than accepted and ignored.
+  // Space and weight per unit, used by storage billing and shelf limits.
+  body('unitVolume').optional({ checkFalsy: true }).isFloat({ min: 0 }),
+  body('unitWeightKg').optional({ checkFalsy: true }).isFloat({ min: 0 }),
+
   body('storageClass').optional({ checkFalsy: true })
     .isIn(['Standard', 'FastMoving', 'Heavy', 'Cold', 'Hazardous', 'Fragile'])
     .withMessage('Unknown storage class'),

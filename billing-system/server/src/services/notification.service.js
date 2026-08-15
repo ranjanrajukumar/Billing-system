@@ -1,7 +1,7 @@
 import { Op } from 'sequelize';
 import {
   ApprovalRequest, CashRegister, Grn, Invoice, Payment, Product, ProductBatch,
-  Purchase, PurchaseOrder, StockTransfer,
+  Purchase, PurchaseOrder, SalesOrder, StockTransfer,
 } from '../models/index.js';
 import { getConfig } from './config.service.js';
 import { reconcileStock } from './stockAudit.service.js';
@@ -201,6 +201,48 @@ export async function buildAlerts({ branchId = null, role = null, menus = [] } =
       title: 'Stock waiting to be received',
       detail: `${inTransit} transfer${inTransit === 1 ? ' has' : 's have'} been dispatched but not received — that stock cannot be sold yet`,
       count: inTransit, link: '/stock-transfers', module: 'stockTransfers', menu: 'stockTransfers',
+    });
+  });
+
+  // ---- Fulfilment ----
+  await safely('orders waiting on the warehouse', async () => {
+    // Orders somebody has started and left. Allocation and picking hold stock
+    // back from every other order without moving it anywhere, so an order
+    // abandoned halfway quietly makes goods unsellable — the shelf still shows
+    // them, but nothing else may promise them.
+    const stalled = await SalesOrder.count({
+      where: {
+        detstatus: false,
+        // ReadyToShip is deliberately absent: it is finished warehouse work
+        // waiting on a van, and it has its own alert. Counting it here too
+        // would report the same order twice under two different meanings.
+        fulfilmentStatus: { [Op.in]: ['Allocated', 'Picking', 'Picked', 'Packed'] },
+        ...(branchId ? { fulfilFromBranchId: branchId } : {}),
+      },
+    });
+
+    add({
+      key: 'orders-in-fulfilment', severity: 'warning', category: 'Stock',
+      title: 'Orders part-way through the warehouse',
+      detail: `${stalled} order${stalled === 1 ? ' is' : 's are'} allocated or picked but not dispatched — that stock is held back from every other order`,
+      count: stalled, link: '/warehouse-floor', module: 'warehouses', menu: 'warehouseOps',
+    });
+  });
+
+  await safely('orders ready to dispatch', async () => {
+    const ready = await SalesOrder.count({
+      where: {
+        detstatus: false,
+        fulfilmentStatus: 'ReadyToShip',
+        ...(branchId ? { fulfilFromBranchId: branchId } : {}),
+      },
+    });
+
+    add({
+      key: 'orders-ready-to-ship', severity: 'info', category: 'Stock',
+      title: 'Packed and waiting for the van',
+      detail: `${ready} order${ready === 1 ? ' is' : 's are'} boxed and ready to go`,
+      count: ready, link: '/warehouse-floor', module: 'warehouses', menu: 'warehouseOps',
     });
   });
 

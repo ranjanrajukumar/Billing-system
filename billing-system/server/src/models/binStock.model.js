@@ -27,6 +27,11 @@ export default (sequelize) => sequelize.define('BinStock', {
   productId: { type: unsignedInteger(sequelize), allowNull: false },
   // Lot-tracked goods are binned per lot, so a picker is told which lot to take.
   batchId: { type: unsignedInteger(sequelize), allowNull: true },
+  // Denormalised from `branch_stock` so a bin query never has to join to find
+  // out whose goods it is holding. Two owners may share a bin; their quantities
+  // stay separate rows, because mixing them would make a client's stock
+  // impossible to pick out at counting time.
+  ownerId: { type: unsignedInteger(sequelize), allowNull: false, defaultValue: 1 },
 
   quantity: { type: DataTypes.DECIMAL(14, 3), allowNull: false, defaultValue: 0 },
 
@@ -41,8 +46,9 @@ export default (sequelize) => sequelize.define('BinStock', {
   updatedAt: 'editondt',
   tableName: 'bin_stock',
   indexes: [
-    { unique: true, fields: ['bin_id', 'product_id', 'batch_id'] },
+    { unique: true, fields: ['bin_id', 'product_id', 'batch_id', 'owner_id'] },
     { fields: ['branch_id', 'product_id'] },
-    { fields: ['product_id'] }
+    { fields: ['product_id'] },
+    { fields: ['owner_id'] }
   ]
 });

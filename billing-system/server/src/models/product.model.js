@@ -36,6 +36,16 @@ export default (sequelize) => sequelize.define('Product', {
   // genuinely cannot put them just anywhere.
   storageClass: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'Standard' },
 
+  // How much space and weight one unit takes. Both optional: most shops never
+  // measure a product, and everything falls back to counting units.
+  //
+  // Volume is what a warehouse actually rents out, so storage charges bill on
+  // it where it is known — a pallet of pillows and a pallet of tiles are one
+  // unit each and cost very different amounts to store. Weight is the limit a
+  // shelf fails on rather than the one it fills on.
+  unitVolume: { type: DataTypes.DECIMAL(12, 6), allowNull: true },
+  unitWeightKg: { type: DataTypes.DECIMAL(12, 4), allowNull: true },
+
   // Variants, kept as plain attributes rather than a variant table: most shops
   // want "red, large" on the product, not a second entity to maintain.
   size: { type: DataTypes.STRING(40), allowNull: true },

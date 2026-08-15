@@ -54,6 +54,10 @@ export const MODULES = [
   // every rupee of cost and cash without ever meeting a journal voucher.
   { key: 'accounting', label: 'Accounting (double-entry)', mode: 'Advanced', menus: ['chartOfAccounts', 'journalEntries', 'financials'] },
   { key: 'approvals', label: 'Approval Workflow', mode: 'Advanced', menus: ['approvals'] },
+  // Storing goods that belong to other companies. Off by default even in
+  // Advanced mode: most warehouses hold only their own stock, and a business
+  // that owns everything it stores should never be asked whose goods these are.
+  { key: 'thirdParty', label: 'Third-Party (3PL) Stock', mode: 'Advanced', default: false, menus: ['stockOwners'] },
 ];
 
 export const MODULE_BY_KEY = Object.fromEntries(MODULES.map((m) => [m.key, m]));
@@ -76,8 +80,12 @@ export function resolveModules({ mode = 'Basic', flags = {} } = {}) {
   for (const module of availableModules(mode)) {
     if (module.core) { enabled.add(module.key); continue; }
     const flag = flags[module.key];
-    // Unset means "follow the mode": Advanced modules default on in Advanced.
-    if (flag === undefined ? true : Boolean(flag)) enabled.add(module.key);
+    // Unset means "follow the mode": Advanced modules default on in Advanced,
+    // unless the module opts out with `default: false`. That opt-out is for
+    // features which change how the rest of the system behaves rather than
+    // simply adding a screen — turning one on should be a decision, not
+    // something a company discovers it has.
+    if (flag === undefined ? module.default !== false : Boolean(flag)) enabled.add(module.key);
   }
   return enabled;
 }

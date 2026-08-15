@@ -10,6 +10,11 @@ export default (sequelize) => sequelize.define('BranchStock', {
   id: { type: unsignedInteger(sequelize), autoIncrement: true, primaryKey: true },
   branchId: { type: unsignedInteger(sequelize), allowNull: false },
   productId: { type: unsignedInteger(sequelize), allowNull: false },
+  // Whose goods these are. A shop has one owner — the house — and never thinks
+  // about this column; a third-party warehouse holds a separate balance per
+  // client at the same location. The default is the house row, which is created
+  // before this column is ever written, so existing stock keeps its meaning.
+  ownerId: { type: unsignedInteger(sequelize), allowNull: false, defaultValue: 1 },
   stock: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
 
   authadd: { type: DataTypes.INTEGER, allowNull: true },
@@ -23,7 +28,10 @@ export default (sequelize) => sequelize.define('BranchStock', {
   updatedAt: 'editondt',
   tableName: 'branch_stock',
   indexes: [
-    { unique: true, fields: ['branch_id', 'product_id'] },
-    { fields: ['product_id'] }
+    // Owner is part of the key: sixty of a product yours and forty a client's
+    // at the same location are two balances, not one.
+    { unique: true, fields: ['branch_id', 'product_id', 'owner_id'] },
+    { fields: ['product_id'] },
+    { fields: ['owner_id'] }
   ]
 });

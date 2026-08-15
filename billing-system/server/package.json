@@ -10,7 +10,8 @@
     "start": "node src/index.js",
     "db:sync": "node src/sync.js",
     "db:migrate": "node src/sync.js",
-    "db:seed-demo": "node src/seedDemo.js"
+    "db:seed-demo": "node src/seedDemo.js",
+    "docs:workflow": "node src/docs/generateWorkflowDoc.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

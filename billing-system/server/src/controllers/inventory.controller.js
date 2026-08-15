@@ -4,6 +4,7 @@ import { buildInventorySummary } from '../services/product.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { getPagination, paged } from '../utils/pagination.js';
 import { postStockTransaction, stockLedger, stockValuation } from '../services/stock.service.js';
+import { resolveOwnerId } from '../services/stockOwner.service.js';
 
 export const getSummary = asyncHandler(async (_req, res) => {
   const products = await Product.findAll({
@@ -53,11 +54,16 @@ export const adjustStock = asyncHandler(async (req, res) => {
     const qty = Math.abs(Number(quantity));
     const adding = type === 'Adjustment In' || type === 'Opening Stock';
 
+    // Unnamed means our own goods, which is what every existing caller means.
+    // A named owner is validated rather than trusted — see resolveOwnerId.
+    const ownerId = await resolveOwnerId(req.body.ownerId, t);
+
     // One call moves the stock and writes the ledger row, so an adjustment can
     // never land without its movement.
     return postStockTransaction({
       productId: product.id,
       branchId: req.branchId,
+      ownerId,
       quantity: adding ? qty : -qty,
       movementType: type,
       referenceType: type === 'Opening Stock' ? 'Opening Balance' : 'Manual Adjustment',

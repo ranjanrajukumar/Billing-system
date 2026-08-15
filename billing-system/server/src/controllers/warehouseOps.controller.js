@@ -10,6 +10,9 @@ import {
   suggestPutAway, unassignedQty, usesBins,
 } from '../services/binStock.service.js';
 import { MATCH_TYPES } from '../models/putAwayRule.model.js';
+import { resolveOwnerId } from '../services/stockOwner.service.js';
+import { routeDto } from '../services/pickPath.service.js';
+import { orderByRoute } from '../utils/pickRoute.js';
 
 /** Storage classes a put-away rule can sort on. */
 export const STORAGE_CLASSES = ['Standard', 'FastMoving', 'Heavy', 'Cold', 'Hazardous', 'Fragile'];
@@ -62,6 +65,9 @@ export const putAwayStock = asyncHandler(async (req, res) => {
         binId: Number(line.binId),
         productId: Number(line.productId),
         batchId: line.batchId ? Number(line.batchId) : null,
+        // Per line, not per request: one trolley can hold pallets for two
+        // different owners, and each goes to its own balance.
+        ownerId: await resolveOwnerId(line.ownerId ?? req.body.ownerId, transaction),
         quantity: line.quantity,
         transaction,
         userId: req.user.id,
@@ -165,6 +171,18 @@ export const pickList = asyncHandler(async (req, res) => {
     });
   }
 
+  // Flattened across every line, then ordered once, so the picker walks the
+  // building a single time rather than once per product.
+  const stops = lines.flatMap((line) => (line.picks || []).map((p) => ({
+    ...p,
+    itemId: line.itemId,
+    productId: line.productId,
+    productCode: line.sku,
+    productName: line.productName,
+    unit: line.unit,
+  })));
+  const route = orderByRoute(stops);
+
   res.json({
     transferId: transfer.id,
     transferNumber: transfer.transferNumber,
@@ -172,6 +190,9 @@ export const pickList = asyncHandler(async (req, res) => {
     fromBranchId: transfer.fromBranchId,
     binsInUse,
     lines,
+    route: routeDto(route),
+    totalStops: route.length,
+    unsequencedStops: route.filter((s) => s.pickSequence === null).length,
     // Without bins there is nothing to walk to, so picking is a formality that
     // simply marks the transfer ready to dispatch.
     note: binsInUse

@@ -2,6 +2,7 @@ import { Op, fn, col } from 'sequelize';
 import {
   Branch, BranchStock, Product, ProductBatch, StockCount, StockMovement, User,
 } from '../models/index.js';
+import { houseOwnerId } from './stockOwner.service.js';
 
 /**
  * Stock audit — checking that the numbers agree with themselves.
@@ -42,18 +43,23 @@ export async function reconcileStock({ branchId = null, includeMatched = false }
 
   // One grouped query rather than one per row: a catalogue of a few thousand
   // products would otherwise make this unusable.
+  //
+  // Grouped by owner as well as product and location. A balance belongs to one
+  // owner, so summing every owner's movements against it reports a third-party
+  // client's goods as drift — the reconciliation would scream about a warehouse
+  // that is perfectly correct, and real drift would be lost in the noise.
   const movementTotals = await StockMovement.findAll({
     where: { detstatus: false, ...(branchId ? { branchId } : {}) },
     attributes: [
-      'productId', 'branchId',
+      'productId', 'branchId', 'ownerId',
       [fn('SUM', col('quantity')), 'netQuantity'],
       [fn('COUNT', col('id')), 'movements'],
     ],
-    group: ['product_id', 'branch_id'],
+    group: ['product_id', 'branch_id', 'owner_id'],
     raw: true,
   });
   const ledgerBy = new Map(
-    movementTotals.map((row) => [`${row.productId}:${row.branchId}`, row]),
+    movementTotals.map((row) => [`${row.productId}:${row.branchId}:${row.ownerId}`, row]),
   );
 
   const batchTotals = await ProductBatch.findAll({
@@ -66,13 +72,20 @@ export async function reconcileStock({ branchId = null, includeMatched = false }
     batchTotals.map((row) => [`${row.productId}:${row.branchId}`, Number(row.lotQuantity || 0)]),
   );
 
+  // Resolved once, not per row: it is the same answer every time.
+  const house = await houseOwnerId();
+
   const rows = [];
   for (const row of held) {
-    const key = `${row.productId}:${row.branchId}`;
+    const key = `${row.productId}:${row.branchId}:${row.ownerId}`;
+    const lotKey = `${row.productId}:${row.branchId}`;
     const ledger = ledgerBy.get(key);
     const onHand = qty(row.stock);
     const perLedger = qty(ledger?.netQuantity ?? 0);
-    const perLots = lotsBy.has(key) ? qty(lotsBy.get(key)) : null;
+    // Lots are not owner-scoped, so they can only be checked against the
+    // company's own balance. Comparing a client's holding to a lot table that
+    // does not know about them would report drift on every row.
+    const perLots = Number(row.ownerId) === Number(house) && lotsBy.has(lotKey) ? qty(lotsBy.get(lotKey)) : null;
 
     const ledgerDrift = qty(onHand - perLedger);
     // Lots are only expected to reconcile for products that are lot-tracked;

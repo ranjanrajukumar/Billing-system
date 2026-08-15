@@ -9,6 +9,8 @@ import { scopedWhere } from '../middleware/branchContext.js';
 import { pick, returnToBins, suggestPick, usesBins } from '../services/binStock.service.js';
 import { getBranchStock, postStockTransaction } from '../services/stock.service.js';
 import { deriveStatus, progressOf, remainingOn } from '../services/fulfilment.service.js';
+import { buildRoute, createPickTasks, routeDto } from '../services/pickPath.service.js';
+import { orderByRoute } from '../utils/pickRoute.js';
 
 /**
  * Fulfilling a sales order: allocate → pick → pack → dispatch.
@@ -68,8 +70,11 @@ export const queue = asyncHandler(async (req, res) => {
   //
   // Orders nobody has allocated yet belong to no location, so they stay visible
   // everywhere until allocation claims them for one.
-  if (req.query.fulfilFromBranchId) {
-    where.fulfilFromBranchId = { [Op.or]: [Number(req.query.fulfilFromBranchId), null] };
+  // Guarded: an unparseable value would otherwise reach SQL as NaN and fail the
+  // whole query, so a bad filter shows everything rather than nothing.
+  const from = Number(req.query.fulfilFromBranchId);
+  if (Number.isFinite(from) && from > 0) {
+    where.fulfilFromBranchId = { [Op.or]: [from, null] };
   }
 
   const { rows, count } = await SalesOrder.findAndCountAll({
@@ -201,6 +206,19 @@ export const pickList = asyncHandler(async (req, res) => {
     });
   }
 
+  // One walk across every line. Routing each line separately would send a
+  // picker down the same aisle once per product; flattening first means they
+  // collect everything in a single pass.
+  const stops = lines.flatMap((line) => (line.picks || []).map((pick) => ({
+    ...pick,
+    itemId: line.itemId,
+    productId: line.productId,
+    productCode: line.sku,
+    productName: line.productName,
+    unit: line.unit,
+  })));
+  const route = orderByRoute(stops);
+
   res.json({
     orderId: order.id,
     orderNumber: order.orderNumber,
@@ -208,10 +226,85 @@ export const pickList = asyncHandler(async (req, res) => {
     fulfilmentStatus: order.fulfilmentStatus,
     branchId,
     binsInUse,
+    // Unchanged in shape, so every existing screen keeps working.
     lines,
+    // Added: the flat walk a handheld follows, in warehouse sequence.
+    route: routeDto(route),
+    totalStops: route.length,
+    unsequencedStops: route.filter((s) => s.pickSequence === null).length,
     note: binsInUse
       ? null
       : 'This location does not use bins, so there is nothing to walk to — confirm to mark the lines picked.',
+  });
+});
+
+/**
+ * Turns the optimised route into PICK tasks, one per stop.
+ *
+ * Separate from the pick list on purpose. Looking at a route is free and can be
+ * done repeatedly; committing it to somebody's task list is a decision, and it
+ * is the point at which the work becomes measurable, assignable and handed over
+ * at shift change.
+ *
+ * Safe to call twice. The idempotency key stops the same request repeating, and
+ * the reference check inside `createPickTasks` stops two different requests
+ * asking for the same work.
+ */
+export const releasePickTasks = asyncHandler(async (req, res) => {
+  const order = await SalesOrder.findOne({
+    where: { id: req.params.id, detstatus: false },
+    include: [ITEM_INCLUDE],
+  });
+  if (!order) return res.status(404).json({ message: 'Sales order not found' });
+
+  const branchId = order.fulfilFromBranchId || req.branchId;
+  if (!await usesBins(branchId)) {
+    return res.status(409).json({
+      message: 'This location does not use bins, so there is no route to release — confirm the pick directly',
+    });
+  }
+
+  const result = await sequelize.transaction(async (transaction) => {
+    const built = await buildRoute({
+      branchId,
+      lines: order.SalesOrderItems.map((item) => ({
+        itemId: item.id,
+        productId: item.productId,
+        productName: item.Product?.productName,
+        productCode: item.Product?.sku,
+        unit: item.Product?.primaryUnit,
+        quantity: remainingOn(item).toPick,
+      })),
+      transaction,
+    });
+
+    const released = await createPickTasks({
+      branchId,
+      route: built.route,
+      referenceType: 'SalesOrder',
+      referenceId: order.id,
+      assignedUserId: req.body.assignedUserId ? Number(req.body.assignedUserId) : null,
+      priority: req.body.priority || 'NORMAL',
+      userId: req.user.id,
+      transaction,
+    });
+
+    return { built, released };
+  });
+
+  res.status(201).json({
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    created: result.released.created,
+    // Reported rather than hidden: releasing twice is not an error, but the
+    // caller should see that the second call added nothing.
+    reused: result.released.reused,
+    totalStops: result.built.totalStops,
+    shortfalls: result.built.shortfalls,
+    route: routeDto(result.built.route).map((stop, i) => ({
+      ...stop,
+      taskId: result.released.tasks[i]?.id ?? null,
+    })),
   });
 });
 

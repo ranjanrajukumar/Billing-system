@@ -76,6 +76,11 @@ export function normalizeProductPayload(body, userId) {
 
     // How this product must be stored, which is what put-away rules match on.
     storageClass: optionalText(body.storageClass) || 'Standard',
+    // Space and weight per unit. Storage charges bill on volume where it is
+    // known, so a column missing from this whitelist would be silently
+    // unreachable and every client would be billed by unit count instead.
+    unitVolume: optionalMoney(body.unitVolume),
+    unitWeightKg: optionalMoney(body.unitWeightKg),
 
     // ---- Descriptive ----
     size: optionalText(body.size),

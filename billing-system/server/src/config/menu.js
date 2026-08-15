@@ -51,6 +51,7 @@ export const MENU_CATALOGUE = [
   { group: 'Warehouse', items: [
     { key: 'warehouses', label: 'Warehouses & Bins', path: '/warehouses' },
     { key: 'warehouseOps', label: 'Warehouse Floor', path: '/warehouse-floor' },
+    { key: 'stockOwners', label: 'Stock Owners', path: '/stock-owners' },
     { key: 'stockTransfers', label: 'Stock Transfers', path: '/stock-transfers' },
     { key: 'stockAdjustments', label: 'Stock Adjustments', path: '/stock-adjustments' },
     { key: 'stockCounts', label: 'Stock Counting', path: '/stock-counts' },
@@ -99,7 +100,8 @@ export const DEFAULT_MENUS_BY_ROLE = {
   ],
   'Warehouse Manager': [
     'dashboard', 'inventory', 'stockTransfers', 'stockAdjustments', 'stockCounts',
-    'batches', 'serials', 'grn', 'products', 'warehouses', 'warehouseOps', 'stockAudit', 'approvals', 'profile',
+    'batches', 'serials', 'grn', 'products', 'warehouses', 'warehouseOps', 'stockOwners',
+    'stockAudit', 'approvals', 'profile',
   ],
   'Branch Manager': [
     'dashboard', 'quickBill', 'invoices', 'salesReturns', 'customers', 'udhar', 'khata',

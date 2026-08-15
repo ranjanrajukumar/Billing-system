@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as controller from '../controllers/fulfilment.controller.js';
 import { authorize } from '../middleware/authMiddleware.js';
+import { idempotent } from '../middleware/idempotencyMiddleware.js';
 import { requireModule } from '../services/config.service.js';
 
 /**
@@ -17,6 +18,9 @@ const FLOOR = ['Admin', 'Accountant', 'Warehouse Manager', 'Branch Manager', 'In
 
 router.get('/queue', controller.queue);
 router.get('/:id/pick-list', controller.pickList);
+// Committing the route to somebody's task list. Idempotent, because a handheld
+// releasing a pick over a flaky link would otherwise create the round twice.
+router.post('/:id/release-picks', authorize(...FLOOR), idempotent('PICK_RELEASE'), controller.releasePickTasks);
 router.get('/:id/packages', controller.packages);
 
 router.post('/:id/allocate', authorize(...FLOOR), controller.allocate);
