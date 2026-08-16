@@ -7,6 +7,8 @@ import { sequelize } from '../models/index.js';
 import { getPagination, paged } from '../utils/pagination.js';
 import { itemsTotal, normalizeOrderItems } from '../utils/lineItems.js';
 import { documentOutputHandlers } from './documentOutput.js';
+import { releaseReservation, reserveStock } from '../services/stock.service.js';
+import { houseOwnerId } from '../services/stockOwner.service.js';
 
 export const getAll = asyncHandler(async (req, res) => {
   const { search } = req.query;
@@ -103,9 +105,87 @@ export const remove = asyncHandler(async (req, res) => {
   res.json({ message: 'Deleted successfully' });
 });
 
+/**
+ * Confirm a Sales Order — validates and reserves stock for every line.
+ *
+ * A confirmed order is a binding commitment: the stock is locked for it and
+ * will not be sold to anyone else. If available stock is insufficient for any
+ * line the whole operation is rejected, the reservation is rolled back and the
+ * response tells the caller exactly which product is short.
+ */
+export const confirm = asyncHandler(async (req, res) => {
+  const order = await SalesOrder.findOne({
+    where: { id: req.params.id, detstatus: false },
+    include: [{ model: SalesOrderItem, include: [Product] }],
+  });
+  if (!order) return res.status(404).json({ message: 'Sales order not found' });
+  if (order.status === 'Confirmed') return res.status(400).json({ message: 'Order is already confirmed' });
+  if (order.status === 'Cancelled') return res.status(400).json({ message: 'Cannot confirm a cancelled order' });
+
+  const branchId = order.branchId || req.branchId;
+
+  await sequelize.transaction(async (t) => {
+    const owner = await houseOwnerId(t);
+    // Reserve stock for every line inside one transaction so either all succeed
+    // or none do — partial reservation would leave orphaned locks.
+    for (const item of order.SalesOrderItems) {
+      await reserveStock({
+        productId: item.productId,
+        branchId,
+        quantity: Number(item.primaryQty || item.quantity),
+        transaction: t,
+        userId: req.user.id,
+        ownerId: owner,
+      });
+    }
+    await order.update({ status: 'Confirmed', authlstedit: req.user.id }, { transaction: t });
+  });
+
+  res.json({ message: 'Order confirmed and stock reserved', orderId: order.id });
+});
+
+/**
+ * Cancel a Sales Order — releases any stock reservation and soft-deletes.
+ */
+export const cancel = asyncHandler(async (req, res) => {
+  const order = await SalesOrder.findOne({
+    where: { id: req.params.id, detstatus: false },
+    include: [{ model: SalesOrderItem }],
+  });
+  if (!order) return res.status(404).json({ message: 'Sales order not found' });
+
+  const branchId = order.branchId || req.branchId;
+
+  await sequelize.transaction(async (t) => {
+    // Only release if the order had actually reserved stock.
+    if (order.status === 'Confirmed') {
+      const owner = await houseOwnerId(t);
+      for (const item of order.SalesOrderItems) {
+        await releaseReservation({
+          productId: item.productId,
+          branchId,
+          quantity: Number(item.primaryQty || item.quantity),
+          transaction: t,
+          userId: req.user.id,
+          ownerId: owner,
+        });
+      }
+    }
+    await order.update({
+      status: 'Cancelled',
+      detstatus: true,
+      authdel: req.user.id,
+      delondt: new Date(),
+    }, { transaction: t });
+  });
+
+  res.json({ message: 'Order cancelled and stock reservation released' });
+});
+
 const loadOrder = (req) => SalesOrder.findOne({
   where: { id: req.params.id, detstatus: false },
   include: [{ model: Customer }, { model: SalesOrderItem, include: [Product] }]
 });
 
 export const { downloadPdf, html } = documentOutputHandlers('salesOrder', loadOrder);
+

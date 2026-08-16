@@ -4,11 +4,11 @@ import * as controller from '../controllers/inventory.controller.js';
 
 const router = express.Router();
 
-
 router.get('/summary', controller.getSummary);
 router.get('/movements', controller.getMovements);
 router.get('/ledger', controller.getLedger);
 router.get('/valuation', controller.getValuation);
+router.get('/wms-stock', controller.getWmsStock);
 router.post('/adjust', controller.adjustStock);
 
 export default router;

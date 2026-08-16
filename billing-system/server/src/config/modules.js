@@ -50,6 +50,7 @@ export const MODULES = [
   { key: 'purchaseOrders', label: 'Purchase Orders & GRN', mode: 'Advanced', menus: ['purchaseOrders', 'grn'] },
   { key: 'purchaseReturns', label: 'Purchase Returns', mode: 'Advanced', menus: ['purchaseReturns'] },
   { key: 'serials', label: 'Serial Number Tracking', mode: 'Advanced', menus: ['serials'] },
+  { key: 'gatepass', label: 'Gatepass', mode: 'Advanced', menus: ['gatepasses'] },
   // Double-entry bookkeeping is the genuinely advanced part: a shop can track
   // every rupee of cost and cash without ever meeting a journal voucher.
   { key: 'accounting', label: 'Accounting (double-entry)', mode: 'Advanced', menus: ['chartOfAccounts', 'journalEntries', 'financials'] },

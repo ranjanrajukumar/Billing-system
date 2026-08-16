@@ -1,7 +1,9 @@
 import { DataTypes } from 'sequelize';
+import { unsignedInteger } from './types.js';
 
 export default (sequelize) => {
   const ExpenseCategory = sequelize.define('ExpenseCategory', {
+    id: { type: unsignedInteger(sequelize), autoIncrement: true, primaryKey: true },
     name: { type: DataTypes.STRING, allowNull: false },
     description: { type: DataTypes.STRING },
     authadd: { type: DataTypes.INTEGER, allowNull: true },

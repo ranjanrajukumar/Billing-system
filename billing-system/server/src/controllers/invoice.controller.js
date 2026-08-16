@@ -6,7 +6,7 @@ import { calculateInvoice } from '../utils/invoiceMath.js';
 import { getPagination, paged } from '../utils/pagination.js';
 import { buildInvoicePdf } from '../services/pdf.service.js';
 import { renderInvoiceHtml } from '../services/invoiceHtml.service.js';
-import { assertAvailable, postStockTransaction } from '../services/stock.service.js';
+import { assertAvailable, deductReserved, postStockTransaction } from '../services/stock.service.js';
 import { postSale, reverseEntry } from '../services/accounting.service.js';
 import { priceFor, unitSnapshot } from '../utils/units.js';
 import { recordCouponUse, releaseCouponUse, validateCoupon } from '../services/coupon.service.js';
@@ -654,3 +654,94 @@ export const downloadInvoicePdf = asyncHandler(async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="${invoice.invoiceNumber}.pdf"`);
   res.send(buffer);
 });
+
+/**
+ * Confirm a Draft invoice — validates available stock and deducts it.
+ *
+ * This is the "Invoice Confirmation → Stock Deduction" step described in the
+ * WMS flow. Creating an invoice does not move stock; only this confirmation
+ * does. If available stock (total minus reserved) is insufficient for any line,
+ * the whole operation is rejected with a clear 409 and the stock is untouched.
+ *
+ * When the invoice is linked to a confirmed Sales Order the reservation created
+ * by that order is consumed here: both the physical stock and the reservation
+ * column decrease together (deductReserved with hasReservation=true).
+ *
+ * Invoices created the old way (createInvoice, which still deducts immediately)
+ * already have status 'Paid' or 'Unpaid' and this action will be a no-op for
+ * them — a guard at the top returns 400 for already-confirmed invoices.
+ */
+export const confirmInvoice = asyncHandler(async (req, res) => {
+  const invoice = await Invoice.findOne({
+    where: { id: req.params.id, detstatus: false },
+    include: [
+      { model: Customer },
+      { model: InvoiceItem, include: [Product] },
+      Payment,
+    ],
+  });
+  if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+  if (invoice.status !== 'Draft') {
+    return res.status(400).json({ message: `Invoice is already ${invoice.status} — cannot confirm again` });
+  }
+
+  const branchId = invoice.branchId || req.branchId;
+  // Does this invoice come from a Sales Order that already locked stock?
+  const salesOrderId = invoice.orderNumber ? null : null; // placeholder — extend if SO-Invoice link added later
+  const hasReservation = false; // Extend to true when SO→Invoice link is implemented
+
+  await sequelize.transaction(async (transaction) => {
+    const products = await Product.findAll({
+      where: { id: invoice.InvoiceItems.map((i) => i.productId) },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+
+    for (const item of invoice.InvoiceItems) {
+      const deductQty = Number(item.primaryQty || item.quantity);
+      await deductReserved({
+        productId: item.productId,
+        branchId,
+        quantity: deductQty,
+        transaction,
+        userId: req.user.id,
+        movementType: 'Sale',
+        referenceType: 'Invoice',
+        referenceId: invoice.id,
+        referenceNumber: invoice.invoiceNumber,
+        unitCost: byId.get(Number(item.productId))?.purchasePrice ?? null,
+        transactionDate: invoice.invoiceDate,
+        notes: `Confirmed Invoice ${invoice.invoiceNumber} — deducted ${deductQty} ${item.primaryUnit || 'PCS'}`,
+        hasReservation,
+      });
+    }
+
+    // Determine payment status after confirmation.
+    const payments = (invoice.Payments || []).filter((p) => !p.detstatus);
+    const paid = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    let newStatus = 'Unpaid';
+    if (invoice.paymentMethod !== 'Credit') {
+      newStatus = 'Paid';
+      // If no payment was recorded yet (Draft with non-credit method), create one.
+      if (paid === 0) {
+        await Payment.create({
+          invoiceId: invoice.id,
+          amount: invoice.grandTotal,
+          paymentMethod: invoice.paymentMethod,
+          paidAt: invoice.invoiceDate,
+          authadd: req.user.id,
+        }, { transaction });
+      }
+    }
+
+    await invoice.update({ status: newStatus, authlstedit: req.user.id }, { transaction });
+  });
+
+  const updated = await Invoice.findOne({
+    where: { id: invoice.id },
+    include: [{ model: Customer }, { model: InvoiceItem, include: Product }, Payment],
+  });
+  res.json(updated);
+});
+

@@ -6,6 +6,7 @@ import {
 import { useState } from 'react';
 import { useToast } from '../context/ToastContext.jsx';
 import { customersApi } from '../services/resource.service.js';
+import SearchableSelect from './SearchableSelect.jsx';
 
 /**
  * Choose a customer, or tick the box and add one without leaving the bill.
@@ -77,22 +78,17 @@ export default function CustomerPicker({
 
   return (
     <Stack spacing={1}>
-      <TextField
-        fullWidth select id={inputId} label={label}
-        value={value ?? ''}
-        onChange={(e) => onChange?.(e.target.value)}
+      <SearchableSelect
+        id={inputId} label={label}
+        options={customers}
+        value={customers.find(c => String(c.id) === String(value)) || null}
+        onChange={(selected) => onChange?.(selected ? selected.id : '')}
+        getOptionLabel={(c) => `${c.customerName}${c.mobileNumber ? ` · ${c.mobileNumber}` : ''}`}
+        getOptionKey={(c) => c.id}
         disabled={disabled || adding}
         required={required}
-        InputLabelProps={{ shrink: true }}
         helperText={adding ? 'Finish adding the new customer below' : ' '}
-      >
-        <MenuItem value=""><em>Select a customer</em></MenuItem>
-        {customers.map((c) => (
-          <MenuItem key={c.id} value={c.id}>
-            {c.customerName}{c.mobileNumber ? ` · ${c.mobileNumber}` : ''}
-          </MenuItem>
-        ))}
-      </TextField>
+      />
 
       <FormControlLabel
         sx={{ ml: 0 }}

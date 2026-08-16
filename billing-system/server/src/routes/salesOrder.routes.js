@@ -10,6 +10,8 @@ router.get('/:id', controller.getOne);
 router.post('/', controller.create);
 router.put('/:id', controller.update);
 router.delete('/:id', controller.remove);
+router.post('/:id/confirm', controller.confirm);
+router.post('/:id/cancel', controller.cancel);
 router.get('/:id/pdf', controller.downloadPdf);
 router.get('/:id/html', controller.html);
 

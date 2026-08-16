@@ -28,6 +28,7 @@ import { currency, mediaUrl } from '../utils/formatters.js';
 const DEFAULT_UNITS = [
   { code: 'PCS', name: 'Pieces' },
   { code: 'KG', name: 'Kilograms' },
+  { code: 'GM', name: 'Grams' },
   { code: 'BOX', name: 'Box' },
   { code: 'BAG', name: 'Bag' },
   { code: 'LTR', name: 'Liters' },

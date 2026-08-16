@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  createInvoice, downloadInvoicePdf, getInvoice, invoiceHtml,
+  confirmInvoice, createInvoice, downloadInvoicePdf, getInvoice, invoiceHtml,
   listInvoices, removeInvoice, updateInvoice,
 } from '../controllers/invoice.controller.js';
 import { authorize } from '../middleware/authMiddleware.js';
@@ -15,6 +15,9 @@ router.post('/', authorize('Admin', 'Sales', 'Accountant'), invoiceRules, valida
 // is held to a tighter set of roles than raising one.
 router.put('/:id', authorize('Admin', 'Accountant'), invoiceRules, validate, updateInvoice);
 router.delete('/:id', authorize('Admin', 'Sales'), removeInvoice);
+// Confirm a Draft invoice → validates stock availability and deducts it atomically.
+router.post('/:id/confirm', authorize('Admin', 'Sales', 'Accountant'), confirmInvoice);
 router.get('/:id/pdf', downloadInvoicePdf);
 router.get('/:id/html', invoiceHtml);
 export default router;
+

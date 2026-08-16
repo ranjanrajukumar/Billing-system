@@ -53,6 +53,7 @@ import Approvals from '../pages/Approvals.jsx';
 import CashFlow from '../pages/CashFlow.jsx';
 import StockAudit from '../pages/StockAudit.jsx';
 import WarehouseFloor from '../pages/WarehouseFloor.jsx';
+import Gatepasses from '../pages/Gatepasses.jsx';
 
 export default function AppRoutes({ mode, onToggleMode }) {
   return (
@@ -109,6 +110,7 @@ export default function AppRoutes({ mode, onToggleMode }) {
           <Route path="cash-flow" element={<CashFlow />} />
           <Route path="stock-audit" element={<StockAudit />} />
           <Route path="warehouse-floor" element={<WarehouseFloor />} />
+          <Route path="gatepasses" element={<Gatepasses />} />
         </Route>
       </Route>
       <Route path="/404" element={<NotFound />} />

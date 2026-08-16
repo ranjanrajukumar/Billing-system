@@ -10,10 +10,12 @@ import Loader from '../components/Loader.jsx';
 import Modal from '../components/Modal.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import StatsCard from '../components/StatsCard.jsx';
+import SearchableSelect from '../components/SearchableSelect.jsx';
 import StatusChip from '../components/StatusChip.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { currency } from '../utils/formatters.js';
 import { branchesApi, productsApi, purchaseOrdersApi, suppliersApi } from '../services/resource.service.js';
+import { useForm, Controller } from 'react-hook-form';
 
 /**
  * Purchase orders.
@@ -42,6 +44,7 @@ export default function PurchaseOrders() {
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [busy, setBusy] = useState(false);
+  const { register, handleSubmit, reset, control } = useForm();
   const { showToast } = useToast();
 
   const blank = () => ({
@@ -140,7 +143,7 @@ export default function PurchaseOrders() {
         title="Purchase Orders"
         subtitle="What has been ordered from suppliers, and how much of it has arrived"
         icon={<AssignmentIcon />}
-        action={<Button startIcon={<AddIcon />} variant="contained" onClick={() => setEditing(blank())}>New Order</Button>}
+        action={<Button startIcon={<AddIcon />} variant="contained" onClick={() => { setEditing(blank()); reset(blank()); }}>New Order</Button>}
       />
 
       <Grid container spacing={2}>
@@ -194,13 +197,17 @@ export default function PurchaseOrders() {
               <Stack direction="row" spacing={0.5} flexWrap="wrap">
                 <Button size="small" onClick={() => purchaseOrdersApi.get(r.id).then(setViewing)}>View</Button>
                 {['Draft', 'Pending Approval', 'Rejected'].includes(r.status) && (
-                  <Button size="small" onClick={() => purchaseOrdersApi.get(r.id).then((full) => setEditing({
-                    ...full,
-                    items: (full.PurchaseOrderItems || []).map((i) => ({
-                      productId: i.productId, quantity: i.quantity, rate: i.rate,
-                      discount: i.discount, gstPercent: i.gstPercent, um: i.um,
-                    })),
-                  }))}>Edit</Button>
+                  <Button size="small" onClick={() => purchaseOrdersApi.get(r.id).then((full) => {
+                    const data = {
+                      ...full,
+                      items: (full.PurchaseOrderItems || []).map((i) => ({
+                        productId: i.productId, quantity: i.quantity, rate: i.rate,
+                        discount: i.discount, gstPercent: i.gstPercent, um: i.um,
+                      })),
+                    };
+                    setEditing(data);
+                    reset(data);
+                  })}>Edit</Button>
                 )}
                 {(ACTIONS_BY_STATUS[r.status] || []).map((action) => (
                   <Button
@@ -228,13 +235,23 @@ export default function PurchaseOrders() {
           <Stack spacing={2}>
             <Grid container spacing={1.5}>
               <Grid item xs={12} sm={6}>
-                <TextField
-                  select fullWidth size="small" label="Supplier" value={editing.supplierId || ''}
-                  onChange={(e) => setEditing({ ...editing, supplierId: e.target.value })}
-                  InputLabelProps={{ shrink: true }}
-                >
-                  {suppliers.map((s) => <MenuItem key={s.id} value={s.id}>{s.supplierName}</MenuItem>)}
-                </TextField>
+                <Controller
+                  name="supplierId"
+                  control={control}
+                  defaultValue={editing.supplierId}
+                  rules={{ required: true }}
+                  render={({ field: { onChange, value } }) => (
+                    <SearchableSelect
+                      options={suppliers}
+                      label="Supplier"
+                      value={suppliers.find(s => String(s.id) === String(value)) || null}
+                      onChange={(selected) => { onChange(selected ? selected.id : ''); setEditing({...editing, supplierId: selected ? selected.id : ''}) }}
+                      getOptionLabel={(s) => s.supplierName}
+                      getOptionKey={(s) => s.id}
+                      required
+                    />
+                  )}
+                />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField

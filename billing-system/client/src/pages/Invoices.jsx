@@ -1,5 +1,6 @@
 import AddIcon from '@mui/icons-material/Add';
 import CancelIcon from '@mui/icons-material/Cancel';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -11,13 +12,14 @@ import ReceiptIcon from '@mui/icons-material/Receipt';
 import ShareIcon from '@mui/icons-material/Share';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import {
   Accordion, AccordionDetails, AccordionSummary,
   alpha, Box, Button, Chip, Divider, Grid, IconButton,
   Menu, MenuItem, Paper, Stack, TextField, Tooltip, Typography, useTheme,
 } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Controller, useForm } from 'react-hook-form';
 import api from '../services/api.js';
 import DataTable from '../components/DataTable.jsx';
@@ -137,6 +139,7 @@ export default function Invoices() {
   const [products, setProducts] = useState([]);
   const [items, setItems] = useState([blankItem]);
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [payingFor, setPayingFor] = useState(null);
   const [viewingInvoiceId, setViewingInvoiceId] = useState(null);
 
@@ -451,6 +454,29 @@ export default function Invoices() {
     catch { showToast('Failed to cancel invoice', 'error'); }
   };
 
+  /**
+   * Confirm a Draft invoice — calls POST /invoices/:id/confirm.
+   * The server validates stock availability and deducts it atomically.
+   * On HTTP 409 (insufficient stock) an explicit error toast shows the product name and shortage.
+   */
+  const confirmInvoice = async (row) => {
+    const confirmed = await confirmAction({
+      title: `Confirm Invoice ${row.invoiceNumber}?`,
+      text: 'Stock will be deducted immediately. This cannot be undone.',
+      confirmText: 'Yes, confirm it',
+    });
+    if (!confirmed) return;
+    try {
+      await invoicesApi.confirm(row.id);
+      showToast(`Invoice ${row.invoiceNumber} confirmed — stock deducted`, 'success');
+      load();
+    } catch (err) {
+      // 409 = insufficient stock — surface the server message which names the product + shortfall.
+      const msg = err.response?.data?.message || 'Could not confirm invoice';
+      showToast(msg, 'error');
+    }
+  };
+
   // Summary stats
   const stats = useMemo(() => ({
     total: rows.length,
@@ -516,7 +542,7 @@ export default function Invoices() {
               { field: 'status', headerName: 'Status', render: (row) => (
                 <Chip
                   label={row.status || '—'} size="small" variant="outlined"
-                  color={{ Paid: 'success', 'Partially Paid': 'warning', Unpaid: 'error', Cancelled: 'default' }[row.status] || 'default'}
+                  color={{ Paid: 'success', 'Partially Paid': 'warning', Unpaid: 'error', Cancelled: 'default', Draft: 'info' }[row.status] || 'default'}
                   sx={{ fontWeight: 700, fontSize: '0.7rem' }}
                 />
               )},
@@ -544,6 +570,24 @@ export default function Invoices() {
                     </Tooltip>
                   )}
                   <ShareMenu row={row} />
+                  {/* Confirm Invoice — only for Draft invoices: deducts stock atomically */}
+                  {row.status === 'Draft' && (
+                    <Tooltip title="Confirm Invoice &amp; Deduct Stock">
+                      <IconButton
+                        size="small"
+                        color="success"
+                        onClick={() => confirmInvoice(row)}
+                        sx={{ borderRadius: 1.5 }}
+                      >
+                        <CheckCircleIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  <Tooltip title="Generate Gatepass">
+                    <IconButton size="small" color="primary" onClick={() => navigate('/gatepasses')} sx={{ borderRadius: 1.5 }}>
+                      <LocalShippingIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                   <Tooltip title="Cancel Invoice"><IconButton size="small" color="error" onClick={() => cancelInvoice(row.id)} sx={{ borderRadius: 1.5 }}><CancelIcon fontSize="small" /></IconButton></Tooltip>
                 </Stack>
               )},
@@ -642,7 +686,7 @@ export default function Invoices() {
                           const uList = [];
                           if (p?.primaryUnit) uList.push(p.primaryUnit);
                           if (p?.secondaryUnit && !uList.includes(p.secondaryUnit)) uList.push(p.secondaryUnit);
-                          if (!uList.length) uList.push('PCS', 'KG', 'BOX', 'BAG', 'LTR');
+                          if (!uList.length) uList.push('PCS', 'KG', 'GM', 'BOX', 'BAG', 'LTR');
                           return uList.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>);
                         })()}
                       </TextField>

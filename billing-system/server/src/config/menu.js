@@ -53,6 +53,7 @@ export const MENU_CATALOGUE = [
     { key: 'warehouseOps', label: 'Warehouse Floor', path: '/warehouse-floor' },
     { key: 'stockOwners', label: 'Stock Owners', path: '/stock-owners' },
     { key: 'stockTransfers', label: 'Stock Transfers', path: '/stock-transfers' },
+    { key: 'gatepasses', label: 'Gatepasses', path: '/gatepasses' },
     { key: 'stockAdjustments', label: 'Stock Adjustments', path: '/stock-adjustments' },
     { key: 'stockCounts', label: 'Stock Counting', path: '/stock-counts' },
     { key: 'serials', label: 'Serial Numbers', path: '/serials' },

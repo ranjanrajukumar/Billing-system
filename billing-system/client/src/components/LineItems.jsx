@@ -3,6 +3,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import {
   Button, Divider, Grid, IconButton, MenuItem, Stack, TextField, Typography,
 } from '@mui/material';
+import SearchableSelect from './SearchableSelect.jsx';
 
 // Numeric columns a document can ask for, beyond the always-present quantity.
 const FIELD_LABELS = {
@@ -71,20 +72,18 @@ export default function LineItems({ items, onChange, products, fields = ['rate',
         return (
           <Stack key={index} spacing={1} sx={{ p: 1.5, borderRadius: 2, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
             <Grid container spacing={1.5} alignItems="center">
-              <Grid item xs={12} sm={3.5}>
-                <TextField
-                  select fullWidth size="small" label="Product"
-                  value={item.productId || ''}
-                  onChange={(e) => chooseProduct(index, e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                >
-                  <MenuItem value=""><em>Select product</em></MenuItem>
-                  {products.map((p) => (
-                    <MenuItem key={p.id} value={p.id}>{p.productName}</MenuItem>
-                  ))}
-                </TextField>
+              <Grid item xs={12} sm={3}>
+                <SearchableSelect
+                  options={products}
+                  label="Product"
+                  value={products.find(p => String(p.id) === String(item.productId)) || null}
+                  onChange={(selectedOption) => chooseProduct(index, selectedOption ? selectedOption.id : '')}
+                  getOptionLabel={(option) => option.productName || ''}
+                  getOptionKey={(option) => option.id}
+                  size="small"
+                />
               </Grid>
-              <Grid item xs={6} sm={1.5}>
+              <Grid item xs={6} sm={1}>
                 <TextField
                   fullWidth size="small" label="Qty" type="number"
                   inputProps={{ min: 0, step: 'any' }}
@@ -93,7 +92,7 @@ export default function LineItems({ items, onChange, products, fields = ['rate',
                   InputLabelProps={{ shrink: true }}
                 />
               </Grid>
-              <Grid item xs={6} sm={1.5}>
+              <Grid item xs={6} sm={1}>
                 <TextField
                   select fullWidth size="small" label="Unit"
                   value={item.um || 'PCS'}
@@ -104,7 +103,7 @@ export default function LineItems({ items, onChange, products, fields = ['rate',
                     const uList = [];
                     if (product?.primaryUnit) uList.push(product.primaryUnit);
                     if (product?.secondaryUnit && !uList.includes(product.secondaryUnit)) uList.push(product.secondaryUnit);
-                    if (!uList.length) uList.push('PCS', 'KG', 'BOX', 'BAG');
+                    if (!uList.length) uList.push('PCS', 'KG', 'GM', 'BOX', 'BAG');
                     return uList.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>);
                   })()}
                 </TextField>
@@ -120,7 +119,7 @@ export default function LineItems({ items, onChange, products, fields = ['rate',
                   />
                 </Grid>
               ))}
-              <Grid item xs={12} sm={0.5}>
+              <Grid item xs={12} sm={1} display="flex" justifyContent="center">
                 <IconButton
                   type="button"
                   size="small" color="error" onClick={() => removeRow(index)}

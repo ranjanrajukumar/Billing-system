@@ -6,7 +6,7 @@ import {
   Stack, TextField, Tooltip, Typography,
 } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import DataTable from '../components/DataTable.jsx';
 import LineItems from '../components/LineItems.jsx';
@@ -16,6 +16,7 @@ import PageHeader from '../components/PageHeader.jsx';
 import Pagination from '../components/Pagination.jsx';
 import PeriodFilter from '../components/PeriodFilter.jsx';
 import StatsCard from '../components/StatsCard.jsx';
+import SearchableSelect from '../components/SearchableSelect.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { productsApi, purchasesApi, suppliersApi } from '../services/resource.service.js';
 import { currency, date } from '../utils/formatters.js';
@@ -44,7 +45,7 @@ export default function Purchases() {
   const [items, setItems] = useState([blankItem]);
   const [cancelling, setCancelling] = useState(null);
   const { showToast } = useToast();
-  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm({
+  const { register, handleSubmit, reset, control, formState: { isSubmitting } } = useForm({
     defaultValues: { purchaseDate: new Date().toISOString().slice(0, 10), supplierId: '', status: 'Received', paidAmount: 0, notes: '' },
   });
   const totals = useMemo(() => calc(items), [items]);
@@ -163,10 +164,22 @@ export default function Purchases() {
         <Stack spacing={2.5} component="form" onSubmit={handleSubmit(submit)}>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={4}>
-              <TextField select fullWidth label="Supplier" defaultValue="" {...register('supplierId', { required: true })} InputLabelProps={{ shrink: true }}>
-                <MenuItem value=""><em>Select supplier</em></MenuItem>
-                {suppliers.map((s) => <MenuItem key={s.id} value={s.id}>{s.supplierName}</MenuItem>)}
-              </TextField>
+              <Controller
+                name="supplierId"
+                control={control}
+                rules={{ required: true }}
+                render={({ field: { onChange, value } }) => (
+                  <SearchableSelect
+                    options={suppliers}
+                    label="Supplier"
+                    value={suppliers.find(s => String(s.id) === String(value)) || null}
+                    onChange={(selectedOption) => onChange(selectedOption ? selectedOption.id : '')}
+                    getOptionLabel={(option) => option.supplierName || ''}
+                    getOptionKey={(option) => option.id}
+                    required
+                  />
+                )}
+              />
             </Grid>
             <Grid item xs={12} sm={4}>
               <TextField fullWidth type="date" label="Purchase Date" {...register('purchaseDate')} InputLabelProps={{ shrink: true }} />

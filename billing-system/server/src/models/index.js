@@ -74,6 +74,7 @@ import JournalEntryModel from './journalEntry.model.js';
 import JournalEntryLineModel from './journalEntryLine.model.js';
 import ApprovalRuleModel from './approvalRule.model.js';
 import ApprovalRequestModel from './approvalRequest.model.js';
+import GatepassModel from './gatepass.model.js';
 import { installAuditHooks } from '../services/audit.service.js';
 export const Role = RoleModel(sequelize);
 export const User = UserModel(sequelize);
@@ -150,6 +151,7 @@ export const JournalEntry = JournalEntryModel(sequelize);
 export const JournalEntryLine = JournalEntryLineModel(sequelize);
 export const ApprovalRule = ApprovalRuleModel(sequelize);
 export const ApprovalRequest = ApprovalRequestModel(sequelize);
+export const Gatepass = GatepassModel(sequelize);
 
 Role.hasMany(User, { foreignKey: 'roleId', onDelete: 'RESTRICT', onUpdate: 'CASCADE' });
 User.belongsTo(Role, { foreignKey: 'roleId', onDelete: 'RESTRICT', onUpdate: 'CASCADE' });
@@ -225,6 +227,12 @@ SalesReturnItem.belongsTo(Product, { foreignKey: 'productId' });
 // Branch scoping: transactions happen at a location, masters are shared.
 Branch.hasMany(User, { foreignKey: 'branchId' });
 User.belongsTo(Branch, { foreignKey: 'branchId' });
+
+Branch.hasMany(Gatepass, { foreignKey: 'branchId' });
+Gatepass.belongsTo(Branch, { foreignKey: 'branchId' });
+
+User.hasMany(Gatepass, { foreignKey: 'authadd', as: 'creator' });
+Gatepass.belongsTo(User, { foreignKey: 'authadd', as: 'creator' });
 
 Branch.hasMany(BranchStock, { foreignKey: 'branchId' });
 BranchStock.belongsTo(Branch, { foreignKey: 'branchId' });

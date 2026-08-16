@@ -23,6 +23,8 @@ export const BLOCK_TYPES = [
   { type: 'meta', label: 'Invoice Details', description: 'Invoice number and date', options: [] },
   { type: 'dispatch', label: 'Consignor / Consignee', description: 'Dispatched-from and delivered-to blocks side by side', options: [] },
   { type: 'declaration', label: 'Declaration', description: 'Certification line above the signatory', options: [] },
+  { type: 'quoteHeader', label: 'Quotation Header', description: 'Premium header for quotations', options: ['showLogo', 'showAddress'] },
+  { type: 'quoteParties', label: 'Quotation Parties', description: 'Premium customer details and quotation metadata', options: ['showGst', 'showAddress'] },
   // Bill-of-supply set: boxed grids matching pre-printed stationery.
   { type: 'bosLetterhead', label: 'Letterhead (boxed)', description: 'Firm name with PAN, GSTIN, licence, CIN and MSME lines', options: [] },
   { type: 'bosParties', label: 'Invoice & Billed To (boxed)', description: 'Document references beside the buyer, in a bordered grid', options: [] },
@@ -276,6 +278,62 @@ const RENDERERS = {
   text: (block) => `<div>${esc(block.text || '')}</div>`,
   divider: () => '<hr>',
   spacer: (block) => `<div style="height:${Number(block.height) || 16}px"></div>`,
+  quoteHeader: (block, { company, template, mediaBase }) => {
+    const s = seller(company, template);
+    const logo = block.showLogo && company?.logoUrl
+      ? `<img class="logo" style="max-height: 80px;" src="${esc(mediaBase + company.logoUrl)}" alt="">`
+      : '';
+    const address = block.showAddress
+      ? `<div style="font-size: 14px; margin-top: 4px; color: #555;">${esc([s.address, s.city, s.state, s.pincode].filter(Boolean).join(', '))}</div>`
+      : '';
+    const contact = [
+      s.phone && `Phone: ${s.phone}`,
+      s.email && `Email: ${s.email}`,
+      s.website,
+    ].filter(Boolean).join(' · ');
+    
+    return `<div style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #333; padding-bottom: 20px;">
+      <div>
+        <div style="font-size: 32px; font-weight: 900; color: #111; letter-spacing: -1px; text-transform: uppercase;">${esc(template?.invoiceTitle || 'QUOTATION')}</div>
+        <div style="margin-top: 8px;">
+          <div style="font-weight: bold; font-size: 18px;">${esc(s.name)}</div>
+          ${address}
+          ${contact ? `<div style="font-size: 12px; color: #777; margin-top: 4px;">${esc(contact)}</div>` : ''}
+        </div>
+      </div>
+      <div style="text-align: right;">${logo}</div>
+    </div>`;
+  },
+  quoteParties: (block, { invoice }) => {
+    const customer = invoice.Customer || {};
+    const address = block.showAddress
+      ? `<div style="color: #444; line-height: 1.5; font-size: 13px; margin-top: 4px;">${esc([customer.address, customer.city, customer.state, customer.pincode].filter(Boolean).join(', '))}</div>`
+      : '';
+    
+    return `<div style="display: flex; justify-content: space-between; background-color: #f9fafb; padding: 16px; border-radius: 8px; border: 1px solid #e5e7eb;">
+      <div style="width: 50%;">
+        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #6b7280; margin-bottom: 4px; font-weight: bold;">Prepared For</div>
+        <div style="font-weight: bold; font-size: 16px; color: #111;">${esc(customer.customerName || '')}</div>
+        ${address}
+        ${customer.mobileNumber ? `<div style="font-size: 13px; color: #444; margin-top: 4px;">M: ${esc(customer.mobileNumber)}</div>` : ''}
+      </div>
+      <div style="width: 40%; text-align: right;">
+        <div style="margin-bottom: 8px;">
+          <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #6b7280; font-weight: bold;">Quotation No.</div>
+          <div style="font-size: 16px; font-weight: bold; color: #111;">${esc(invoice.quotationNumber || invoice.invoiceNumber)}</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #6b7280; font-weight: bold;">Date</div>
+          <div style="font-size: 14px; color: #111;">${esc(invoice.quotationDate || invoice.invoiceDate)}</div>
+        </div>
+        ${invoice.validUntil ? `
+        <div style="margin-top: 8px;">
+          <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #6b7280; font-weight: bold;">Valid Until</div>
+          <div style="font-size: 14px; color: #111;">${esc(invoice.validUntil)}</div>
+        </div>` : ''}
+      </div>
+    </div>`;
+  }
 };
 
 // The template form builds blocks as { id, key: 'companyHeader' }; the designer

@@ -83,20 +83,22 @@ export async function getPhysicalStock(productId, branchId, transaction) {
 /**
  * Applies a signed change to one location's stock.
  *
- * Refuses to go negative unless the company has allowed it, or the caller has
- * already validated availability and says so with `allowNegative`.
+ * For outbound moves (delta < 0) the available amount is stock − reservedQuantity;
+ * only that figure is checked — reserved stock is already spoken for.
  */
 export async function adjustStock({ productId, branchId, delta, transaction, userId, allowNegative = false, ownerId = null }) {
   const owner = ownerId ?? await houseOwnerId(transaction);
   const row = await stockRow(productId, branchId, owner, transaction);
   const previous = Number(row.stock);
+  const reserved = Number(row.reservedQuantity || 0);
+  const available = previous - reserved;
   const next = previous + Number(delta);
 
-  if (!allowNegative && next < 0) {
+  if (!allowNegative && Number(delta) < 0 && available < Math.abs(Number(delta))) {
     const { allowNegativeStock } = await getConfig();
     if (!allowNegativeStock) {
       throw Object.assign(
-        new Error(`Insufficient stock at this location (have ${previous}, need ${Math.abs(delta)})`),
+        new Error(`Insufficient stock at this location (have ${available} available, need ${Math.abs(delta)})`),
         { status: 409 },
       );
     }
@@ -105,6 +107,113 @@ export async function adjustStock({ productId, branchId, delta, transaction, use
   await row.update({ stock: next, authlstedit: userId ?? null }, { transaction });
   await syncProductTotal(productId, transaction);
   return { previous, current: next };
+}
+
+/**
+ * Locks a quantity against confirmed Sales Orders.
+ *
+ * Checks that available (stock − reservedQuantity) ≥ qty, then increments
+ * reservedQuantity. Must run inside a transaction with a row lock so that two
+ * concurrent confirmations for the same product cannot both succeed when only
+ * one unit remains.
+ */
+export async function reserveStock({ productId, branchId, quantity, transaction, userId = null, ownerId = null }) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
+  const row = await stockRow(productId, branchId, owner, transaction);
+  const stock = Number(row.stock);
+  const reserved = Number(row.reservedQuantity || 0);
+  const available = stock - reserved;
+  const qty = Number(quantity);
+
+  if (qty <= 0) return;
+
+  if (available < qty) {
+    const product = await Product.findByPk(productId, { transaction, attributes: ['productName'] });
+    throw Object.assign(
+      new Error(`Insufficient stock for ${product?.productName || `product ${productId}`} (have ${available} available, need ${qty})`),
+      { status: 409 },
+    );
+  }
+
+  await row.update({
+    reservedQuantity: reserved + qty,
+    authlstedit: userId ?? null,
+  }, { transaction });
+}
+
+/**
+ * Releases a previously-made reservation.
+ *
+ * Used when a Sales Order is cancelled: the stock was never consumed so the
+ * reservation simply disappears. Clamps at zero — an over-release is a bug
+ * but should never leave the database in a negative state.
+ */
+export async function releaseReservation({ productId, branchId, quantity, transaction, userId = null, ownerId = null }) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
+  const row = await stockRow(productId, branchId, owner, transaction);
+  const reserved = Number(row.reservedQuantity || 0);
+  const qty = Number(quantity);
+  if (qty <= 0 || reserved <= 0) return;
+  const next = Math.max(0, reserved - qty);
+  await row.update({ reservedQuantity: next, authlstedit: userId ?? null }, { transaction });
+}
+
+/**
+ * Consumes a reservation on invoice confirmation.
+ *
+ * Decrements both `stock` (physical unit leaves the building) and
+ * `reservedQuantity` (the hold is consumed). Writes a ledger row.
+ * If there is no prior reservation (invoice not linked to an SO), it falls back
+ * to a plain availability check on the unreserved balance.
+ */
+export async function deductReserved({
+  productId, branchId, quantity, transaction, userId = null, ownerId = null,
+  movementType = 'Sale', referenceType = null, referenceId = null, referenceNumber = null,
+  unitCost = null, notes = null, transactionDate = null, hasReservation = false,
+}) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
+  const row = await stockRow(productId, branchId, owner, transaction);
+  const stock = Number(row.stock);
+  const reserved = Number(row.reservedQuantity || 0);
+  const qty = Number(quantity);
+
+  if (hasReservation) {
+    // The SO already locked this quantity — just consume it.
+    const newReserved = Math.max(0, reserved - qty);
+    if (stock < qty) {
+      // Should never happen if reserveStock was called, but guard it.
+      throw Object.assign(new Error('Stock deduction exceeds physical stock'), { status: 409 });
+    }
+    await row.update({
+      stock: stock - qty,
+      reservedQuantity: newReserved,
+      authlstedit: userId ?? null,
+    }, { transaction });
+  } else {
+    // Plain availability check on unreserved balance.
+    const available = stock - reserved;
+    if (available < qty) {
+      const product = await Product.findByPk(productId, { transaction, attributes: ['productName'] });
+      throw Object.assign(
+        new Error(`Insufficient stock for ${product?.productName || `product ${productId}`} (have ${available} available, need ${qty})`),
+        { status: 409 },
+      );
+    }
+    await row.update({ stock: stock - qty, authlstedit: userId ?? null }, { transaction });
+  }
+
+  await syncProductTotal(productId, transaction);
+
+  // Ledger row.
+  const location = await Branch.findByPk(branchId, { transaction, attributes: ['id', 'locationType'] });
+  return StockMovement.create({
+    productId, branchId, ownerId: owner, locationType: location?.locationType || 'Branch',
+    movementType, quantity: -qty, quantityIn: 0, quantityOut: qty,
+    previousQuantity: stock, currentQuantity: stock - qty,
+    unitCost, referenceType, referenceId, referenceNumber,
+    transactionDate: transactionDate || new Date(),
+    notes, createdBy: userId, authadd: userId,
+  }, { transaction });
 }
 
 /**
@@ -229,9 +338,8 @@ export async function setBranchStock({ productId, branchId, quantity, transactio
 /**
  * Checks availability for several lines at once before any of them are applied.
  *
- * Availability is per owner. A client's forty units sitting on the next shelf
- * do not make your sixty into a hundred, and a check that summed them would let
- * a bill be raised against goods that are not yours to sell.
+ * Availability = stock − reservedQuantity. A client's reserved units sitting on
+ * the next shelf do not count toward your available balance.
  */
 export async function assertAvailable(items, branchId, transaction, ownerId = null) {
   const { allowNegativeStock } = await getConfig();
@@ -240,11 +348,17 @@ export async function assertAvailable(items, branchId, transaction, ownerId = nu
   const owner = ownerId ?? await houseOwnerId(transaction);
 
   for (const item of items) {
-    const available = await getBranchStock(item.productId, branchId, transaction, owner);
+    const row = await BranchStock.findOne({
+      where: { branchId, productId: item.productId, ownerId: owner },
+      transaction,
+    });
+    const stock = Number(row?.stock || 0);
+    const reserved = Number(row?.reservedQuantity || 0);
+    const available = stock - reserved;
     if (available < Number(item.quantity)) {
       const product = await Product.findByPk(item.productId, { transaction });
       throw Object.assign(
-        new Error(`Insufficient stock for ${product?.productName || `product ${item.productId}`} (have ${available})`),
+        new Error(`Insufficient stock for ${product?.productName || `product ${item.productId}`} (have ${available} available, ${reserved} reserved)`),
         { status: 409 },
       );
     }

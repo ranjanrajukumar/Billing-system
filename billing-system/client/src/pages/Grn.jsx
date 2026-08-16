@@ -16,6 +16,7 @@ import { useToast } from '../context/ToastContext.jsx';
 import {
   branchesApi, grnApi, productsApi, purchaseOrdersApi, suppliersApi, warehouseOpsApi,
 } from '../services/resource.service.js';
+import SearchableSelect from '../components/SearchableSelect.jsx';
 
 /**
  * Goods Receipt Notes.
@@ -297,13 +298,16 @@ export default function Grn() {
                 </TextField>
               </Grid>
               <Grid item xs={12} sm={4}>
-                <TextField
-                  select fullWidth size="small" label="Supplier" value={creating.supplierId || ''}
-                  onChange={(e) => setCreating({ ...creating, supplierId: e.target.value })}
-                  InputLabelProps={{ shrink: true }} disabled={Boolean(creating.poId)}
-                >
-                  {suppliers.map((s) => <MenuItem key={s.id} value={s.id}>{s.supplierName}</MenuItem>)}
-                </TextField>
+                <SearchableSelect
+                  options={suppliers}
+                  label="Supplier"
+                  size="small"
+                  value={suppliers.find(s => String(s.id) === String(creating.supplierId)) || null}
+                  onChange={(selected) => setCreating({ ...creating, supplierId: selected ? selected.id : '' })}
+                  getOptionLabel={(s) => s.supplierName}
+                  getOptionKey={(s) => s.id}
+                  disabled={Boolean(creating.poId)}
+                />
               </Grid>
               <Grid item xs={12} sm={4}>
                 <TextField

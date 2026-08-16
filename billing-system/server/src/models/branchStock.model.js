@@ -16,6 +16,10 @@ export default (sequelize) => sequelize.define('BranchStock', {
   // before this column is ever written, so existing stock keeps its meaning.
   ownerId: { type: unsignedInteger(sequelize), allowNull: false, defaultValue: 1 },
   stock: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  // Quantity locked by confirmed Sales Orders waiting for invoice confirmation.
+  // available = stock − reservedQuantity — this is what availability checks use.
+  // On invoice confirmation the reservation is consumed: both columns decrease together.
+  reservedQuantity: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
 
   authadd: { type: DataTypes.INTEGER, allowNull: true },
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },

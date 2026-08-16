@@ -315,7 +315,7 @@ export default function QuickBill() {
                           const uList = [];
                           if (p?.primaryUnit) uList.push(p.primaryUnit);
                           if (p?.secondaryUnit && !uList.includes(p.secondaryUnit)) uList.push(p.secondaryUnit);
-                          if (!uList.length) uList.push('PCS', 'KG', 'BOX', 'BAG');
+                          if (!uList.length) uList.push('PCS', 'KG', 'GM', 'BOX', 'BAG');
                           return uList.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>);
                         })()}
                       </TextField>

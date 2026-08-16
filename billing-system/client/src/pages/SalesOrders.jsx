@@ -4,12 +4,15 @@ import DownloadIcon from '@mui/icons-material/Download';
 import PrintIcon from '@mui/icons-material/Print';
 import ShareIcon from '@mui/icons-material/Share';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CancelIcon from '@mui/icons-material/Cancel';
+import InventoryIcon from '@mui/icons-material/Inventory';
 import {
   alpha, Box, Button, Chip, Divider, Grid, IconButton,
   MenuItem, Paper, Stack, TextField, Tooltip, Typography, useTheme,
 } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import api from '../services/api.js';
 import DataTable from '../components/DataTable.jsx';
 import Loader from '../components/Loader.jsx';
@@ -20,6 +23,7 @@ import PeriodFilter from '../components/PeriodFilter.jsx';
 import StatsCard from '../components/StatsCard.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { customersApi, salesOrdersApi, productsApi } from '../services/resource.service.js';
+import SearchableSelect from '../components/SearchableSelect.jsx';
 import { currency, date } from '../utils/formatters.js';
 import { printDocument, printPdfBlob } from '../utils/print.js';
 
@@ -35,7 +39,7 @@ function calc(items) {
   return { subtotal: sub, cgst: tax / 2, sgst: tax / 2, igst: 0, grand, roundOff: grand - sub - tax };
 }
 
-const STATUS_COLORS = { Pending: 'warning', Approved: 'info', Shipped: 'primary', Delivered: 'success', Cancelled: 'error' };
+const STATUS_COLORS = { Pending: 'warning', Approved: 'info', Confirmed: 'success', Shipped: 'primary', Delivered: 'success', Cancelled: 'error' };
 
 export default function SalesOrders() {
   const [rows, setRows] = useState([]);
@@ -48,7 +52,7 @@ export default function SalesOrders() {
   const [items, setItems] = useState([blankItem]);
   const { showToast } = useToast();
   const theme = useTheme();
-  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm({
+  const { register, handleSubmit, reset, control, formState: { isSubmitting } } = useForm({
     defaultValues: { orderDate: new Date().toISOString().slice(0, 10), customerId: '', status: 'Pending', notes: '' },
   });
   const totals = useMemo(() => calc(items), [items]);
@@ -85,6 +89,29 @@ export default function SalesOrders() {
       showToast('Sales Order saved');
       setOpen(false); setItems([blankItem]); reset(); load();
     } catch (err) { showToast(err.response?.data?.message || 'Error saving order', 'error'); }
+  };
+
+  /** Confirm order → reserves stock. Shows insufficient-stock error prominently. */
+  const confirmOrder = async (order) => {
+    try {
+      await salesOrdersApi.confirm(order.id);
+      showToast(`Order ${order.orderNumber} confirmed — stock reserved`, 'success');
+      load();
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Could not confirm order';
+      showToast(msg, 'error');
+    }
+  };
+
+  /** Cancel order → releases any stock reservation. */
+  const cancelOrder = async (order) => {
+    try {
+      await salesOrdersApi.cancel(order.id);
+      showToast(`Order ${order.orderNumber} cancelled`, 'info');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Could not cancel order', 'error');
+    }
   };
 
   const orderPdf = (id) => api.get(`/sales-orders/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data);
@@ -200,6 +227,22 @@ export default function SalesOrders() {
               { field: 'totalAmount', headerName: 'Total', render: (r) => <Typography fontWeight={800} color="success.main">{currency(r.totalAmount)}</Typography> },
               { field: 'actions', headerName: 'Actions', render: (r) => (
                 <Stack direction="row" spacing={0.25}>
+                  {/* Confirm — only for Pending/Approved orders */}
+                  {!['Confirmed', 'Cancelled', 'Delivered', 'Shipped'].includes(r.status) && (
+                    <Tooltip title="Confirm Order &amp; Reserve Stock">
+                      <IconButton size="small" color="success" onClick={() => confirmOrder(r)} sx={{ borderRadius: 1.5 }}>
+                        <CheckCircleIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  {/* Cancel — not for already-cancelled or delivered */}
+                  {!['Cancelled', 'Delivered'].includes(r.status) && (
+                    <Tooltip title="Cancel Order">
+                      <IconButton size="small" color="error" onClick={() => cancelOrder(r)} sx={{ borderRadius: 1.5 }}>
+                        <CancelIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                   <Tooltip title="Download PDF"><IconButton size="small" onClick={() => download(r.id)} sx={{ borderRadius: 1.5 }}><DownloadIcon fontSize="small" /></IconButton></Tooltip>
                   <Tooltip title="Print"><IconButton size="small" onClick={() => printOrder(r.id)} sx={{ borderRadius: 1.5 }}><PrintIcon fontSize="small" /></IconButton></Tooltip>
                   <Tooltip title="Share on WhatsApp"><IconButton size="small" onClick={() => share(r)} sx={{ borderRadius: 1.5 }}><ShareIcon fontSize="small" /></IconButton></Tooltip>
@@ -222,9 +265,22 @@ export default function SalesOrders() {
               <TextField fullWidth type="date" label="Order Date" InputLabelProps={{ shrink: true }} {...register('orderDate', { required: true })} />
             </Grid>
             <Grid item xs={12} sm={4}>
-              <TextField fullWidth select label="Customer" {...register('customerId', { required: true })}>
-                {customers.map((c) => <MenuItem key={c.id} value={c.id}>{c.customerName}</MenuItem>)}
-              </TextField>
+              <Controller
+                name="customerId"
+                control={control}
+                rules={{ required: true }}
+                render={({ field: { onChange, value } }) => (
+                  <SearchableSelect
+                    options={customers}
+                    label="Customer"
+                    value={customers.find(c => String(c.id) === String(value)) || null}
+                    onChange={(selected) => onChange(selected ? selected.id : '')}
+                    getOptionLabel={(c) => c.customerName}
+                    getOptionKey={(c) => c.id}
+                    required
+                  />
+                )}
+              />
             </Grid>
             <Grid item xs={12} sm={4}>
               <TextField fullWidth select label="Status" {...register('status')}>
@@ -243,13 +299,15 @@ export default function SalesOrders() {
                 <Box key={i}>
                   <Grid container spacing={1} alignItems="center">
                     <Grid item xs={12} md={4}>
-                      <TextField fullWidth select size="small" label="Product" value={item.productId} onChange={(e) => chooseProduct(i, e.target.value)}>
-                        {products.map((p) => (
-                          <MenuItem key={p.id} value={p.id} disabled={Number(p.stock || 0) <= 0}>
-                            <Box><Typography variant="body2" fontWeight={600}>{p.productName}</Typography><Typography variant="caption" color="text.secondary">Stock: {p.stock}</Typography></Box>
-                          </MenuItem>
-                        ))}
-                      </TextField>
+                      <SearchableSelect
+                        options={products}
+                        label="Product"
+                        size="small"
+                        value={products.find(p => String(p.id) === String(item.productId)) || null}
+                        onChange={(selected) => chooseProduct(i, selected ? selected.id : '')}
+                        getOptionLabel={(p) => p.productName}
+                        getOptionKey={(p) => p.id}
+                      />
                     </Grid>
                     {[['quantity', 'Qty'], ['rate', 'Rate'], ['discount', 'Disc.'], ['gstPercent', 'GST%']].map(([name, label]) => (
                       <Grid item xs={6} sm={3} md={1.5} key={name}>

@@ -16,8 +16,17 @@ export const productsApi      = makeResource('/products');
 export const unitsApi         = makeMasterDataResource('unit');
 export const suppliersApi     = makeResource('/suppliers');
 export const purchasesApi     = makeResource('/purchases');
-export const invoicesApi      = makeResource('/invoices');
-export const salesOrdersApi   = makeResource('/sales-orders');
+export const invoicesApi      = {
+  ...makeResource('/invoices'),
+  // Confirm a Draft invoice → validates stock availability and deducts it atomically.
+  confirm: (id) => api.post(`/invoices/${id}/confirm`).then((r) => r.data),
+};
+export const salesOrdersApi   = {
+  ...makeResource('/sales-orders'),
+  confirm: (id) => api.post(`/sales-orders/${id}/confirm`).then((r) => r.data),
+  cancel:  (id) => api.post(`/sales-orders/${id}/cancel`).then((r) => r.data),
+  downloadPdf: (id) => api.get(`/sales-orders/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data),
+};
 export const quotationsApi    = makeResource('/quotations');
 export const deliveryChallansApi = makeResource('/delivery-challans');
 export const salesReturnsApi  = makeResource('/sales-returns');
@@ -29,6 +38,8 @@ export const inventoryApi = {
   // The full stock ledger, with the balance before and after every movement.
   ledger:    (params) => api.get('/inventory/ledger', { params }).then((r) => r.data ?? []),
   valuation: (params) => api.get('/inventory/valuation', { params }).then((r) => r.data ?? {}),
+  // WMS current stock — all hierarchy columns (Warehouse/Zone/Aisle/Rack/Shelf/Bin) + available/reserved.
+  wmsStock:  (params) => api.get('/inventory/wms-stock', { params }).then((r) => r.data ?? { data: [], meta: {} }),
 };
 
 export const invoiceTemplatesApi = {
@@ -128,13 +139,7 @@ export const purchaseReturnsApi = withAction('/purchase-returns', {
   cancel:     (id)         => api.post(`/purchase-returns/${id}/cancel`).then((r) => r.data),
 });
 
-export const warehousesApi = withAction('/warehouses', {
-  contents:  (id, params) => api.get(`/warehouses/${id}/contents`, { params }).then((r) => r.data),
-  valuation: (id)         => api.get(`/warehouses/${id}/valuation`).then((r) => r.data),
-  bins:      (id)         => api.get(`/warehouses/${id}/bins`).then((r) => r.data ?? []),
-  createBin: (id, body)   => api.post(`/warehouses/${id}/bins`, body).then((r) => r.data),
-  removeBin: (id, binId)  => api.delete(`/warehouses/${id}/bins/${binId}`).then((r) => r.data),
-});
+
 
 export const serialsApi = {
   list:    (params) => api.get('/warehouses/serials', { params }).then((r) => r.data ?? { data: [], meta: {} }),
@@ -276,4 +281,29 @@ export const ledgersApi = {
 export const branchesApi = {
   ...makeResource('/branches'),
   productStock: (productId) => api.get(`/branches/stock/${productId}`).then((r) => r.data ?? {}),
+};
+
+/**
+ * Warehouses — the 6-level location hierarchy (Warehouse → Zone → Aisle → Rack → Shelf → Bin).
+ *
+ * The server's /warehouses routes manage Branch rows with locationType=Warehouse
+ * and their associated WarehouseBin tree.
+ */
+export const warehousesApi = {
+  // Warehouse-level CRUD (Branch rows with locationType=Warehouse)
+  list:      (params)   => api.get('/warehouses', { params }).then((r) => r.data ?? { data: [], meta: {} }),
+  get:       (id)       => api.get(`/warehouses/${id}`).then((r) => r.data ?? null),
+  create:    (payload)  => api.post('/warehouses', payload).then((r) => r.data ?? {}),
+  update:    (id, body) => api.put(`/warehouses/${id}`, body).then((r) => r.data ?? {}),
+  remove:    (id)       => api.delete(`/warehouses/${id}`).then((r) => r.data ?? {}),
+
+  // Stock contents and valuation for a warehouse
+  contents:  (id, params) => api.get(`/warehouses/${id}/contents`, { params }).then((r) => r.data ?? { data: [] }),
+  valuation: (id)         => api.get(`/warehouses/${id}/valuation`).then((r) => r.data ?? {}),
+
+  // Location hierarchy (WarehouseBin tree) within a warehouse
+  bins:      (id)            => api.get(`/warehouses/${id}/bins`).then((r) => r.data ?? []),
+  createBin: (id, body)      => api.post(`/warehouses/${id}/bins`, body).then((r) => r.data ?? {}),
+  updateBin: (id, binId, body) => api.put(`/warehouses/${id}/bins/${binId}`, body).then((r) => r.data ?? {}),
+  removeBin: (id, binId)     => api.delete(`/warehouses/${id}/bins/${binId}`).then((r) => r.data ?? {}),
 };

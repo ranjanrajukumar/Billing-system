@@ -1,7 +1,10 @@
 import { DataTypes } from 'sequelize';
 
 export function unsignedInteger(sequelize) {
-  return sequelize.getDialect() === 'mssql' ? DataTypes.INTEGER : DataTypes.INTEGER.UNSIGNED;
+  if (['mysql', 'mariadb'].includes(sequelize.getDialect())) {
+    return DataTypes.INTEGER.UNSIGNED;
+  }
+  return DataTypes.INTEGER;
 }
 
 export function enumType(sequelize, values, maxLength = 40) {

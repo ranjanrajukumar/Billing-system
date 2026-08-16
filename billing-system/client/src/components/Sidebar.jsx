@@ -92,6 +92,7 @@ const ICONS = {
 
   warehouses: <WarehouseIcon fontSize="small" />,
   warehouseOps: <ForkliftIcon fontSize="small" />,
+  gatepasses: <LocalShippingIcon fontSize="small" />,
   stockTransfers: <SwapHorizIcon fontSize="small" />,
   stockAdjustments: <TuneIcon fontSize="small" />,
   stockCounts: <FactCheckIcon fontSize="small" />,
