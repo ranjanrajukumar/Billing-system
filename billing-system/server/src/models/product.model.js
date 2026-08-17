@@ -46,6 +46,24 @@ export default (sequelize) => sequelize.define('Product', {
   unitVolume: { type: DataTypes.DECIMAL(12, 6), allowNull: true },
   unitWeightKg: { type: DataTypes.DECIMAL(12, 4), allowNull: true },
 
+  // ---- Additional product details ----
+  packageSize: { type: DataTypes.STRING(60), allowNull: true },   // e.g. "500ml", "1kg", "10pcs"
+  productType: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'Goods' }, // Goods | Service
+  location: { type: DataTypes.STRING(100), allowNull: true },     // Rack / shelf / bin label
+  moq: { type: DataTypes.INTEGER, allowNull: true },              // Minimum order quantity
+  taxCategory: { type: DataTypes.STRING(20), allowNull: true },   // e.g. CGST, SGST, IGST, Exempt
+
+  // Computed read-only virtual: MRP inclusive of GST
+  mrpWithGst: {
+    type: DataTypes.VIRTUAL,
+    get() {
+      const m = Number(this.mrp);
+      const g = Number(this.gstPercent);
+      if (!m || !Number.isFinite(m)) return null;
+      return Number((m + (m * g) / 100).toFixed(2));
+    },
+  },
+
   // Variants, kept as plain attributes rather than a variant table: most shops
   // want "red, large" on the product, not a second entity to maintain.
   size: { type: DataTypes.STRING(40), allowNull: true },
