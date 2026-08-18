@@ -68,6 +68,9 @@ export const list = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
   const where = withDateRange(scopedWhere(req, { detstatus: false }), req.query, 'poDate');
   if (req.query.status) where.status = req.query.status;
+  if (req.query.search) {
+    where.poNumber = { [Op.like]: `%${req.query.search}%` };
+  }
   if (req.query.supplierId) where.supplierId = req.query.supplierId;
   // "Still owed to us" — the list purchasing actually works from.
   if (req.query.pending === 'true') {

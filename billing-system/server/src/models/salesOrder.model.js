@@ -30,7 +30,9 @@ export default (sequelize) => sequelize.define('SalesOrder', {
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },
   authdel: { type: DataTypes.INTEGER, allowNull: true },
   detstatus: { type: DataTypes.BOOLEAN, defaultValue: false },
-  delondt: { type: DataTypes.DATE, allowNull: true }
+  delondt: { type: DataTypes.DATE, allowNull: true },
+  
+  waveId: { type: unsignedInteger(sequelize), allowNull: true }
 }, {
   timestamps: true,
   createdAt: 'addondt',

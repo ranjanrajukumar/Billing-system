@@ -11,6 +11,7 @@ import Modal from '../components/Modal.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import StatsCard from '../components/StatsCard.jsx';
 import SearchableSelect from '../components/SearchableSelect.jsx';
+import SearchBox from '../components/SearchBox.jsx';
 import StatusChip from '../components/StatusChip.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { currency } from '../utils/formatters.js';
@@ -47,6 +48,8 @@ export default function PurchaseOrders() {
   const { register, handleSubmit, reset, control } = useForm();
   const { showToast } = useToast();
 
+  const [query, setQuery] = useState({ page: 1, limit: 10, search: '', status: '' });
+
   const blank = () => ({
     supplierId: '', branchId: '', poDate: new Date().toISOString().slice(0, 10),
     expectedDate: '', terms: '', notes: '',
@@ -56,8 +59,12 @@ export default function PurchaseOrders() {
   const load = async () => {
     setLoading(true);
     try {
+      const params = { ...query };
+      if (!params.search) delete params.search;
+      if (!params.status) delete params.status;
+      
       const [list, sups, prods, locs] = await Promise.all([
-        purchaseOrdersApi.list({ limit: 100 }),
+        purchaseOrdersApi.list(params),
         suppliersApi.list({ limit: 300 }),
         productsApi.list({ limit: 500 }),
         branchesApi.list({ limit: 200 }),
@@ -71,7 +78,7 @@ export default function PurchaseOrders() {
     }
     setLoading(false);
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [query]);
 
   const lineTotal = (line) => {
     const taxable = Math.max(Number(line.quantity || 0) * Number(line.rate || 0) - Number(line.discount || 0), 0);
@@ -80,6 +87,11 @@ export default function PurchaseOrders() {
   const orderTotal = (items) => items.reduce((sum, line) => sum + lineTotal(line), 0);
 
   const submitForm = async () => {
+    if (!editing.items || !editing.items.some(i => i.productId && Number(i.quantity) > 0)) {
+      showToast('Add at least one product with quantity > 0', 'error'); return;
+    }
+    const invalid = editing.items.filter(i => i.productId && Number(i.quantity) > 0).find(i => Number(i.rate) < 0 || Number(i.discount) < 0 || Number(i.gstPercent) < 0 || Number(i.gstPercent) > 100);
+    if (invalid) { showToast('Invalid rate, discount, or GST percentage in line items', 'error'); return; }
     setBusy(true);
     try {
       const payload = {
@@ -161,6 +173,18 @@ export default function PurchaseOrders() {
           />
         </Grid>
       </Grid>
+
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+        <SearchBox value={query.search || ''} onChange={(search) => setQuery({ ...query, search, page: 1 })} placeholder="Search by PO #…" />
+        <TextField
+          select size="small" label="Status" value={query.status || ''}
+          onChange={(e) => setQuery({ ...query, status: e.target.value, page: 1 })}
+          sx={{ minWidth: 150 }}
+        >
+          <MenuItem value="">All Statuses</MenuItem>
+          {Object.keys(ACTIONS_BY_STATUS).map((s) => <MenuItem value={s} key={s}>{s}</MenuItem>)}
+        </TextField>
+      </Stack>
 
       {loading ? <Loader /> : (
         <DataTable

@@ -8,10 +8,13 @@ const router = express.Router();
 // Apply auth and branch context to all routes
 router.use(authenticate, resolveBranch);
 
+import { validate } from '../middleware/validate.js';
+import { gatepassRules } from '../validators/logistics.validator.js';
+
 router.get('/', controller.getAll);
 router.get('/:id', controller.getOne);
-router.post('/', controller.create);
-router.put('/:id', controller.update);
+router.post('/', gatepassRules, validate, controller.create);
+router.put('/:id', gatepassRules, validate, controller.update);
 router.delete('/:id', controller.remove);
 
 export default router;

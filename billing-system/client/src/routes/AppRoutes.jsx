@@ -54,6 +54,11 @@ import CashFlow from '../pages/CashFlow.jsx';
 import StockAudit from '../pages/StockAudit.jsx';
 import WarehouseFloor from '../pages/WarehouseFloor.jsx';
 import Gatepasses from '../pages/Gatepasses.jsx';
+import InboundAppointments from '../pages/InboundAppointments.jsx';
+import QcInspections from '../pages/QcInspections.jsx';
+import PickWaves from '../pages/PickWaves.jsx';
+import Shipments from '../pages/Shipments.jsx';
+import Repairs from '../pages/Repairs.jsx';
 
 export default function AppRoutes({ mode, onToggleMode }) {
   return (
@@ -98,12 +103,18 @@ export default function AppRoutes({ mode, onToggleMode }) {
           <Route path="stock-adjustments" element={<StockAdjustments />} />
           <Route path="stock-counts" element={<StockCounts />} />
           <Route path="serials" element={<Serials />} />
-          <Route path="warehouses" element={<Warehouses />} />
+          <Route path="gatepasses" element={<Gatepasses />} />
+          <Route path="inbound-appointments" element={<InboundAppointments />} />
+          <Route path="qc" element={<QcInspections />} />
+          <Route path="waves" element={<PickWaves />} />
+          <Route path="shipments" element={<Shipments />} />
+          <Route path="repairs" element={<Repairs />} />
           <Route path="ledgers" element={<Ledgers />} />
           <Route path="expenses" element={<Expenses />} />
           <Route path="cash-registers" element={<CashRegisters />} />
           <Route path="bank-accounts" element={<BankAccounts />} />
           <Route path="chart-of-accounts" element={<ChartOfAccounts />} />
+          <Route path="warehouses" element={<Warehouses />} />
           <Route path="journal-entries" element={<JournalEntries />} />
           <Route path="financials" element={<Financials />} />
           <Route path="approvals" element={<Approvals />} />

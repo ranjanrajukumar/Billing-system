@@ -68,6 +68,11 @@ export default function JournalEntries() {
   });
 
   const save = async () => {
+    const t = totals(creating.lines);
+    const balanced = Math.abs(t.debit - t.credit) < 0.01 && t.debit > 0;
+    if (!balanced) { showToast('Debits must equal credits and be greater than zero', 'error'); return; }
+    const invalid = creating.lines.find(l => Number(l.debit) < 0 || Number(l.credit) < 0);
+    if (invalid) { showToast('Debits and credits cannot be negative', 'error'); return; }
     setBusy(true);
     try {
       await accountingApi.createEntry({

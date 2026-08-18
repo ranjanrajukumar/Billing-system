@@ -83,7 +83,9 @@ export default function SalesOrders() {
 
   const submit = async (values) => {
     const selected = items.filter((it) => it.productId && Number(it.quantity) > 0);
-    if (!selected.length) { showToast('Add at least one product', 'error'); return; }
+    if (!selected.length) { showToast('Add at least one product with quantity > 0', 'error'); return; }
+    const invalid = selected.find(it => Number(it.rate) < 0 || Number(it.discount) < 0 || Number(it.gstPercent) < 0 || Number(it.gstPercent) > 100);
+    if (invalid) { showToast('Invalid rate, discount, or GST percentage in line items', 'error'); return; }
     try {
       await salesOrdersApi.create({ ...values, items: selected, totalAmount: totals.grand });
       showToast('Sales Order saved');
@@ -192,10 +194,21 @@ export default function SalesOrders() {
         }
       />
 
-      <PeriodFilter
-        value={query}
-        onChange={(range) => setQuery({ ...query, ...range, page: 1 })}
-      />
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+        <PeriodFilter
+          value={query}
+          onChange={(range) => setQuery({ ...query, ...range, page: 1 })}
+        />
+        <SearchBox value={query.search || ''} onChange={(search) => setQuery({ ...query, search, page: 1 })} placeholder="Search orders…" />
+        <TextField
+          select size="small" label="Status" value={query.status || ''}
+          onChange={(e) => setQuery({ ...query, status: e.target.value, page: 1 })}
+          sx={{ minWidth: 150 }}
+        >
+          <MenuItem value="">All Statuses</MenuItem>
+          {Object.keys(STATUS_COLORS).map((s) => <MenuItem value={s} key={s}>{s}</MenuItem>)}
+        </TextField>
+      </Stack>
 
       {/* Stats */}
       <Grid container spacing={2}>

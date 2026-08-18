@@ -46,9 +46,7 @@ const empty = {
   unitConversionFactor: 1, secondarySellingPrice: '',
   batchRequired: false, expiryRequired: false, serialRequired: false, warrantyMonths: '',
   size: '', color: '', isActive: true,
-  // New fields
-  packageSize: '', productType: 'Goods', location: '', moq: '',
-  taxCategory: '', description: '', brandId: '',
+  packageSize: '', packageUnit: 'Gram', packType: 'Packet',
 };
 
 function ProductImage({ row }) {
@@ -89,12 +87,6 @@ export default function Products() {
   const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm({ defaultValues: empty });
   const formValues = watch();
   const formMargin = Number(formValues.sellingPrice || 0) - Number(formValues.purchasePrice || 0);
-  const mrpWithGst = (() => {
-    const m = Number(formValues.mrp);
-    const g = Number(formValues.gstPercent);
-    if (!m || m <= 0) return null;
-    return (m + (m * g) / 100).toFixed(2);
-  })();
 
   const load = async () => {
     setLoading(true);
@@ -167,14 +159,9 @@ export default function Products() {
       expiryRequired: Boolean(row.expiryRequired),
       serialRequired: Boolean(row.serialRequired),
       isActive: row.isActive !== false,
-      // New fields
       packageSize: blankIfNull(row.packageSize),
-      productType: row.productType || 'Goods',
-      location: blankIfNull(row.location),
-      moq: blankIfNull(row.moq),
-      taxCategory: blankIfNull(row.taxCategory),
-      description: blankIfNull(row.description),
-      brandId: blankIfNull(row.brandId),
+      packageUnit: row.packageUnit || 'Gram',
+      packType: row.packType || 'Packet',
     });
   };
 
@@ -340,13 +327,15 @@ export default function Products() {
                 <Grid item xs={12} sm={4}>
                   <TextField
                     fullWidth type="number" label="Selling Price — Retail (₹)" inputProps={{ min: 0, step: 'any' }}
-                    {...register('sellingPrice')} InputLabelProps={{ shrink: true }}
-                    error={Number(formValues.mrp) > 0 && Number(formValues.sellingPrice) > Number(formValues.mrp)}
-                    helperText={
-                      Number(formValues.mrp) > 0 && Number(formValues.sellingPrice) > Number(formValues.mrp)
-                        ? 'Cannot be more than the MRP'
-                        : ' '
-                    }
+                    {...register('sellingPrice', {
+                      validate: (val, formValues) => {
+                        const mrp = Number(formValues.mrp);
+                        if (mrp > 0 && Number(val) > mrp) return 'Cannot be more than the MRP';
+                        return true;
+                      }
+                    })} InputLabelProps={{ shrink: true }}
+                    error={Boolean(errors.sellingPrice)}
+                    helperText={errors.sellingPrice ? errors.sellingPrice.message : ' '}
                   />
                 </Grid>
                 <Grid item xs={12} sm={4}>
@@ -362,29 +351,6 @@ export default function Products() {
                 <Grid item xs={12} sm={4}>
                   <TextField fullWidth type="number" label="GST %" inputProps={{ min: 0, max: 100, step: 'any' }}
                     {...register('gstPercent')} InputLabelProps={{ shrink: true }} />
-                </Grid>
-                {/* MRP with GST computed display */}
-                {mrpWithGst && (
-                  <Grid item xs={12}>
-                    <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: alpha(theme.palette.success.main, 0.06), border: 1, borderColor: alpha(theme.palette.success.main, 0.25) }}>
-                      <Typography variant="caption" color="text.secondary">MRP incl. GST ({formValues.gstPercent}%)</Typography>
-                      <Typography variant="h6" fontWeight={700} color="success.main">₹{mrpWithGst}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        MRP {currency(formValues.mrp)} + GST {formValues.gstPercent}% = ₹{mrpWithGst}
-                      </Typography>
-                    </Box>
-                  </Grid>
-                )}
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth select label="Tax Category" {...register('taxCategory')} InputLabelProps={{ shrink: true }}
-                    helperText="GST treatment for this item">
-                    <MenuItem value="">— Not set —</MenuItem>
-                    <MenuItem value="CGST+SGST">CGST + SGST (Intra-state)</MenuItem>
-                    <MenuItem value="IGST">IGST (Inter-state)</MenuItem>
-                    <MenuItem value="Exempt">Exempt</MenuItem>
-                    <MenuItem value="NIL">NIL rated</MenuItem>
-                    <MenuItem value="Zero-rated">Zero-rated (Export)</MenuItem>
-                  </TextField>
                 </Grid>
                 {Number(formValues.sellingPrice) > 0 && Number(formValues.purchasePrice) > 0 && (
                   <Grid item xs={12}>
@@ -454,9 +420,15 @@ export default function Products() {
                     fullWidth type="number" label="Conversion Factor"
                     placeholder="e.g. 10"
                     inputProps={{ min: 0, step: 'any' }}
-                    {...register('unitConversionFactor')}
+                    {...register('unitConversionFactor', {
+                      validate: (val, formValues) => {
+                        if (formValues.secondaryUnit && Number(val) <= 1) return 'Must be > 1 with a secondary unit';
+                        return true;
+                      }
+                    })}
                     InputLabelProps={{ shrink: true }}
-                    helperText="e.g. 1 BOX = 10 PCS"
+                    error={Boolean(errors.unitConversionFactor)}
+                    helperText={errors.unitConversionFactor ? errors.unitConversionFactor.message : 'e.g. 1 BOX = 10 PCS'}
                   />
                 </Grid>
                 {/* Stated in the direction the stock engine actually applies:
@@ -493,53 +465,8 @@ export default function Products() {
               </Grid>
             </Box>
           </Grid>
-
-          {/* Additional Details */}
-          <Grid item xs={12}>
-            <Box sx={{ p: 2, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
-              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5, color: 'primary.main' }}>
-                Additional Details
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth label="Brand / Manufacturer" {...register('brandId')} InputLabelProps={{ shrink: true }}
-                    helperText="Brand name or manufacturer" />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth label="Package Size" placeholder="e.g. 500ml, 1kg, 10pcs"
-                    {...register('packageSize')} InputLabelProps={{ shrink: true }}
-                    helperText="Unit size per package" />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth select label="Product Type" {...register('productType')} InputLabelProps={{ shrink: true }}>
-                    <MenuItem value="Goods">Goods (Physical)</MenuItem>
-                    <MenuItem value="Service">Service</MenuItem>
-                  </TextField>
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth label="Location / Rack / Shelf" placeholder="e.g. A-12, Rack 3"
-                    {...register('location')} InputLabelProps={{ shrink: true }}
-                    helperText="Storage location in the store" />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth type="number" label="MOQ (Min. Order Qty)" inputProps={{ min: 1, step: 1 }}
-                    {...register('moq')} InputLabelProps={{ shrink: true }}
-                    helperText="Minimum quantity to sell/order" />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth size="small" label="Size" {...register('size')} InputLabelProps={{ shrink: true }} />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth size="small" label="Colour" {...register('color')} InputLabelProps={{ shrink: true }} />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField fullWidth multiline minRows={2} label="Description / Notes"
-                    placeholder="Product description, usage notes, ingredients…"
-                    {...register('description')} InputLabelProps={{ shrink: true }} />
-                </Grid>
-              </Grid>
-            </Box>
-          </Grid>
+          {/* Tracking is opt-in per product: a shop selling loose grain wants
+              none of it, an electronics dealer wants serials on everything. */}
           <Grid item xs={12}>
             <Box sx={{ p: 2, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
               <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5, color: 'primary.main' }}>
@@ -561,6 +488,12 @@ export default function Products() {
                 <Grid item xs={12} sm={3}>
                   <TextField fullWidth size="small" type="number" label="Warranty (months)" inputProps={{ min: 0 }}
                     {...register('warrantyMonths')} InputLabelProps={{ shrink: true }} />
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <TextField fullWidth size="small" label="Size" {...register('size')} InputLabelProps={{ shrink: true }} />
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <TextField fullWidth size="small" label="Colour" {...register('color')} InputLabelProps={{ shrink: true }} />
                 </Grid>
               </Grid>
             </Box>

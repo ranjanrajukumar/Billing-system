@@ -62,6 +62,9 @@ export default function StockAdjustments() {
   });
 
   const submit = async () => {
+    if (!creating.items || !creating.items.some(i => i.productId && Number(i.quantity) !== 0)) {
+      showToast('Add at least one product with a non-zero quantity', 'error'); return;
+    }
     setBusy(true);
     try {
       await stockAdjustmentsApi.create({

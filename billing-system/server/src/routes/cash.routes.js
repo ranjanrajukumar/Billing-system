@@ -15,14 +15,17 @@ router.post('/registers/open', controller.openRegister);
 router.post('/registers/:id/close', controller.closeRegister);
 router.post('/registers/:id/entries', controller.addCashEntry);
 
+import { validate } from '../middleware/validate.js';
+import { bankRules, bankEntryRules } from '../validators/cash.validator.js';
+
 // ---- Bank accounts ----
 const TREASURY = ['Admin', 'Accountant'];
 router.get('/banks', controller.listBankAccounts);
 router.get('/banks/:id/transactions', controller.bankTransactions);
-router.post('/banks', authorize(...TREASURY), controller.createBankAccount);
-router.put('/banks/:id', authorize(...TREASURY), controller.updateBankAccount);
+router.post('/banks', authorize(...TREASURY), bankRules, validate, controller.createBankAccount);
+router.put('/banks/:id', authorize(...TREASURY), bankRules, validate, controller.updateBankAccount);
 router.delete('/banks/:id', authorize('Admin'), controller.removeBankAccount);
-router.post('/banks/:id/entries', authorize(...TREASURY), controller.addBankEntry);
+router.post('/banks/:id/entries', authorize(...TREASURY), bankEntryRules, validate, controller.addBankEntry);
 router.patch('/banks/entries/:entryId/reconcile', authorize(...TREASURY), controller.reconcileBankEntry);
 
 export default router;

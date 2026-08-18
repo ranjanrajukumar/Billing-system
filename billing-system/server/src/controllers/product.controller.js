@@ -9,6 +9,9 @@ import { getBranchStock, setBranchStock } from '../services/stock.service.js';
 export const listProducts = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
   const where = { detstatus: false };
+  if (req.query.baseOnly === 'true') {
+    where.parentId = null;
+  }
   if (req.query.search) {
     where[Op.or] = [
       { productName: { [Op.like]: `%${req.query.search}%` } },
@@ -18,52 +21,349 @@ export const listProducts = asyncHandler(async (req, res) => {
     ];
   }
   if (req.query.categoryId) where.categoryId = req.query.categoryId;
-  const { rows, count } = await Product.findAndCountAll({ where, include: Category, limit, offset, order: [['addondt', 'DESC']] });
+
+  const includeModels = [Category];
+  if (req.query.baseOnly === 'true') {
+    includeModels.push({
+      model: Product,
+      as: 'variants',
+      where: { detstatus: false },
+      required: false
+    });
+  }
+
+  const { rows, count } = await Product.findAndCountAll({
+    where,
+    include: includeModels,
+    limit,
+    offset,
+    order: [['addondt', 'DESC']]
+  });
   res.json(paged(rows, count, page, limit));
 });
 
 export const getProduct = asyncHandler(async (req, res) => {
-  const product = await Product.findOne({ where: { id: req.params.id, detstatus: false }, include: Category });
+  const product = await Product.findOne({
+    where: { id: req.params.id, detstatus: false },
+    include: [
+      Category,
+      {
+        model: Product,
+        as: 'variants',
+        where: { detstatus: false },
+        required: false
+      }
+    ]
+  });
   if (!product) return res.status(404).json({ message: 'Product not found' });
   res.json(product);
 });
 
 export const createProduct = asyncHandler(async (req, res) => {
-  const payload = { ...normalizeProductPayload(req.body, req.user?.id), ...imageColumns(req.file, 'image') };
-  const product = await Product.create(payload);
-  // Opening stock belongs to the branch creating the product; without this the
-  // product would exist with no stock anywhere and could never be sold.
-  await setBranchStock({
-    productId: product.id,
-    branchId: req.branchId,
-    quantity: product.stock,
-    userId: req.user?.id,
+  const basePayload = normalizeProductPayload(req.body, req.user?.id);
+  const imageCols = imageColumns(req.file, 'image');
+
+  let variantsData = [];
+  if (req.body.variants) {
+    try {
+      variantsData = typeof req.body.variants === 'string' ? JSON.parse(req.body.variants) : req.body.variants;
+    } catch (e) {
+      return res.status(400).json({ message: 'Invalid variants JSON format' });
+    }
+  }
+
+  // Validate SKUs and Barcodes uniqueness in request body (including parent)
+  const allSkus = [basePayload.sku?.trim(), ...variantsData.map((v) => v.sku?.trim())].filter(Boolean);
+  const allBarcodes = [basePayload.barcode?.trim(), ...variantsData.map((v) => v.barcode?.trim())].filter(Boolean);
+
+  if (new Set(allSkus.map(s => s.toLowerCase())).size !== allSkus.length) {
+    return res.status(400).json({ message: 'Duplicate SKUs found in product details' });
+  }
+  if (new Set(allBarcodes.map(b => b.toLowerCase())).size !== allBarcodes.length) {
+    return res.status(400).json({ message: 'Duplicate Barcodes found in product details' });
+  }
+
+  // Check database for existing SKUs and Barcodes
+  if (allSkus.length) {
+    const existingSku = await Product.findOne({ where: { sku: allSkus, detstatus: false } });
+    if (existingSku) return res.status(409).json({ message: `SKU ${existingSku.sku} is already used by ${existingSku.productName}` });
+  }
+  if (allBarcodes.length) {
+    const existingBarcode = await Product.findOne({ where: { barcode: allBarcodes, detstatus: false } });
+    if (existingBarcode) return res.status(409).json({ message: `Barcode ${existingBarcode.barcode} is already used by ${existingBarcode.productName}` });
+  }
+
+  // Validate Rule 9 (Product Name + Size + Unit + Pack Type duplicates)
+  const itemsToCheck = variantsData.length > 0 ? variantsData : [{
+    packageSize: basePayload.packageSize,
+    packageUnit: basePayload.packageUnit,
+    packType: basePayload.packType
+  }];
+
+  for (const item of itemsToCheck) {
+    const duplicate = await Product.findOne({
+      where: {
+        productName: basePayload.productName,
+        packageSize: item.packageSize || null,
+        packageUnit: item.packageUnit || null,
+        packType: item.packType || null,
+        detstatus: false
+      }
+    });
+    if (duplicate) {
+      return res.status(409).json({
+        message: `A product/variant of "${basePayload.productName}" with size "${item.packageSize || ''}", unit "${item.packageUnit || ''}", and pack type "${item.packType || ''}" already exists (SKU: ${duplicate.sku}).`
+      });
+    }
+  }
+
+  // Create the parent base product
+  const parent = await Product.create({
+    ...basePayload,
+    ...imageCols,
+    parentId: null
   });
-  // Re-read through the default scope so the image bytes stay out of the response.
-  res.status(201).json(await Product.findByPk(product.id, { include: Category }));
+
+  // Create variants
+  if (variantsData.length > 0) {
+    for (const v of variantsData) {
+      const variantPayload = normalizeProductPayload(v, req.user?.id);
+      const child = await Product.create({
+        ...variantPayload,
+        productName: parent.productName,
+        categoryId: parent.categoryId,
+        brandId: parent.brandId,
+        parentId: parent.id,
+        imagePath: parent.imagePath,
+        imageData: parent.imageData,
+        imageMimeType: parent.imageMimeType,
+      });
+
+      // Initialize stock for the variant
+      await setBranchStock({
+        productId: child.id,
+        branchId: req.branchId,
+        quantity: child.stock,
+        userId: req.user?.id,
+      });
+    }
+  } else {
+    // Single / legacy product creation path
+    await setBranchStock({
+      productId: parent.id,
+      branchId: req.branchId,
+      quantity: parent.stock,
+      userId: req.user?.id,
+    });
+  }
+
+  res.status(201).json(await Product.findByPk(parent.id, {
+    include: [Category, { model: Product, as: 'variants', where: { detstatus: false }, required: false }]
+  }));
 });
 
 export const updateProduct = asyncHandler(async (req, res) => {
   const product = await Product.findOne({ where: { id: req.params.id, detstatus: false } });
   if (!product) return res.status(404).json({ message: 'Product not found' });
-  const payload = { ...normalizeProductUpdate(req.body, req.user?.id), ...imageColumns(req.file, 'image') };
-  await product.update(payload);
-  // Editing stock on the product form sets the acting branch's quantity.
-  if (payload.stock !== undefined) {
-    await setBranchStock({
-      productId: product.id,
-      branchId: req.branchId,
-      quantity: payload.stock,
-      userId: req.user?.id,
+
+  // Always update from the perspective of the parent product
+  const parent = product.parentId ? await Product.findByPk(product.parentId) : product;
+
+  const basePayload = normalizeProductUpdate(req.body, req.user?.id);
+  const imageCols = imageColumns(req.file, 'image');
+
+  let variantsData = [];
+  if (req.body.variants) {
+    try {
+      variantsData = typeof req.body.variants === 'string' ? JSON.parse(req.body.variants) : req.body.variants;
+    } catch (e) {
+      return res.status(400).json({ message: 'Invalid variants JSON format' });
+    }
+  }
+
+  // Get list of all IDs we are keeping/updating (parent ID and variant IDs)
+  const savedIds = [parent.id, ...variantsData.map((v) => v.id).filter(Boolean)];
+
+  // Validate SKUs and Barcodes uniqueness in request body
+  const allSkus = [basePayload.sku?.trim(), ...variantsData.map((v) => v.sku?.trim())].filter(Boolean);
+  const allBarcodes = [basePayload.barcode?.trim(), ...variantsData.map((v) => v.barcode?.trim())].filter(Boolean);
+
+  if (new Set(allSkus.map(s => s.toLowerCase())).size !== allSkus.length) {
+    return res.status(400).json({ message: 'Duplicate SKUs found in request' });
+  }
+  if (new Set(allBarcodes.map(b => b.toLowerCase())).size !== allBarcodes.length) {
+    return res.status(400).json({ message: 'Duplicate Barcodes found in request' });
+  }
+
+  // Check database collisions (excluding the IDs we are updating/keeping)
+  for (const sku of allSkus) {
+    const clash = await Product.findOne({
+      where: {
+        sku,
+        detstatus: false,
+        id: { [Op.notIn]: savedIds }
+      }
+    });
+    if (clash) {
+      return res.status(409).json({ message: `SKU ${sku} is already used by ${clash.productName}` });
+    }
+  }
+
+  for (const barcode of allBarcodes) {
+    const clash = await Product.findOne({
+      where: {
+        barcode,
+        detstatus: false,
+        id: { [Op.notIn]: savedIds }
+      }
+    });
+    if (clash) {
+      return res.status(409).json({ message: `Barcode ${barcode} is already used by ${clash.productName}` });
+    }
+  }
+
+  // Check Rule 9 duplicate variants
+  const itemsToCheck = req.body.variants !== undefined
+    ? variantsData
+    : [{
+        id: parent.id,
+        packageSize: basePayload.packageSize !== undefined ? basePayload.packageSize : parent.packageSize,
+        packageUnit: basePayload.packageUnit !== undefined ? basePayload.packageUnit : parent.packageUnit,
+        packType: basePayload.packType !== undefined ? basePayload.packType : parent.packType
+      }];
+
+  const parentName = basePayload.productName !== undefined ? basePayload.productName : parent.productName;
+
+  for (const item of itemsToCheck) {
+    const duplicate = await Product.findOne({
+      where: {
+        productName: parentName,
+        packageSize: item.packageSize || null,
+        packageUnit: item.packageUnit || null,
+        packType: item.packType || null,
+        detstatus: false,
+        id: { [Op.notIn]: item.id ? [item.id] : [] }
+      }
+    });
+    if (duplicate) {
+      return res.status(409).json({
+        message: `A product/variant of "${parentName}" with size "${item.packageSize || ''}", unit "${item.packageUnit || ''}", and pack type "${item.packType || ''}" already exists (SKU: ${duplicate.sku}).`
+      });
+    }
+  }
+
+  // Update base product
+  await parent.update({
+    ...basePayload,
+    ...imageCols
+  });
+
+  if (req.body.variants !== undefined) {
+    const currentVariants = await Product.findAll({ where: { parentId: parent.id, detstatus: false } });
+    const currentIds = currentVariants.map((v) => v.id);
+    const postedIds = variantsData.map((v) => v.id).filter(Boolean);
+
+    // Soft delete removed variants
+    const toDelete = currentIds.filter((id) => !postedIds.includes(id));
+    if (toDelete.length > 0) {
+      await Product.update(
+        { detstatus: true, authdel: req.user?.id, delondt: new Date() },
+        { where: { id: toDelete } }
+      );
+    }
+
+    // Update or create variants
+    for (const v of variantsData) {
+      if (v.id) {
+        const variantPayload = normalizeProductUpdate(v, req.user?.id);
+        const child = await Product.findByPk(v.id);
+        if (child) {
+          await child.update({
+            ...variantPayload,
+            productName: parent.productName,
+            categoryId: parent.categoryId,
+            brandId: parent.brandId,
+            imagePath: parent.imagePath,
+            imageData: parent.imageData,
+            imageMimeType: parent.imageMimeType,
+          });
+
+          // Sync stock
+          if (variantPayload.stock !== undefined) {
+            await setBranchStock({
+              productId: child.id,
+              branchId: req.branchId,
+              quantity: variantPayload.stock,
+              userId: req.user?.id,
+            });
+          }
+        }
+      } else {
+        const variantPayload = normalizeProductPayload(v, req.user?.id);
+        const child = await Product.create({
+          ...variantPayload,
+          productName: parent.productName,
+          categoryId: parent.categoryId,
+          brandId: parent.brandId,
+          parentId: parent.id,
+          imagePath: parent.imagePath,
+          imageData: parent.imageData,
+          imageMimeType: parent.imageMimeType,
+        });
+
+        // Initialize variant stock
+        await setBranchStock({
+          productId: child.id,
+          branchId: req.branchId,
+          quantity: child.stock,
+          userId: req.user?.id,
+        });
+      }
+    }
+  } else {
+    // Single / legacy product stock edit
+    if (basePayload.stock !== undefined) {
+      await setBranchStock({
+        productId: parent.id,
+        branchId: req.branchId,
+        quantity: basePayload.stock,
+        userId: req.user?.id,
+      });
+    }
+  }
+
+  // Update base details on all child variants in background
+  const activeVariants = await Product.findAll({ where: { parentId: parent.id, detstatus: false } });
+  for (const child of activeVariants) {
+    await child.update({
+      productName: parent.productName,
+      categoryId: parent.categoryId,
+      brandId: parent.brandId,
+      imagePath: parent.imagePath,
+      imageData: parent.imageData,
+      imageMimeType: parent.imageMimeType,
     });
   }
-  res.json(await Product.findByPk(product.id, { include: Category }));
+
+  res.json(await Product.findByPk(parent.id, {
+    include: [Category, { model: Product, as: 'variants', where: { detstatus: false }, required: false }]
+  }));
 });
 
 export const deleteProduct = asyncHandler(async (req, res) => {
   const itemToDelete = await Product.findOne({ where: { id: req.params.id, detstatus: false } });
   if (!itemToDelete) return res.status(404).json({ message: 'Product not found' });
+
   await itemToDelete.update({ detstatus: true, authdel: req.user?.id, delondt: new Date() });
+  
+  // Also soft-delete variants if this is a parent product
+  if (!itemToDelete.parentId) {
+    await Product.update(
+      { detstatus: true, authdel: req.user?.id, delondt: new Date() },
+      { where: { parentId: itemToDelete.id, detstatus: false } }
+    );
+  }
+
   res.status(204).send();
 });
 

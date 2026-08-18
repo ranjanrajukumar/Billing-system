@@ -30,7 +30,9 @@ export const MENU_CATALOGUE = [
   ]},
   { group: 'Purchasing', items: [
     { key: 'purchaseOrders', label: 'Purchase Orders', path: '/purchase-orders' },
+    { key: 'inboundAppointments', label: 'Inbound Appointments', path: '/inbound-appointments' },
     { key: 'grn', label: 'Goods Receipt (GRN)', path: '/grn' },
+    { key: 'qcInspections', label: 'QC Inspections', path: '/qc' },
     { key: 'purchases', label: 'Purchase Invoices', path: '/purchases' },
     { key: 'purchaseReturns', label: 'Purchase Returns', path: '/purchase-returns' },
     { key: 'suppliers', label: 'Suppliers', path: '/suppliers' },
@@ -51,6 +53,9 @@ export const MENU_CATALOGUE = [
   { group: 'Warehouse', items: [
     { key: 'warehouses', label: 'Warehouses & Bins', path: '/warehouses' },
     { key: 'warehouseOps', label: 'Warehouse Floor', path: '/warehouse-floor' },
+    { key: 'pickWaves', label: 'Pick Waves', path: '/waves' },
+    { key: 'shipments', label: 'Shipments', path: '/shipments' },
+    { key: 'repairs', label: 'Damage & Repairs', path: '/repairs' },
     { key: 'stockOwners', label: 'Stock Owners', path: '/stock-owners' },
     { key: 'stockTransfers', label: 'Stock Transfers', path: '/stock-transfers' },
     { key: 'gatepasses', label: 'Gatepasses', path: '/gatepasses' },
@@ -102,7 +107,7 @@ export const DEFAULT_MENUS_BY_ROLE = {
   'Warehouse Manager': [
     'dashboard', 'inventory', 'stockTransfers', 'stockAdjustments', 'stockCounts',
     'batches', 'serials', 'grn', 'products', 'warehouses', 'warehouseOps', 'stockOwners',
-    'stockAudit', 'approvals', 'profile',
+    'stockAudit', 'approvals', 'inboundAppointments', 'qcInspections', 'pickWaves', 'shipments', 'repairs', 'profile',
   ],
   'Branch Manager': [
     'dashboard', 'quickBill', 'invoices', 'salesReturns', 'customers', 'udhar', 'khata',

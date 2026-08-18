@@ -89,6 +89,7 @@ export default function Khata() {
   };
 
   const saveEntry = async () => {
+    if (Number(form.amount || 0) <= 0) { showToast('Amount must be positive', 'error'); return; }
     const [type, id] = String(form.partyKey).split(':');
     if (!type || !id) { showToast('Choose a party', 'error'); return; }
 

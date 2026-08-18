@@ -227,59 +227,19 @@ export const post = asyncHandler(async (req, res) => {
       const primaryQty = primaryQtyFromLine(item, accepted);
 
       if (primaryQty > 0) {
-        // A batch is created before the movement so the ledger row can point at it.
-        let batch = null;
-        if (item.batchNumber?.trim()) {
-          const [row] = await ProductBatch.findOrCreate({
-            where: {
-              productId: item.productId,
-              branchId: grn.branchId,
-              batchNumber: item.batchNumber.trim(),
-              detstatus: false,
-            },
-            defaults: {
-              productId: item.productId,
-              branchId: grn.branchId,
-              batchNumber: item.batchNumber.trim(),
-              lotNumber: item.batchNumber.trim(),
-              germinationPercent: item.germinationPercent || null,
-              packingDate: item.manufacturingDate || null,
-              expiryDate: item.expiryDate || null,
-              quantity: 0,
-              purchaseRate: item.rate,
-              supplierName: grn.Supplier?.supplierName || null,
-            },
-            transaction,
-            lock: transaction.LOCK.UPDATE,
-          });
+        // Note: Batch creation and quantity increment is deferred to QC Pass.
+        // We only create QcInspection records here.
 
-          await row.update({
-            quantity: Number(row.quantity || 0) + primaryQty,
-            expiryDate: item.expiryDate || row.expiryDate,
-            germinationPercent: item.germinationPercent ?? row.germinationPercent,
-            purchaseRate: item.rate,
-            authlstedit: req.user.id,
-          }, { transaction });
-
-          batch = row;
-          await item.update({ batchId: row.id }, { transaction });
-        }
-
-        await postStockTransaction({
+        const { QcInspection } = await import('../models/index.js');
+        const count = await QcInspection.count({ transaction });
+        await QcInspection.create({
+          inspectionNumber: `QC-${String(count + 1).padStart(5, '0')}-${item.id}`,
+          grnId: grn.id,
           productId: item.productId,
-          branchId: grn.branchId,
-          quantity: primaryQty,
-          movementType: 'GRN',
-          referenceType: 'GRN',
-          referenceId: grn.id,
-          referenceNumber: grn.grnNumber,
-          batchId: batch?.id || null,
-          unitCost: item.rate,
-          transactionDate: grn.grnDate,
-          notes: `Accepted ${accepted} ${item.um || ''} on ${grn.grnNumber}`.trim(),
-          transaction,
-          userId: req.user.id,
-        });
+          inspectedQty: primaryQty,
+          status: 'Pending',
+          authadd: req.user.id,
+        }, { transaction });
       }
 
       // Serials arrive as free text; each becomes a tracked unit.
@@ -300,17 +260,16 @@ export const post = asyncHandler(async (req, res) => {
               { status: 409 },
             );
           }
-          await ProductSerial.create({
-            productId: item.productId,
-            serialNumber,
-            branchId: grn.branchId,
-            batchId: item.batchId || null,
-            status: 'In Stock',
-            grnId: grn.id,
-            supplierId: grn.supplierId,
-            purchaseCost: item.rate,
-            authadd: req.user.id,
-          }, { transaction });
+            await ProductSerial.create({
+              productId: item.productId,
+              serialNumber,
+              branchId: grn.branchId,
+              status: 'In QC', // Changed from 'In Stock'
+              grnId: grn.id,
+              supplierId: grn.supplierId,
+              purchaseCost: item.rate,
+              authadd: req.user.id,
+            }, { transaction });
         }
       }
 

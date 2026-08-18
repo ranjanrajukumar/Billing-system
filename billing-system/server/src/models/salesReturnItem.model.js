@@ -6,6 +6,7 @@ export default (sequelize) => sequelize.define('SalesReturnItem', {
 
   quantity: { type: DataTypes.FLOAT, allowNull: false },
   refundAmount: { type: DataTypes.FLOAT, allowNull: false },
+  batchId: { type: unsignedInteger(sequelize), allowNull: true },
   authadd: { type: DataTypes.INTEGER, allowNull: true },
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },
   authdel: { type: DataTypes.INTEGER, allowNull: true },

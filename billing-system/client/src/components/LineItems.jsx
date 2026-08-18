@@ -4,6 +4,7 @@ import {
   Button, Divider, Grid, IconButton, MenuItem, Stack, TextField, Typography,
 } from '@mui/material';
 import SearchableSelect from './SearchableSelect.jsx';
+import { formatPackage, formatProductOption } from '../utils/productFormatters.js';
 
 // Numeric columns a document can ask for, beyond the always-present quantity.
 const FIELD_LABELS = {
@@ -25,9 +26,11 @@ export default function LineItems({ items, onChange, products, fields = ['rate',
     const rateToUse = fields.includes('rate')
       ? (showBatchFields ? Number(product?.purchasePrice || 0) : Number(product?.sellingPrice || 0))
       : 0;
+    const pkg = formatPackage(product);
     setItem(index, {
       productId,
       um: primaryUnit,
+      packing: pkg || '',
       ...(fields.includes('rate') ? { rate: rateToUse } : {}),
       ...(fields.includes('gstPercent') ? { gstPercent: product?.gstPercent || 0 } : {}),
     });
@@ -68,6 +71,7 @@ export default function LineItems({ items, onChange, products, fields = ['rate',
         const billedUnit = item.um || primary;
         const isSecondary = billedUnit === secondary && factor > 1;
         const primaryQty = isSecondary ? Number(item.quantity || 0) * factor : Number(item.quantity || 0);
+        const pkg = formatPackage(product);
 
         return (
           <Stack key={index} spacing={1} sx={{ p: 1.5, borderRadius: 2, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
@@ -78,10 +82,24 @@ export default function LineItems({ items, onChange, products, fields = ['rate',
                   label="Product"
                   value={products.find(p => String(p.id) === String(item.productId)) || null}
                   onChange={(selectedOption) => chooseProduct(index, selectedOption ? selectedOption.id : '')}
-                  getOptionLabel={(option) => option.productName || ''}
+                  getOptionLabel={(option) => formatProductOption(option)}
                   getOptionKey={(option) => option.id}
                   size="small"
                 />
+                {product && (
+                  <Box sx={{ mt: 0.5, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                    {pkg && (
+                      <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 600, bgcolor: 'action.hover', px: 0.75, py: 0.25, borderRadius: 1 }}>
+                        Pkg: {pkg}
+                      </Typography>
+                    )}
+                    {product.sku && (
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace', bgcolor: 'action.hover', px: 0.75, py: 0.25, borderRadius: 1 }}>
+                        SKU: {product.sku}
+                      </Typography>
+                    )}
+                  </Box>
+                )}
               </Grid>
               <Grid item xs={6} sm={1}>
                 <TextField

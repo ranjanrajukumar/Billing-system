@@ -6,6 +6,8 @@
  * Kept separate from the general blocks so the plainer templates stay simple.
  */
 
+import { formatPackage, formatProductTitle } from '../utils/productFormatters.js';
+
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ESCAPES[char]);
 const money = (value) => Number(value || 0).toFixed(2);
@@ -87,10 +89,10 @@ export function renderBillItems(_block, { invoice }) {
         : '';
       return `<tr>
         <td class="num">${i + 1}</td>
-        <td>${esc(item.Product?.productName || '')}</td>
+        <td>${esc(formatProductTitle(item))}</td>
         <td>${dash(item.Product?.hsnCode)}</td>
         ${batchCells}
-        <td>${dash(item.packing)}</td>
+        <td>${dash(item.packing || formatPackage(item))}</td>
         <td>${dash(item.um)}</td>
         <td class="num">${money(item.quantity)}</td>
         <td class="num">${money(item.rate)}</td>

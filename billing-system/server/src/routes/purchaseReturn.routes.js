@@ -8,10 +8,13 @@ router.use(requireModule('purchaseReturns'));
 
 const BUYERS = ['Admin', 'Accountant', 'Purchase Manager', 'Warehouse Manager'];
 
+import { validate } from '../middleware/validate.js';
+import { purchaseReturnRules } from '../validators/purchase.validator.js';
+
 router.get('/', controller.list);
 router.get('/returnable/:purchaseId', controller.returnableItems);
 router.get('/:id', controller.getOne);
-router.post('/', authorize(...BUYERS), controller.create);
+router.post('/', authorize(...BUYERS), purchaseReturnRules, validate, controller.create);
 router.post('/:id/confirm', authorize(...BUYERS), controller.confirm);
 router.post('/:id/cancel', authorize('Admin', 'Accountant'), controller.cancel);
 

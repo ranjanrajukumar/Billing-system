@@ -5,10 +5,13 @@ import * as controller from '../controllers/quotation.controller.js';
 const router = express.Router();
 
 
+import { validate } from '../middleware/validate.js';
+import { quotationRules } from '../validators/quotation.validator.js';
+
 router.get('/', controller.getAll);
 router.get('/:id', controller.getOne);
-router.post('/', controller.create);
-router.put('/:id', controller.update);
+router.post('/', quotationRules, validate, controller.create);
+router.put('/:id', quotationRules, validate, controller.update);
 router.delete('/:id', controller.remove);
 router.get('/:id/pdf', controller.downloadPdf);
 router.get('/:id/html', controller.html);

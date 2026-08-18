@@ -62,7 +62,7 @@ export default function DeliveryChallans() {
 
   const submit = async (values) => {
     const selected = items.filter((it) => it.productId && Number(it.quantity) > 0);
-    if (!selected.length) { showToast('Add at least one product', 'error'); return; }
+    if (!selected.length) { showToast('Add at least one product with quantity > 0', 'error'); return; }
     try {
       await deliveryChallansApi.create({ ...values, items: selected });
       showToast('Delivery challan saved');

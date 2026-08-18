@@ -44,7 +44,7 @@ export const MODULES = [
   { key: 'stockAudit', label: 'Stock Audit', mode: 'Basic', menus: ['stockAudit'] },
 
   // ---- Advanced only ----
-  { key: 'warehouses', label: 'Warehouses & Locations', mode: 'Advanced', menus: ['warehouses', 'warehouseOps'] },
+  { key: 'warehouses', label: 'Warehouses & Locations', mode: 'Advanced', menus: ['warehouses', 'warehouseOps', 'pickWaves', 'shipments', 'inboundAppointments', 'qcInspections', 'repairs'] },
   { key: 'stockTransfers', label: 'Stock Transfers', mode: 'Advanced', menus: ['stockTransfers'] },
   { key: 'stockAdjustments', label: 'Stock Adjustments & Counting', mode: 'Advanced', menus: ['stockAdjustments', 'stockCounts'] },
   { key: 'purchaseOrders', label: 'Purchase Orders & GRN', mode: 'Advanced', menus: ['purchaseOrders', 'grn'] },

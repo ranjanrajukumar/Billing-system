@@ -67,6 +67,8 @@ export default function Udhar() {
   };
 
   const submitCollect = async () => {
+    if (Number(form.amount || 0) <= 0) { showToast('Collection amount must be positive', 'error'); return; }
+    if (Number(form.amount || 0) > Number(collecting.outstanding)) { showToast('Collection amount cannot exceed outstanding balance', 'error'); return; }
     setSaving(true);
     try {
       const result = await api.post('/udhar/collect', {

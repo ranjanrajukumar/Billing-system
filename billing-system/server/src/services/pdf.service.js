@@ -2,6 +2,7 @@ import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 import fs from 'fs';
 import path from 'path';
+import { formatProductTitle } from '../utils/productFormatters.js';
 
 const money = (n) => Number(n || 0).toFixed(2);
 
@@ -23,12 +24,27 @@ export async function buildInvoicePdf(invoice, company, template = 'standard', t
     let tplName = typeof template === 'string' ? template : 'dynamic';
     let config = typeof template === 'object' ? template : null;
     
-    const isThermal = tplName === 'thermal' || config?.paperSize === '80mm Thermal' || config?.paperSize === '58mm Thermal';
-    const paperWidth = config?.paperSize === '80mm Thermal' ? 226 : config?.paperSize === '58mm Thermal' ? 164 : (config?.paperSize === 'A5' ? 419 : 595);
+    const isThermal = tplName === 'thermal' || ['80mm Thermal','58mm Thermal','110mm Thermal','112mm Thermal'].includes(config?.paperSize);
+
+    // Map paper-size label → pt width.  1mm ≈ 2.8346pt
+    const THERMAL_WIDTHS = {
+      '58mm Thermal':  164,
+      '80mm Thermal':  226,
+      '110mm Thermal': 311,
+      '112mm Thermal': 317,
+    };
+    // For custom, the config may carry the raw mm value.
+    const customPtWidth = config?.customPaperMm ? Math.round(Number(config.customPaperMm) * 2.8346) : 0;
+
+    const thermalWidthPt = THERMAL_WIDTHS[config?.paperSize] || customPtWidth || 226;
+
+    let paperWidth = isThermal ? thermalWidthPt
+      : config?.paperSize === 'A5' ? 419 : 595;
     const paperHeight = config?.paperSize === 'A5' ? 595 : 842;
     const isLandscape = config?.orientation === 'Landscape';
-    
-    let size = isThermal ? [paperWidth, 800] : (isLandscape ? [paperHeight, paperWidth] : [paperWidth, paperHeight]);
+
+    let size = isThermal ? [thermalWidthPt, 800] : (isLandscape ? [paperHeight, paperWidth] : [paperWidth, paperHeight]);
+
 
     const doc = new PDFDocument({ margin: isThermal ? 10 : (tplName === 'compact' ? 20 : 40), size });
     const chunks = [];
@@ -69,7 +85,7 @@ export async function buildInvoicePdf(invoice, company, template = 'standard', t
       let y = startY + 25;
       invoice.InvoiceItems?.forEach((item) => {
         let colIdx = 0;
-        doc.text(item.Product?.productName || 'Product', columns[colIdx++], y, { width: 110 });
+        doc.text(formatProductTitle(item), columns[colIdx++], y, { width: 110 });
         if (config.showHsnCode) doc.text(item.Product?.hsnCode || '-', columns[colIdx++], y);
         doc.text(money(item.quantity), columns[colIdx++], y);
         doc.text(money(item.rate), columns[colIdx++], y);
@@ -107,53 +123,64 @@ export async function buildInvoicePdf(invoice, company, template = 'standard', t
       }
 
     } else if (isThermal) {
+      const margin  = 10;
+      const W       = thermalWidthPt - margin * 2;   // printable width in pt
+      // Column layout: name takes 55%, qty 13%, rate 16%, amount 16%
+      const nameW  = Math.floor(W * 0.55);
+      const qtyX   = margin + nameW + 2;
+      const qtyW   = Math.floor(W * 0.13);
+      const rateX  = qtyX + qtyW + 2;
+      const rateW  = Math.floor(W * 0.16);
+      const amtX   = rateX + rateW + 2;
+      const amtW   = W - nameW - qtyW - rateW - 6;
+      const rightX = margin + W;                     // right-edge for totals
+
       doc.fontSize(12).text(company?.name || 'Billing System', { align: 'center' });
       doc.fontSize(8).text(company?.address || '', { align: 'center' });
+      if (company?.gstNumber) doc.text(`GSTIN: ${company.gstNumber}`, { align: 'center' });
       doc.moveDown(0.5);
-      doc.text('------------------------------------------', { align: 'center' });
+      doc.text('─'.repeat(Math.floor(W / 5.5)), { align: 'center' });
       doc.fontSize(10).text(title, { align: 'center' });
-      doc.text('------------------------------------------', { align: 'center' });
-      
+      doc.text('─'.repeat(Math.floor(W / 5.5)), { align: 'center' });
+
       doc.fontSize(8).text(`Inv: ${invoice.invoiceNumber}`);
       doc.text(`Date: ${invoice.invoiceDate}`);
       doc.text(`To: ${invoice.Customer?.customerName || ''}`);
-      doc.text('------------------------------------------', { align: 'center' });
-      
+      doc.text('─'.repeat(Math.floor(W / 5.5)), { align: 'center' });
+
       let y = doc.y;
-      doc.text('Item', 10, y, { width: 90 });
-      doc.text('Qty', 100, y, { width: 30 });
-      doc.text('Rate', 130, y, { width: 40 });
-      doc.text('Amt', 170, y, { width: 40, align: 'right' });
-      
+      // Header row
+      doc.text('Item', margin, y, { width: nameW });
+      doc.text('Qty',  qtyX,   y, { width: qtyW,  align: 'right' });
+      doc.text('Rate', rateX,  y, { width: rateW, align: 'right' });
+      doc.text('Amt',  amtX,   y, { width: amtW,  align: 'right' });
       y += 12;
-      doc.text('------------------------------------------', 10, y, { align: 'center' });
-      y += 10;
-      
+      doc.moveTo(margin, y).lineTo(rightX, y).stroke(); y += 4;
+
       invoice.InvoiceItems?.forEach((item) => {
-        doc.text(item.Product?.productName || 'Product', 10, y, { width: 90 });
-        doc.text(money(item.quantity), 100, y, { width: 30 });
-        doc.text(money(item.rate), 130, y, { width: 40 });
-        doc.text(money(item.amount), 170, y, { width: 40, align: 'right' });
-        y += 12;
+        doc.text(formatProductTitle(item), margin, y, { width: nameW });
+        doc.text(money(item.quantity), qtyX,  y, { width: qtyW,  align: 'right' });
+        doc.text(money(item.rate),     rateX, y, { width: rateW, align: 'right' });
+        doc.text(money(item.amount),   amtX,  y, { width: amtW,  align: 'right' });
+        y += 13;
         if (item.Product?.hsnCode) {
-          doc.text(`HSN: ${item.Product.hsnCode}`, 10, y, { width: 200, color: '#666666' });
-          y += 10;
+          doc.fontSize(7).text(`HSN: ${item.Product.hsnCode}`, margin + 4, y, { width: W, color: '#666' });
+          doc.fontSize(8);
+          y += 9;
         }
       });
-      
-      doc.text('------------------------------------------', 10, y, { align: 'center' });
-      y += 12;
-      doc.text(`Subtotal:`, 10, y);
-      doc.text(money(invoice.subtotal), 170, y, { align: 'right' });
-      y += 10;
-      doc.text(`Tax:`, 10, y);
-      doc.text(money(Number(invoice.cgst) + Number(invoice.sgst) + Number(invoice.igst)), 170, y, { align: 'right' });
-      y += 10;
-      doc.fontSize(10).text(`Total:`, 10, y);
-      doc.text(money(invoice.grandTotal), 170, y, { align: 'right' });
-      
-      y += 20;
-      doc.image(qr, 73, y, { width: 80 });
+
+      doc.moveTo(margin, y).lineTo(rightX, y).stroke(); y += 5;
+      doc.text('Subtotal:',           margin, y); doc.text(money(invoice.subtotal), amtX, y, { width: amtW, align: 'right' }); y += 11;
+      doc.text('CGST:',               margin, y); doc.text(money(invoice.cgst),     amtX, y, { width: amtW, align: 'right' }); y += 11;
+      doc.text('SGST:',               margin, y); doc.text(money(invoice.sgst),     amtX, y, { width: amtW, align: 'right' }); y += 11;
+      if (Number(invoice.igst) > 0) { doc.text('IGST:', margin, y); doc.text(money(invoice.igst), amtX, y, { width: amtW, align: 'right' }); y += 11; }
+      doc.moveTo(margin, y).lineTo(rightX, y).stroke(); y += 5;
+      doc.fontSize(10).text('TOTAL:', margin, y);
+      doc.fontSize(10).text(money(invoice.grandTotal), amtX, y, { width: amtW, align: 'right' });
+      y += 22;
+      const qrSize = Math.min(80, Math.floor(W * 0.45));
+      doc.image(qr, Math.floor((thermalWidthPt - qrSize) / 2), y, { width: qrSize });
       doc.moveDown(5);
     } else if (template === 'premium') {
       const primaryColor = '#243454';
@@ -203,7 +230,7 @@ export async function buildInvoicePdf(invoice, company, template = 'standard', t
            doc.fillColor('#333333');
         }
         
-        doc.text(item.Product?.productName || 'Product', columns[0], y, { width: 90 });
+        doc.text(formatProductTitle(item), columns[0], y, { width: 90 });
         doc.text(item.Product?.hsnCode || '-', columns[1], y);
         doc.text(money(item.quantity), columns[2], y);
         doc.text(money(item.rate), columns[3], y);
@@ -267,7 +294,7 @@ export async function buildInvoicePdf(invoice, company, template = 'standard', t
       
       let y = startY + 30;
       invoice.InvoiceItems?.forEach((item) => {
-        doc.text(item.Product?.productName || 'Product', columns[0], y, { width: 100 });
+        doc.text(formatProductTitle(item), columns[0], y, { width: 100 });
         doc.text(item.Product?.hsnCode || '-', columns[1], y);
         doc.text(money(item.quantity), columns[2], y);
         doc.text(money(item.rate), columns[3], y);
@@ -315,7 +342,7 @@ export async function buildInvoicePdf(invoice, company, template = 'standard', t
       
       let y = startY + 15;
       invoice.InvoiceItems?.forEach((item) => {
-        doc.text(item.Product?.productName || 'Product', columns[0], y, { width: 120 });
+        doc.text(formatProductTitle(item), columns[0], y, { width: 120 });
         doc.text(item.Product?.hsnCode || '-', columns[1], y);
         doc.text(money(item.quantity), columns[2], y);
         doc.text(money(item.rate), columns[3], y);
@@ -354,7 +381,7 @@ export async function buildInvoicePdf(invoice, company, template = 'standard', t
       
       let y = startY + 25;
       invoice.InvoiceItems?.forEach((item) => {
-        doc.text(item.Product?.productName || 'Product', columns[0], y, { width: 110 });
+        doc.text(formatProductTitle(item), columns[0], y, { width: 110 });
         doc.text(item.Product?.hsnCode || '-', columns[1], y);
         doc.text(money(item.quantity), columns[2], y);
         doc.text(money(item.rate), columns[3], y);

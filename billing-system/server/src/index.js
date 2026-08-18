@@ -63,3 +63,4 @@ async function start() {
 }
 
 start();
+// trigger nodemon

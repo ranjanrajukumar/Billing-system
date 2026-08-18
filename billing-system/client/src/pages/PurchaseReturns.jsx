@@ -96,6 +96,11 @@ export default function PurchaseReturns() {
   };
 
   const submit = async () => {
+    if (!creating.items || !creating.items.some(i => i.productId && Number(i.quantity) > 0)) {
+      showToast('Add at least one product with quantity > 0', 'error'); return;
+    }
+    const invalid = creating.items.filter(i => i.productId && Number(i.quantity) > 0).find(i => Number(i.rate) < 0 || Number(i.gstPercent) < 0 || Number(i.gstPercent) > 100);
+    if (invalid) { showToast('Invalid rate or GST percentage in line items', 'error'); return; }
     setBusy(true);
     try {
       await purchaseReturnsApi.create({

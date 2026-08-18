@@ -75,14 +75,9 @@ export const productRules = [
   // Descriptive
   body('size').optional({ checkFalsy: true }).trim().isLength({ max: 40 }),
   body('color').optional({ checkFalsy: true }).trim().isLength({ max: 40 }),
-  body('barcode').optional({ checkFalsy: true }).trim(),
   body('packageSize').optional({ checkFalsy: true }).trim().isLength({ max: 60 }),
-  body('productType').optional({ checkFalsy: true }).isIn(['Goods', 'Service'])
-    .withMessage('productType must be Goods or Service'),
-  body('location').optional({ checkFalsy: true }).trim().isLength({ max: 100 }),
-  body('moq').optional({ checkFalsy: true }).isInt({ min: 1 }),
-  body('taxCategory').optional({ checkFalsy: true })
-    .isIn(['CGST+SGST', 'IGST', 'Exempt', 'NIL', 'Zero-rated'])
-    .withMessage('Unknown tax category'),
+  body('packageUnit').optional({ checkFalsy: true }).trim().isLength({ max: 20 }),
+  body('packType').optional({ checkFalsy: true }).trim().isLength({ max: 20 }),
+  body('barcode').optional({ checkFalsy: true }).trim(),
   body('isActive').optional().isBoolean()
 ];

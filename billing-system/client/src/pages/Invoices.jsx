@@ -9,6 +9,7 @@ import PaymentsIcon from '@mui/icons-material/Payments';
 import PrintIcon from '@mui/icons-material/Print';
 import ViewQuiltIcon from '@mui/icons-material/ViewQuilt';
 import ReceiptIcon from '@mui/icons-material/Receipt';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import ShareIcon from '@mui/icons-material/Share';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -37,9 +38,12 @@ import { customersApi, invoicesApi, productsApi, settingsApi } from '../services
 import CustomerPicker from '../components/CustomerPicker.jsx';
 import { currency, date } from '../utils/formatters.js';
 import { printDocument, printHtml, printPdfBlob } from '../utils/print.js';
+import { buildThermalHtml, THERMAL_SIZES } from '../utils/thermal.js';
+import ThermalPreview from '../components/ThermalPreview.jsx';
 import { confirmAction } from '../utils/alerts.js';
 import { can } from '../utils/access.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { formatPackage, formatProductTitle, formatProductOption } from '../utils/productFormatters.js';
 
 const blankItem = { productId: '', quantity: 1, rate: 0, discount: 0, gstPercent: 18, packing: '', um: '', batchId: '' };
 
@@ -128,6 +132,48 @@ function ShareMenu({ row }) {
   );
 }
 
+/** Thermal-print dropdown: quick-print at a specific size OR open the preview modal. */
+function ThermalMenu({ row, onPreview }) {
+  const { showToast } = useToast();
+  const [anchor, setAnchor] = useState(null);
+
+  const quickPrint = async (size) => {
+    setAnchor(null);
+    try {
+      const res  = await api.get(`/invoices/${row.id}`);
+      const inv  = res.data?.data || res.data;
+      const html = buildThermalHtml(inv, null, { size, showGst: true, showQr: true });
+      printHtml(html);
+    } catch {
+      showToast('Could not load invoice for printing', 'error');
+    }
+  };
+
+  return (
+    <>
+      <Tooltip title="Thermal / Receipt Print">
+        <IconButton size="small" onClick={(e) => setAnchor(e.currentTarget)} sx={{ borderRadius: 1.5 }}>
+          <ReceiptLongIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}
+        PaperProps={{ sx: { minWidth: 200 } }}
+      >
+        <MenuItem disabled sx={{ fontSize: '0.7rem', opacity: 0.6, py: 0.5 }}>QUICK PRINT</MenuItem>
+        {THERMAL_SIZES.filter(s => s.value !== 'custom').map((s) => (
+          <MenuItem key={s.value} onClick={() => quickPrint(s.value)} sx={{ fontSize: '0.85rem' }}>
+            <ReceiptLongIcon sx={{ mr: 1, fontSize: 16, color: 'text.secondary' }} />{s.label}
+          </MenuItem>
+        ))}
+        <MenuItem divider />
+        <MenuItem onClick={() => { setAnchor(null); onPreview(row); }} sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'primary.main' }}>
+          <PrintIcon sx={{ mr: 1, fontSize: 16 }} />Preview &amp; Print…
+        </MenuItem>
+      </Menu>
+    </>
+  );
+}
+
 export default function Invoices() {
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({});
@@ -142,6 +188,8 @@ export default function Invoices() {
   const navigate = useNavigate();
   const [payingFor, setPayingFor] = useState(null);
   const [viewingInvoiceId, setViewingInvoiceId] = useState(null);
+  const [thermalInvoice, setThermalInvoice] = useState(null); // invoice object for ThermalPreview
+  const [company, setCompany] = useState(null);
 
   const urlInvoiceId = searchParams.get('id') || searchParams.get('open');
   useEffect(() => {
@@ -272,9 +320,19 @@ export default function Invoices() {
     // The company's own state prefills a new customer's, since a walk-in is
     // almost always local — and it is what decides CGST/SGST versus IGST.
     settingsApi.get()
-      .then((r) => setCompanyState(r?.company?.state || ''))
+      .then((r) => { setCompanyState(r?.company?.state || ''); setCompany(r?.company || null); })
       .catch(() => setCompanyState(''));
   }, []);
+
+  /** Open ThermalPreview: fetch full invoice detail first if needed. */
+  const openThermalPreview = async (row) => {
+    try {
+      const res = await api.get(`/invoices/${row.id}`);
+      setThermalInvoice(res.data?.data || res.data);
+    } catch {
+      showToast('Could not load invoice', 'error');
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -299,11 +357,13 @@ export default function Invoices() {
   const chooseProduct = (i, productId) => {
     const p = products.find((p) => String(p.id) === String(productId));
     const primaryUnit = p?.primaryUnit || 'PCS';
+    const pkg = formatPackage(p);
     setItem(i, {
       productId,
       rate: Number(p?.sellingPrice || 0),
       gstPercent: Number(p?.gstPercent || 0),
       um: primaryUnit,
+      packing: pkg || '',
       batchId: '',
     });
     loadBatches(productId);
@@ -385,7 +445,9 @@ export default function Invoices() {
 
   const submit = async (values) => {
     const selected = items.filter((it) => it.productId && Number(it.quantity) > 0);
-    if (!selected.length) { showToast('Add at least one product', 'error'); return; }
+    if (!selected.length) { showToast('Add at least one product with quantity > 0', 'error'); return; }
+    const invalid = selected.find(it => Number(it.rate) < 0 || Number(it.discount) < 0 || Number(it.gstPercent) < 0 || Number(it.gstPercent) > 100);
+    if (invalid) { showToast('Invalid rate, discount, or GST percentage in line items', 'error'); return; }
     // An edit gives its own stock back first, so the on-screen check would
     // wrongly refuse simply moving a line around. The server is the authority.
     if (!editing) {
@@ -570,6 +632,8 @@ export default function Invoices() {
                     </Tooltip>
                   )}
                   <ShareMenu row={row} />
+                  {/* Thermal / Receipt printer */}
+                  <ThermalMenu row={row} onPreview={openThermalPreview} />
                   {/* Confirm Invoice — only for Draft invoices: deducts stock atomically */}
                   {row.status === 'Draft' && (
                     <Tooltip title="Confirm Invoice &amp; Deduct Stock">
@@ -608,6 +672,21 @@ export default function Invoices() {
       />
 
       <PaymentsModal invoice={payingFor} onClose={() => setPayingFor(null)} onChanged={load} />
+
+      {/* Thermal Receipt Preview Modal */}
+      <ThermalPreview
+        open={Boolean(thermalInvoice)}
+        onClose={() => setThermalInvoice(null)}
+        invoice={thermalInvoice}
+        company={company}
+        defaultSize={company?.thermalPaperSize || '80mm'}
+        defaultOpts={{
+          showGst: true,
+          showQr: company?.thermalShowQr !== false,
+          showLogo: Boolean(company?.thermalShowLogo),
+          footer: company?.thermalFooter || '',
+        }}
+      />
 
       {/* Create Invoice Modal */}
       <Modal
@@ -658,14 +737,24 @@ export default function Invoices() {
                   <Grid container spacing={1} alignItems="center" wrap="nowrap" sx={{ minWidth: 0 }}>
                     <Grid item xs={12} md={2.5} sx={{ minWidth: 0 }}>
                       <TextField fullWidth select size="small" label="Product" value={item.productId} onChange={(e) => chooseProduct(index, e.target.value)}>
-                        {products.map((p) => (
-                          <MenuItem value={p.id} key={p.id} disabled={Number(p.stock || 0) <= 0}>
-                            <Box>
-                              <Typography variant="body2" fontWeight={600}>{p.productName}</Typography>
-                              <Typography variant="caption" color="text.secondary">Stock: {p.stock} • HSN: {p.hsnCode}</Typography>
-                            </Box>
-                          </MenuItem>
-                        ))}
+                        {products.map((p) => {
+                          const pkg = formatPackage(p);
+                          return (
+                            <MenuItem value={p.id} key={p.id} disabled={Number(p.stock || 0) <= 0}>
+                              <Box>
+                                <Typography variant="body2" fontWeight={700}>{p.productName}</Typography>
+                                {pkg && (
+                                  <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 600, display: 'block' }}>
+                                    Package: {pkg}
+                                  </Typography>
+                                )}
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                  {p.sku ? `SKU: ${p.sku} • ` : ''}Stock: {p.stock} • HSN: {p.hsnCode || '—'}
+                                </Typography>
+                              </Box>
+                            </MenuItem>
+                          );
+                        })}
                       </TextField>
                     </Grid>
                     {[['quantity', 'Qty'], ['rate', 'Rate'], ['discount', 'Disc.'], ['gstPercent', 'GST%']].map(([name, label]) => (

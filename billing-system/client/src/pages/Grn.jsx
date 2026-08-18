@@ -100,6 +100,8 @@ export default function Grn() {
   };
 
   const submit = async () => {
+    const invalid = creating.items.some(i => Number(i.acceptedQty || 0) + Number(i.rejectedQty || 0) + Number(i.damagedQty || 0) > Number(i.receivedQty || 0));
+    if (invalid) { showToast('Accepted, rejected, and damaged quantities cannot exceed received quantity', 'error'); return; }
     setBusy(true);
     try {
       await grnApi.create({

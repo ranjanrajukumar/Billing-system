@@ -84,10 +84,8 @@ export function normalizeProductPayload(body, userId) {
 
     // ---- Descriptive ----
     packageSize: optionalText(body.packageSize),
-    productType: optionalText(body.productType) || 'Goods',
-    location: optionalText(body.location),
-    moq: optionalInt(body.moq),
-    taxCategory: optionalText(body.taxCategory),
+    packageUnit: optionalText(body.packageUnit),
+    packType: optionalText(body.packType),
     size: optionalText(body.size),
     color: optionalText(body.color),
     description: optionalText(body.description),

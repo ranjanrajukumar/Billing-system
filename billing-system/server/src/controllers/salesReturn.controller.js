@@ -7,6 +7,8 @@ import { withDateRange } from '../utils/dateRange.js';
 import { sequelize } from '../models/index.js';
 import { documentOutputHandlers } from './documentOutput.js';
 import { postStockTransaction } from '../services/stock.service.js';
+import { restoreFromItems } from '../services/batch.service.js';
+import { Invoice, InvoiceItem } from '../models/index.js';
 
 // The client posts items as quantity/rate; the model stores a refund amount.
 function normalizeReturnItems(items = []) {
@@ -15,7 +17,7 @@ function normalizeReturnItems(items = []) {
     const refundAmount = item.refundAmount !== undefined
       ? Number(item.refundAmount)
       : quantity * Number(item.rate || 0);
-    return { productId: item.productId, quantity, refundAmount };
+    return { productId: item.productId, quantity, refundAmount, batchId: item.batchId || null };
   });
 }
 
@@ -79,27 +81,52 @@ export const create = asyncHandler(async (req, res) => {
     if (!data.totalRefund && items && items.length > 0) {
       data.totalRefund = refundTotal(items);
     }
+
+    if (data.invoiceId && items && items.length > 0) {
+      const invoice = await Invoice.findOne({ where: { id: data.invoiceId, detstatus: false }, include: [InvoiceItem], transaction: t });
+      if (!invoice) throw Object.assign(new Error('Invoice not found'), { status: 404 });
+      
+      const invoiceQuantities = {};
+      invoice.InvoiceItems.forEach(i => {
+        invoiceQuantities[i.productId] = (invoiceQuantities[i.productId] || 0) + Number(i.quantity);
+      });
+      
+      const pastReturns = await SalesReturnItem.findAll({
+        include: [{ model: SalesReturn, where: { invoiceId: data.invoiceId, detstatus: false } }],
+        transaction: t
+      });
+      pastReturns.forEach(i => {
+        invoiceQuantities[i.productId] -= Number(i.quantity);
+      });
+
+      for (const item of normalizeReturnItems(items)) {
+        const available = invoiceQuantities[item.productId] || 0;
+        if (item.quantity > available) {
+          throw Object.assign(new Error(`Return quantity for product ${item.productId} exceeds the original invoiced amount (max allowed: ${available})`), { status: 400 });
+        }
+      }
+    }
+
     const parent = await SalesReturn.create(data, { transaction: t });
     if (items && items.length > 0) {
       const itemsData = normalizeReturnItems(items).map(item => ({ ...item, returnId: parent.id, authadd: req.user.id }));
-      await SalesReturnItem.bulkCreate(itemsData, { transaction: t });
+      const createdItems = await SalesReturnItem.bulkCreate(itemsData, { transaction: t, returning: true });
 
-      // Returned goods come back into the location that took the return, each
-      // one leaving a 'Sale Return' row in the stock ledger.
-      for (const item of normalizeReturnItems(items)) {
-        await postStockTransaction({
+      const { QcInspection } = await import('../models/index.js');
+      const count = await QcInspection.count({ transaction: t });
+      let index = 1;
+
+      for (const item of createdItems) {
+        await QcInspection.create({
+          inspectionNumber: `QC-${String(count + index).padStart(5, '0')}-RET-${item.id}`,
+          returnId: parent.id,
+          returnItemId: item.id,
           productId: item.productId,
-          branchId: req.branchId,
-          quantity: Number(item.quantity),
-          movementType: 'Sale Return',
-          referenceType: 'Sales Return',
-          referenceId: parent.id,
-          referenceNumber: parent.returnNumber,
-          transactionDate: parent.returnDate,
-          notes: `Returned via ${parent.returnNumber}`,
-          transaction: t,
-          userId: req.user.id,
-        });
+          inspectedQty: Number(item.quantity),
+          status: 'Pending',
+          authadd: req.user.id,
+        }, { transaction: t });
+        index++;
       }
     }
     return parent;
@@ -114,12 +141,61 @@ export const update = asyncHandler(async (req, res) => {
   data.editondt = new Date();
 
   await sequelize.transaction(async (t) => {
+    const existing = await SalesReturn.findOne({
+      where: { id: req.params.id, detstatus: false },
+      include: [SalesReturnItem],
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+    if (!existing) throw Object.assign(new Error('Sales return not found'), { status: 404 });
+
+    // Reverse old stock entries
+    for (const item of existing.SalesReturnItems) {
+      await postStockTransaction({
+        productId: item.productId,
+        branchId: existing.branchId || req.branchId,
+        quantity: -Number(item.quantity),
+        movementType: 'Adjustment Out',
+        referenceType: 'Sales Return Edit Reversal',
+        referenceId: existing.id,
+        referenceNumber: existing.returnNumber,
+        batchId: item.batchId || null, // although we didn't save batchId in SalesReturnItem, handle it if added later
+        notes: `Reversed before editing Sales Return ${existing.returnNumber}`,
+        transaction: t,
+        userId: req.user.id,
+        allowNegative: true, // We are reversing an inward move
+      });
+      // Reverse batch quantity
+      if (item.batchId) {
+        await restoreFromItems([{ ...item, quantity: -Number(item.quantity) }], { transaction: t, userId: req.user.id });
+      }
+    }
+
     await SalesReturn.update(data, { where: { id: req.params.id }, transaction: t });
 
     if (items) {
       await SalesReturnItem.destroy({ where: { returnId: req.params.id }, transaction: t });
       const itemsData = normalizeReturnItems(items).map(item => ({ ...item, returnId: req.params.id, authadd: req.user.id }));
       await SalesReturnItem.bulkCreate(itemsData, { transaction: t });
+
+      // Apply new stock entries
+      for (const item of itemsData) {
+        await postStockTransaction({
+          productId: item.productId,
+          branchId: existing.branchId || req.branchId,
+          quantity: Number(item.quantity),
+          movementType: 'Sale Return',
+          referenceType: 'Sales Return Edit',
+          referenceId: existing.id,
+          referenceNumber: existing.returnNumber,
+          transactionDate: existing.returnDate,
+          batchId: item.batchId || null,
+          notes: `Re-applied via Edited Sales Return ${existing.returnNumber}`,
+          transaction: t,
+          userId: req.user.id,
+        });
+      }
+      await restoreFromItems(itemsData, { transaction: t, userId: req.user.id });
     }
   });
 
@@ -127,10 +203,40 @@ export const update = asyncHandler(async (req, res) => {
 });
 
 export const remove = asyncHandler(async (req, res) => {
-  await SalesReturn.update(
-    { detstatus: true, authdel: req.user.id, delondt: new Date() },
-    { where: { id: req.params.id } }
-  );
+  await sequelize.transaction(async (t) => {
+    const existing = await SalesReturn.findOne({
+      where: { id: req.params.id, detstatus: false },
+      include: [SalesReturnItem],
+      transaction: t,
+    });
+    if (!existing) throw Object.assign(new Error('Sales return not found'), { status: 404 });
+
+    // Completely reverse stock entries
+    for (const item of existing.SalesReturnItems) {
+      await postStockTransaction({
+        productId: item.productId,
+        branchId: existing.branchId || req.branchId,
+        quantity: -Number(item.quantity),
+        movementType: 'Adjustment Out',
+        referenceType: 'Sales Return Cancellation',
+        referenceId: existing.id,
+        referenceNumber: existing.returnNumber,
+        batchId: item.batchId || null,
+        notes: `Reversed via Cancelled Sales Return ${existing.returnNumber}`,
+        transaction: t,
+        userId: req.user.id,
+        allowNegative: true,
+      });
+      if (item.batchId) {
+        await restoreFromItems([{ ...item, quantity: -Number(item.quantity) }], { transaction: t, userId: req.user.id });
+      }
+    }
+
+    await SalesReturn.update(
+      { detstatus: true, authdel: req.user.id, delondt: new Date(), status: 'Rejected' },
+      { where: { id: req.params.id }, transaction: t }
+    );
+  });
   res.json({ message: 'Deleted successfully' });
 });
 

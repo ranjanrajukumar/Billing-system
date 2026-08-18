@@ -22,6 +22,7 @@ import { printHtml, printPdfBlob } from '../utils/print.js';
 import { useToast } from '../context/ToastContext.jsx';
 import { can } from '../utils/access.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { formatPackage } from '../utils/productFormatters.js';
 
 function StatusChip({ status }) {
   const config = {
@@ -244,27 +245,49 @@ export default function InvoiceDetailsModal({ invoiceId, invoice: initialInvoice
                 <TableRow>
                   <TableCell sx={{ fontWeight: 700 }}>#</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Product Name</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Package</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>SKU</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>HSN</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700 }}>Qty</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 700 }}>Rate</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700 }}>Unit Price</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700 }}>Disc</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700 }}>GST %</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 700 }}>Amount</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700 }}>Total</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {(data.InvoiceItems || []).map((item, idx) => (
-                  <TableRow key={item.id || idx} hover>
-                    <TableCell>{idx + 1}</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>{item.Product?.productName || item.productName || 'Product'}</TableCell>
-                    <TableCell>{item.Product?.hsnCode || item.hsnCode || '—'}</TableCell>
-                    <TableCell align="right">{item.quantity} {item.um || ''}</TableCell>
-                    <TableCell align="right">{currency(item.rate)}</TableCell>
-                    <TableCell align="right">{item.discount > 0 ? currency(item.discount) : '—'}</TableCell>
-                    <TableCell align="right">{item.gstPercent}%</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>{currency(item.amount)}</TableCell>
-                  </TableRow>
-                ))}
+                {(data.InvoiceItems || []).map((item, idx) => {
+                  const pkg = formatPackage(item) || item.packing;
+                  const sku = item.Product?.sku;
+                  return (
+                    <TableRow key={item.id || idx} hover>
+                      <TableCell>{idx + 1}</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>
+                        {item.Product?.productName || item.productName || 'Product'}
+                      </TableCell>
+                      <TableCell>
+                        {pkg ? (
+                          <Chip
+                            label={pkg}
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                            sx={{ fontWeight: 600, fontSize: '0.75rem', bgcolor: alpha(theme.palette.primary.main, 0.04) }}
+                          />
+                        ) : '—'}
+                      </TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'text.secondary' }}>
+                        {sku || '—'}
+                      </TableCell>
+                      <TableCell>{item.Product?.hsnCode || item.hsnCode || '—'}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>{item.quantity} {item.um || ''}</TableCell>
+                      <TableCell align="right">{currency(item.rate)}</TableCell>
+                      <TableCell align="right">{item.discount > 0 ? currency(item.discount) : '—'}</TableCell>
+                      <TableCell align="right">{item.gstPercent}%</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 800, color: 'primary.main' }}>{currency(item.amount)}</TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </TableContainer>

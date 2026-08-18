@@ -70,6 +70,9 @@ export default function Expenses() {
   });
 
   const save = async () => {
+    if (Number(editing.amount || 0) < 0 || Number(editing.taxAmount || 0) < 0) {
+      showToast('Expense and tax amounts cannot be negative', 'error'); return;
+    }
     setBusy(true);
     try {
       const payload = {

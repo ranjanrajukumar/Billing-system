@@ -14,10 +14,16 @@ const EDITABLE_FIELDS = [
   'city', 'state', 'pincode', 'signatureUrl', 'defaultInvoiceTemplate', 'creditDays',
   'multiBranchEnabled', 'businessMode', 'allowNegativeStock',
   'loyaltyEnabled', 'loyaltyPointsPer100', 'loyaltyRedeemValue', 'loyaltyMinRedeem',
-  'panNumber', 'licenseNo', 'cin', 'msmeReg'
+  'panNumber', 'licenseNo', 'cin', 'msmeReg',
+  // Thermal / Receipt Printer
+  'thermalPaperSize', 'thermalCustomMm', 'thermalFontSize', 'thermalFooter',
+  'thermalShowGst', 'thermalShowQr', 'thermalShowLogo',
 ];
 
-const BOOLEAN_FIELDS = ['multiBranchEnabled', 'loyaltyEnabled', 'allowNegativeStock'];
+const BOOLEAN_FIELDS = [
+  'multiBranchEnabled', 'loyaltyEnabled', 'allowNegativeStock',
+  'thermalShowGst', 'thermalShowQr', 'thermalShowLogo',
+];
 
 export const getSettings = asyncHandler(async (_req, res) => {
   const [company, settings] = await Promise.all([Company.findOne(), Setting.findAll()]);
@@ -126,7 +132,7 @@ export const saveCompany = asyncHandler(async (req, res) => {
   // The mode has its own endpoint because switching it seeds accounts; ignore
   // it here so a stray form field cannot flip the whole application.
   delete payload.businessMode;
-  for (const num of ['creditDays', 'loyaltyPointsPer100', 'loyaltyRedeemValue', 'loyaltyMinRedeem']) {
+  for (const num of ['creditDays', 'loyaltyPointsPer100', 'loyaltyRedeemValue', 'loyaltyMinRedeem', 'thermalCustomMm']) {
     if (payload[num] !== undefined) payload[num] = Number(payload[num]) || 0;
   }
 

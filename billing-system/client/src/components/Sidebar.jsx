@@ -37,6 +37,7 @@ import TaskAltIcon from '@mui/icons-material/TaskAlt';
 import TuneIcon from '@mui/icons-material/Tune';
 import UndoIcon from '@mui/icons-material/Undo';
 import WarehouseIcon from '@mui/icons-material/Warehouse';
+import BuildIcon from '@mui/icons-material/Build';
 import {
   alpha,
   Box,
@@ -92,11 +93,16 @@ const ICONS = {
 
   warehouses: <WarehouseIcon fontSize="small" />,
   warehouseOps: <ForkliftIcon fontSize="small" />,
+  pickWaves: <AssignmentIcon fontSize="small" />,
+  shipments: <LocalShippingIcon fontSize="small" />,
   gatepasses: <LocalShippingIcon fontSize="small" />,
   stockTransfers: <SwapHorizIcon fontSize="small" />,
   stockAdjustments: <TuneIcon fontSize="small" />,
   stockCounts: <FactCheckIcon fontSize="small" />,
   serials: <QrCode2Icon fontSize="small" />,
+  inboundAppointments: <AssignmentIcon fontSize="small" />,
+  qcInspections: <FactCheckIcon fontSize="small" />,
+  repairs: <BuildIcon fontSize="small" />,
 
   ledgers: <MenuBookIcon fontSize="small" />,
   expenses: <PaymentsIcon fontSize="small" />,

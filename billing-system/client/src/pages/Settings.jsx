@@ -2,6 +2,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import ImageIcon from '@mui/icons-material/Image';
 import BusinessIcon from '@mui/icons-material/Business';
 import ReceiptIcon from '@mui/icons-material/Receipt';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import LoyaltyIcon from '@mui/icons-material/Loyalty';
 import StoreIcon from '@mui/icons-material/Store';
 import TuneIcon from '@mui/icons-material/Tune';
@@ -20,6 +21,7 @@ import { settingsApi } from '../services/resource.service.js';
 import { useFetch } from '../hooks/useFetch.js';
 import api from '../services/api.js';
 import { mediaUrl } from '../utils/formatters.js';
+import { THERMAL_SIZES } from '../utils/thermal.js';
 
 function SectionCard({ title, icon, children }) {
   const theme = useTheme();
@@ -78,9 +80,14 @@ export default function Settings() {
 
   const submit = async (values) => {
     const fd = new FormData();
+    // Fields that must never be sent as empty (they'd blank-out a saved value).
+    const SKIP_IF_EMPTY = ['thermalPaperSize', 'thermalFontSize', 'defaultInvoiceTemplate'];
     Object.keys(values).forEach((k) => {
-      if (k === 'logo' && values[k]?.[0]) fd.append('logo', values[k][0]);
-      else if (!['logo', 'logoPath', 'logoUrl', 'logoMimeType'].includes(k)) fd.append(k, values[k] ?? '');
+      if (k === 'logo' && values[k]?.[0]) { fd.append('logo', values[k][0]); return; }
+      if (['logo', 'logoPath', 'logoUrl', 'logoMimeType'].includes(k)) return;
+      // Don't send select fields as empty — the server default is better than ''.
+      if (SKIP_IF_EMPTY.includes(k) && (values[k] === '' || values[k] == null)) return;
+      fd.append(k, values[k] ?? '');
     });
     try {
       await settingsApi.saveCompany(fd);
@@ -325,7 +332,137 @@ export default function Settings() {
         </Stack>
       </SectionCard>
 
-      {/* Mobile save button */}
+      {/* ── Thermal / Receipt Printer ─────────────────────────────────── */}
+      <SectionCard title="Thermal / Receipt Printer" icon={<ReceiptLongIcon fontSize="small" />}>
+        <Stack spacing={2.5}>
+          <Typography variant="body2" color="text.secondary">
+            Configure your receipt printer. These defaults are used by Quick Bill (F6) and the
+            Thermal Print button on any invoice. You can always override them at print time.
+          </Typography>
+
+          <Grid container spacing={2}>
+            {/* Paper size */}
+            <Grid item xs={12} sm={4}>
+              <Controller
+                name="thermalPaperSize"
+                control={control}
+                defaultValue="80mm"
+                render={({ field }) => (
+                  <TextField
+                    fullWidth select label="Default Paper Width"
+                    value={field.value || '80mm'}
+                    onChange={field.onChange}
+                    InputLabelProps={{ shrink: true }}
+                    helperText="Roll width installed in your printer"
+                  >
+                    {THERMAL_SIZES.map((s) => (
+                      <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
+                    ))}
+                  </TextField>
+                )}
+              />
+            </Grid>
+
+            {/* Custom width — only visible when 'custom' is selected */}
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth type="number" label="Custom Paper Width (mm)"
+                {...register('thermalCustomMm')}
+                InputLabelProps={{ shrink: true }}
+                inputProps={{ min: 30, max: 300, step: 1 }}
+                helperText="Shown only when paper width is 'Custom'"
+              />
+            </Grid>
+
+            {/* Font size */}
+            <Grid item xs={12} sm={4}>
+              <Controller
+                name="thermalFontSize"
+                control={control}
+                defaultValue="8.5pt"
+                render={({ field }) => (
+                  <TextField
+                    fullWidth select label="Base Font Size"
+                    value={field.value || '8.5pt'}
+                    onChange={field.onChange}
+                    InputLabelProps={{ shrink: true }}
+                    helperText="Adjust for readability vs. content density"
+                  >
+                    {['7pt','7.5pt','8pt','8.5pt','9pt','10pt'].map((s) => (
+                      <MenuItem key={s} value={s}>{s}</MenuItem>
+                    ))}
+                  </TextField>
+                )}
+              />
+            </Grid>
+
+            {/* Receipt footer */}
+            <Grid item xs={12}>
+              <TextField
+                fullWidth multiline rows={2}
+                label="Receipt Footer Message"
+                {...register('thermalFooter')}
+                InputLabelProps={{ shrink: true }}
+                placeholder="e.g. Thank you for shopping with us! Returns within 7 days."
+                helperText="Printed at the bottom of every thermal receipt"
+              />
+            </Grid>
+          </Grid>
+
+          {/* Toggles */}
+          <Grid container spacing={2}>
+            {[
+              ['thermalShowGst', 'Show GST Breakdown on Receipt', 'Prints CGST / SGST / IGST lines below the subtotal'],
+              ['thermalShowQr',  'Show QR Code on Receipt',       'Prints a QR code containing invoice number and total'],
+              ['thermalShowLogo','Show Company Logo on Receipt',   'Requires logo to be set in Company Information above'],
+            ].map(([name, label, hint]) => (
+              <Grid item xs={12} sm={4} key={name}>
+                <Controller
+                  name={name}
+                  control={control}
+                  defaultValue={false}
+                  render={({ field }) => (
+                    <FormControlLabel
+                      control={<Switch checked={Boolean(field.value)} onChange={(e) => field.onChange(e.target.checked)} />}
+                      label={
+                        <Box>
+                          <Typography variant="body2" fontWeight={700}>{label}</Typography>
+                          <Typography variant="caption" color="text.secondary">{hint}</Typography>
+                        </Box>
+                      }
+                    />
+                  )}
+                />
+              </Grid>
+            ))}
+          </Grid>
+
+          {/* Quick-size guide */}
+          <Box sx={{
+            p: 1.5, borderRadius: 2,
+            bgcolor: alpha(theme.palette.info.main, 0.05),
+            border: 1, borderColor: alpha(theme.palette.info.main, 0.2),
+          }}>
+            <Typography variant="caption" color="info.main" fontWeight={700}>Common paper widths</Typography>
+            <Grid container spacing={1} sx={{ mt: 0.5 }}>
+              {[
+                ['58mm', 'Small / economy printers, handheld'],
+                ['80mm', 'Standard counter POS (most common)'],
+                ['110mm', 'Wide receipts, drug stores'],
+                ['112mm', 'Wide+ receipts'],
+              ].map(([w, desc]) => (
+                <Grid item xs={6} sm={3} key={w}>
+                  <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider' }}>
+                    <Typography variant="body2" fontWeight={700} color="primary.main">{w}</Typography>
+                    <Typography variant="caption" color="text.secondary">{desc}</Typography>
+                  </Box>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
+        </Stack>
+      </SectionCard>
+
       <Box sx={{ display: { sm: 'none' } }}>
         <Button
           type="submit"

@@ -86,6 +86,9 @@ export default function StockTransfers() {
   };
 
   const submit = async () => {
+    if (!form.items || !form.items.some(i => i.productId && Number(i.quantity) > 0)) {
+      showToast('Add at least one product with quantity > 0', 'error'); return;
+    }
     setBusy(true);
     try {
       await stockTransfersApi.create({

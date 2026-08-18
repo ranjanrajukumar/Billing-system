@@ -18,6 +18,9 @@ export const getAll = asyncHandler(async (req, res) => {
   if (search) {
     where['orderNumber'] = { [Op.like]: `%${search}%` };
   }
+  if (req.query.status) {
+    where.status = req.query.status;
+  }
 
   const { rows, count } = await SalesOrder.findAndCountAll({
     where,
@@ -119,7 +122,7 @@ export const confirm = asyncHandler(async (req, res) => {
     include: [{ model: SalesOrderItem, include: [Product] }],
   });
   if (!order) return res.status(404).json({ message: 'Sales order not found' });
-  if (order.status === 'Confirmed') return res.status(400).json({ message: 'Order is already confirmed' });
+  if (order.status === 'Approved') return res.status(400).json({ message: 'Order is already confirmed' });
   if (order.status === 'Cancelled') return res.status(400).json({ message: 'Cannot confirm a cancelled order' });
 
   const branchId = order.branchId || req.branchId;
@@ -138,7 +141,7 @@ export const confirm = asyncHandler(async (req, res) => {
         ownerId: owner,
       });
     }
-    await order.update({ status: 'Confirmed', authlstedit: req.user.id }, { transaction: t });
+    await order.update({ status: 'Approved', authlstedit: req.user.id }, { transaction: t });
   });
 
   res.json({ message: 'Order confirmed and stock reserved', orderId: order.id });

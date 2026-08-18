@@ -1,6 +1,7 @@
 import BoltIcon from '@mui/icons-material/Bolt';
 import DeleteIcon from '@mui/icons-material/Delete';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import {
   alpha, Box, Button, Chip, Divider, Grid, IconButton, MenuItem, Paper,
   Stack, TextField, Tooltip, Typography, useTheme,
@@ -13,6 +14,10 @@ import { customersApi, invoicesApi, productsApi, settingsApi } from '../services
 import CustomerPicker from '../components/CustomerPicker.jsx';
 import { currency } from '../utils/formatters.js';
 import { printPdfBlob } from '../utils/print.js';
+import { buildThermalHtml } from '../utils/thermal.js';
+import { THERMAL_SIZES } from '../utils/thermal.js';
+import ThermalPreview from '../components/ThermalPreview.jsx';
+import { formatPackage, formatProductTitle, formatProductOption } from '../utils/productFormatters.js';
 
 /**
  * Counter billing driven from the keyboard.
@@ -36,29 +41,32 @@ const lineTaxable = (l) => Math.max(l.quantity * l.rate - l.discount, 0);
 const lineTotal = (l) => lineTaxable(l) * (1 + l.gstPercent / 100);
 
 export default function QuickBill() {
-  const theme = useTheme();
-  const { showToast } = useToast();
-  const scanRef = useRef(null);
-  const [scan, setScan] = useState('');
-  const [lines, setLines] = useState([]);
-  const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [customerId, setCustomerId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
-  const [saving, setSaving] = useState(false);
+  const [scan, setScan] = useState('');
+  const [lines, setLines] = useState([]);
   const [lastAdded, setLastAdded] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [companyState, setCompanyState] = useState('');
+  const [company, setCompany] = useState(null);
+  const [thermalPaperSize, setThermalPaperSize] = useState('80mm');
+  const [thermalPreviewOpen, setThermalPreviewOpen] = useState(false);
+  const [previewInvoice, setPreviewInvoice] = useState(null);
+  const { showToast } = useToast();
+  const theme = useTheme();
+  const scanRef = useRef(null);
 
   useEffect(() => {
-    customersApi.list({ limit: 200 }).then((r) => {
-      const list = r?.data || [];
-      setCustomers(list);
-      if (list.length) setCustomerId(list[0].id);
-    }).catch(() => setCustomers([]));
     productsApi.list({ limit: 500 }).then((r) => setProducts(r?.data || [])).catch(() => setProducts([]));
-    // Prefills the state on a new walk-in, which is what decides CGST/SGST.
+    customersApi.list({ limit: 500 }).then((r) => setCustomers(r?.data || [])).catch(() => setCustomers([]));
     settingsApi.get()
-      .then((r) => setCompanyState(r?.company?.state || ''))
+      .then((r) => {
+        setCompanyState(r?.company?.state || '');
+        setCompany(r?.company || null);
+        setThermalPaperSize(r?.company?.thermalPaperSize || '80mm');
+      })
       .catch(() => setCompanyState(''));
   }, []);
 
@@ -80,6 +88,9 @@ export default function QuickBill() {
 
   /** Adds a product, bumping the quantity if it is already on the bill. */
   const addProduct = useCallback((product, batch = null) => {
+    const dispName = formatProductTitle(product);
+    const pkgLabel = formatPackage(product);
+
     setLines((prev) => {
       // Same product from the same lot is one line, not two.
       const index = prev.findIndex((l) => l.productId === product.id && l.batchId === (batch?.id || ''));
@@ -88,7 +99,13 @@ export default function QuickBill() {
       }
       return [...prev, {
         productId: product.id,
-        productName: product.productName,
+        productName: dispName,
+        baseProductName: product.productName,
+        packageSize: product.packageSize || '',
+        packageUnit: product.packageUnit || '',
+        packType: product.packType || '',
+        pkgLabel,
+        sku: product.sku || '',
         quantity: 1,
         rate: Number(product.sellingPrice || 0),
         discount: 0,
@@ -102,7 +119,7 @@ export default function QuickBill() {
         stock: Number(product.stock || 0),
       }];
     });
-    setLastAdded(product.productName);
+    setLastAdded(dispName);
   }, []);
 
   /**
@@ -124,14 +141,26 @@ export default function QuickBill() {
     }
 
     const needle = code.toLowerCase();
-    const matches = products.filter((p) => p.productName.toLowerCase().includes(needle));
+    
+    const matches = products.filter((p) => {
+      const fullName = formatProductOption(p).toLowerCase();
+      return p.productName.toLowerCase().includes(needle) ||
+             (p.sku && p.sku.toLowerCase().includes(needle)) ||
+             fullName.includes(needle);
+    });
+
     if (matches.length === 1) {
       addProduct(matches[0]);
       setScan('');
     } else if (matches.length > 1) {
-      const exact = matches.find((p) => p.productName.toLowerCase() === needle);
+      const exact = matches.find((p) => {
+        const fullName = formatProductOption(p).toLowerCase();
+        return p.productName.toLowerCase() === needle ||
+               (p.sku && p.sku.toLowerCase() === needle) ||
+               fullName === needle;
+      });
       if (exact) { addProduct(exact); setScan(''); }
-      else showToast(`${matches.length} products match "${code}" — type more of the name`, 'info');
+      else showToast(`${matches.length} products match "${code}" — type more of the name or SKU`, 'info');
     } else {
       showToast(`Nothing found for "${code}"`, 'error');
     }
@@ -170,6 +199,8 @@ export default function QuickBill() {
   const save = useCallback(async (thenPrint = false) => {
     if (!lines.length) { showToast('Nothing on the bill yet', 'error'); return; }
     if (!customerId) { showToast('Choose a customer first', 'error'); return; }
+    const invalid = lines.find(l => Number(l.quantity) <= 0 || Number(l.rate) < 0 || Number(l.discount) < 0 || Number(l.gstPercent) < 0 || Number(l.gstPercent) > 100);
+    if (invalid) { showToast('Invalid quantity, rate, discount, or GST percentage in line items', 'error'); return; }
 
     setSaving(true);
     try {
@@ -199,18 +230,57 @@ export default function QuickBill() {
     setSaving(false);
   }, [lines, customerId, paymentMethod, showToast, clearBill]);
 
+  /** Save and immediately print a thermal receipt at the configured paper size. */
+  const saveThermal = useCallback(async (size) => {
+    if (!lines.length) { showToast('Nothing on the bill yet', 'error'); return; }
+    if (!customerId) { showToast('Choose a customer first', 'error'); return; }
+    const invalid = lines.find(l => Number(l.quantity) <= 0 || Number(l.rate) < 0 || Number(l.discount) < 0 || Number(l.gstPercent) < 0 || Number(l.gstPercent) > 100);
+    if (invalid) { showToast('Invalid quantity, rate, discount, or GST percentage in line items', 'error'); return; }
+    setSaving(true);
+    try {
+      const invoice = await invoicesApi.create({
+        invoiceDate: new Date().toISOString().slice(0, 10),
+        customerId,
+        paymentMethod,
+        items: lines.map((l) => ({
+          productId: l.productId, quantity: l.quantity,
+          rate: l.rate, discount: l.discount,
+          gstPercent: l.gstPercent, um: l.um || 'PCS',
+          batchId: l.batchId || undefined,
+        })),
+      });
+      showToast(`${invoice.invoiceNumber} saved — printing ${size} receipt`);
+      // Fetch full invoice (with Customer + InvoiceItems associations)
+      const full = await api.get(`/invoices/${invoice.id}`).then(r => r.data?.data || r.data);
+      const { printHtml } = await import('../utils/print.js');
+      const html = buildThermalHtml(full, company, {
+        size: size || thermalPaperSize,
+        showGst: true,
+        showQr: company?.thermalShowQr !== false,
+        showLogo: Boolean(company?.thermalShowLogo),
+        footer: company?.thermalFooter || '',
+      });
+      printHtml(html);
+      clearBill();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Could not save the bill', 'error');
+    }
+    setSaving(false);
+  }, [lines, customerId, paymentMethod, company, thermalPaperSize, showToast, clearBill]);
+
   // Shortcuts are registered on the window so they work wherever focus sits.
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'F2') { e.preventDefault(); focusScan(); }
       else if (e.key === 'F4') { e.preventDefault(); document.getElementById('quickbill-customer')?.focus(); }
+      else if (e.key === 'F6') { e.preventDefault(); saveThermal(thermalPaperSize); }
       else if (e.key === 'Escape') { e.preventDefault(); clearBill(); }
       else if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); save(false); }
       else if (e.ctrlKey && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); save(true); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [focusScan, clearBill, save]);
+  }, [focusScan, clearBill, save, saveThermal, thermalPaperSize]);
 
   return (
     <Stack spacing={2.5} className="animate-fadeInUp">
@@ -286,7 +356,19 @@ export default function QuickBill() {
                 {lines.map((line, index) => (
                   <Grid container spacing={1} key={`${line.productId}-${line.batchId}`} alignItems="center" sx={{ p: 1.5 }}>
                     <Grid item xs={12} md={3}>
-                      <Typography variant="body2" fontWeight={600}>{line.productName}</Typography>
+                      <Typography variant="body2" fontWeight={700}>
+                        {line.baseProductName || line.productName}
+                      </Typography>
+                      {line.pkgLabel && (
+                        <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 600, display: 'block' }}>
+                          Package: {line.pkgLabel}
+                        </Typography>
+                      )}
+                      {line.sku && (
+                        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', fontFamily: 'monospace' }}>
+                          SKU: {line.sku}
+                        </Typography>
+                      )}
                       <Typography variant="caption" color="text.secondary">
                         {line.gstPercent}% GST
                         {line.batchNumber ? ` · lot ${line.batchNumber}` : ''}
@@ -381,6 +463,16 @@ export default function QuickBill() {
                 >
                   Save &amp; Print  (Ctrl+P)
                 </Button>
+                {/* Thermal receipt button — splits into size options */}
+                <Button
+                  fullWidth variant="outlined" color="secondary"
+                  disabled={saving || !lines.length}
+                  startIcon={<ReceiptLongIcon />}
+                  onClick={() => saveThermal(thermalPaperSize)}
+                  sx={{ borderRadius: 2 }}
+                >
+                  🧾 Thermal ({thermalPaperSize})  F6
+                </Button>
                 <Button
                   fullWidth color="inherit"
                   disabled={!lines.length}
@@ -409,3 +501,6 @@ export default function QuickBill() {
     </Stack>
   );
 }
+
+// ThermalPreview is loaded only when the QuickBill modal needs it
+// (it is already imported above).

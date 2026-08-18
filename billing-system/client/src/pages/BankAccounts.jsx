@@ -84,6 +84,9 @@ export default function BankAccounts() {
   };
 
   const addEntry = async () => {
+    if (Number(entry.amount || 0) <= 0) {
+      showToast('Amount must be positive', 'error'); return;
+    }
     setBusy(true);
     try {
       await cashApi.addBankEntry(detail.id, { ...entry, amount: Number(entry.amount || 0) });

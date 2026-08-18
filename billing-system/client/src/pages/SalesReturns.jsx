@@ -69,7 +69,9 @@ export default function SalesReturns() {
 
   const submit = async (values) => {
     const selected = items.filter((it) => it.productId && Number(it.quantity) > 0);
-    if (!selected.length) { showToast('Add at least one product', 'error'); return; }
+    if (!selected.length) { showToast('Add at least one product with quantity > 0', 'error'); return; }
+    const invalid = selected.find(it => Number(it.rate) < 0 || Number(it.discount) < 0 || Number(it.gstPercent) < 0 || Number(it.gstPercent) > 100);
+    if (invalid) { showToast('Invalid rate, discount, or GST percentage in line items', 'error'); return; }
     try {
       const payload = { ...values, items: selected, totalRefund };
       if (!payload.invoiceId) delete payload.invoiceId;

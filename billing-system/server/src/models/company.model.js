@@ -44,8 +44,24 @@ export default (sequelize) => sequelize.define('Company', {
   loyaltyEnabled: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   loyaltyPointsPer100: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
   loyaltyRedeemValue: { type: DataTypes.DECIMAL(8, 2), allowNull: false, defaultValue: 1 },
-  loyaltyMinRedeem: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 100 }
-,
+  loyaltyMinRedeem: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 100 },
+
+  // ── Thermal / Receipt Printer ─────────────────────────────────────
+  // Default paper size shown in Quick Bill and the invoice print dropdown.
+  thermalPaperSize:  { type: DataTypes.STRING(10),  allowNull: false, defaultValue: '80mm' },
+  // Width in mm when thermalPaperSize is 'custom'.
+  thermalCustomMm:   { type: DataTypes.INTEGER,     allowNull: true },
+  // Base font size string, e.g. '8pt'.
+  thermalFontSize:   { type: DataTypes.STRING(8),   allowNull: false, defaultValue: '8.5pt' },
+  // Message printed at the bottom of every receipt.
+  thermalFooter:     { type: DataTypes.TEXT,        allowNull: true },
+  // Toggle: print CGST / SGST / IGST lines on the receipt.
+  thermalShowGst:    { type: DataTypes.BOOLEAN,     allowNull: false, defaultValue: true },
+  // Toggle: print QR code on receipt.
+  thermalShowQr:     { type: DataTypes.BOOLEAN,     allowNull: false, defaultValue: true },
+  // Toggle: print company logo on receipt.
+  thermalShowLogo:   { type: DataTypes.BOOLEAN,     allowNull: false, defaultValue: false },
+
   authadd: { type: DataTypes.INTEGER, allowNull: true },
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },
   authdel: { type: DataTypes.INTEGER, allowNull: true },

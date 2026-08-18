@@ -61,6 +61,9 @@ export default function ChartOfAccounts() {
   };
 
   const save = async () => {
+    if (Number(editing.openingBalance || 0) < 0) {
+      showToast('Opening balance cannot be negative', 'error'); return;
+    }
     setBusy(true);
     try {
       if (editing.id) await accountingApi.updateAccount(editing.id, editing);

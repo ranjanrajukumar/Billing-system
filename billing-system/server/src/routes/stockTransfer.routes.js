@@ -8,9 +8,12 @@ import { requireModule } from '../services/config.service.js';
 const router = Router();
 router.use(requireModule('stockTransfers'));
 
+import { validate } from '../middleware/validate.js';
+import { stockTransferRules } from '../validators/inventory.validator.js';
+
 router.get('/', controller.list);
 router.get('/:id', controller.getOne);
-router.post('/', controller.create);
+router.post('/', stockTransferRules, validate, controller.create);
 
 // Approving, dispatching and receiving each move real stock or release it, so
 // they are narrower than the right to request a transfer.

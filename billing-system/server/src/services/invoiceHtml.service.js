@@ -3,6 +3,7 @@ import {
   BILL_OF_SUPPLY_STYLES, renderBillItems, renderChargeGrid, renderFooterGrid,
   renderLetterhead, renderPageFoot, renderPartyGrid, renderWordsRemark,
 } from './billOfSupplyBlocks.js';
+import { formatProductTitle } from '../utils/productFormatters.js';
 
 // Renders an invoice as a standalone HTML document from a template's
 // drag-and-drop block layout. This is the single renderer: the designer's live
@@ -189,7 +190,7 @@ function renderItems(block, { invoice }) {
   const withAmounts = block.showAmounts !== false;
   const columns = [
     block.showSerial && { header: '#', value: (_it, i) => i + 1, num: true },
-    { header: 'Description', value: (it) => it.Product?.productName || '' },
+    { header: 'Description', value: (it) => formatProductTitle(it) },
     block.showHsn && { header: 'HSN', value: (it) => it.Product?.hsnCode || '' },
     { header: 'Qty', value: (it) => it.quantity, num: true },
     withAmounts && { header: 'Rate', value: (it) => money(it.rate), num: true },

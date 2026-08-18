@@ -75,6 +75,11 @@ import JournalEntryLineModel from './journalEntryLine.model.js';
 import ApprovalRuleModel from './approvalRule.model.js';
 import ApprovalRequestModel from './approvalRequest.model.js';
 import GatepassModel from './gatepass.model.js';
+import InboundAppointmentModel from './inboundAppointment.model.js';
+import QcInspectionModel from './qcInspection.model.js';
+import PickWaveModel from './pickWave.model.js';
+import ShipmentModel from './shipment.model.js';
+import RepairOrderModel from './repairOrder.model.js';
 import { installAuditHooks } from '../services/audit.service.js';
 export const Role = RoleModel(sequelize);
 export const User = UserModel(sequelize);
@@ -152,12 +157,21 @@ export const JournalEntryLine = JournalEntryLineModel(sequelize);
 export const ApprovalRule = ApprovalRuleModel(sequelize);
 export const ApprovalRequest = ApprovalRequestModel(sequelize);
 export const Gatepass = GatepassModel(sequelize);
+export const InboundAppointment = InboundAppointmentModel(sequelize);
+export const QcInspection = QcInspectionModel(sequelize);
+export const PickWave = PickWaveModel(sequelize);
+export const Shipment = ShipmentModel(sequelize);
+export const RepairOrder = RepairOrderModel(sequelize);
 
 Role.hasMany(User, { foreignKey: 'roleId', onDelete: 'RESTRICT', onUpdate: 'CASCADE' });
 User.belongsTo(Role, { foreignKey: 'roleId', onDelete: 'RESTRICT', onUpdate: 'CASCADE' });
 
 Category.hasMany(Product, { foreignKey: 'categoryId' });
 Product.belongsTo(Category, { foreignKey: 'categoryId' });
+
+Product.belongsTo(Product, { as: 'parent', foreignKey: 'parentId' });
+Product.hasMany(Product, { as: 'variants', foreignKey: 'parentId' });
+Product.belongsTo(Branch, { as: 'warehouse', foreignKey: 'warehouseId' });
 
 Supplier.hasMany(Purchase, { foreignKey: 'supplierId' });
 Purchase.belongsTo(Supplier, { foreignKey: 'supplierId' });
@@ -297,6 +311,8 @@ Branch.hasMany(ProductBatch, { foreignKey: 'branchId' });
 ProductBatch.belongsTo(Branch, { foreignKey: 'branchId' });
 ProductBatch.hasMany(InvoiceItem, { foreignKey: 'batchId' });
 InvoiceItem.belongsTo(ProductBatch, { foreignKey: 'batchId' });
+ProductBatch.hasMany(SalesReturnItem, { foreignKey: 'batchId' });
+SalesReturnItem.belongsTo(ProductBatch, { foreignKey: 'batchId' });
 
 // ---- Warehouse / ERP associations ----
 // Branches and warehouses are both rows in `branches`, so every location link
@@ -376,6 +392,38 @@ GrnItem.belongsTo(Product, { foreignKey: 'productId' });
 GrnItem.belongsTo(PurchaseOrderItem, { foreignKey: 'poItemId' });
 Grn.belongsTo(User, { foreignKey: 'receivedBy', as: 'receiver' });
 Grn.belongsTo(Purchase, { foreignKey: 'purchaseId' });
+
+InboundAppointment.belongsTo(Supplier, { foreignKey: 'supplierId' });
+Supplier.hasMany(InboundAppointment, { foreignKey: 'supplierId' });
+InboundAppointment.belongsTo(PurchaseOrder, { foreignKey: 'poId' });
+PurchaseOrder.hasMany(InboundAppointment, { foreignKey: 'poId' });
+InboundAppointment.belongsTo(Branch, { foreignKey: 'branchId' });
+Branch.hasMany(InboundAppointment, { foreignKey: 'branchId' });
+
+QcInspection.belongsTo(Grn, { foreignKey: 'grnId' });
+Grn.hasMany(QcInspection, { foreignKey: 'grnId' });
+QcInspection.belongsTo(Product, { foreignKey: 'productId' });
+Product.hasMany(QcInspection, { foreignKey: 'productId' });
+QcInspection.belongsTo(User, { foreignKey: 'inspectorId', as: 'inspector' });
+QcInspection.belongsTo(SalesReturn, { foreignKey: 'returnId' });
+SalesReturn.hasMany(QcInspection, { foreignKey: 'returnId' });
+QcInspection.belongsTo(SalesReturnItem, { foreignKey: 'returnItemId' });
+SalesReturnItem.hasMany(QcInspection, { foreignKey: 'returnItemId' });
+
+PickWave.belongsTo(Branch, { foreignKey: 'branchId' });
+Branch.hasMany(PickWave, { foreignKey: 'branchId' });
+SalesOrder.belongsTo(PickWave, { foreignKey: 'waveId' });
+PickWave.hasMany(SalesOrder, { foreignKey: 'waveId' });
+
+Shipment.belongsTo(Invoice, { foreignKey: 'invoiceId' });
+Invoice.hasMany(Shipment, { foreignKey: 'invoiceId' });
+
+RepairOrder.belongsTo(Product, { foreignKey: 'productId' });
+Product.hasMany(RepairOrder, { foreignKey: 'productId' });
+RepairOrder.belongsTo(Branch, { foreignKey: 'branchId' });
+Branch.hasMany(RepairOrder, { foreignKey: 'branchId' });
+RepairOrder.belongsTo(QcInspection, { foreignKey: 'qcInspectionId' });
+QcInspection.hasMany(RepairOrder, { foreignKey: 'qcInspectionId' });
 
 PurchaseReturn.belongsTo(Supplier, { foreignKey: 'supplierId' });
 Supplier.hasMany(PurchaseReturn, { foreignKey: 'supplierId' });

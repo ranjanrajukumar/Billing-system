@@ -23,6 +23,9 @@ export const getAll = asyncHandler(async (req, res) => {
   if (search) {
     where['quotationNumber'] = { [Op.like]: `%${search}%` };
   }
+  if (req.query.status) {
+    where.status = req.query.status;
+  }
 
   const { rows, count } = await Quotation.findAndCountAll({
     where,

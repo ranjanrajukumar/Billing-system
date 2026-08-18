@@ -6,9 +6,12 @@ import { requireModule } from '../services/config.service.js';
 const router = Router();
 router.use(requireModule('stockAdjustments'));
 
+import { validate } from '../middleware/validate.js';
+import { stockCountRules } from '../validators/inventory.validator.js';
+
 router.get('/', controller.list);
 router.get('/:id', controller.getOne);
-router.post('/', controller.create);
+router.post('/', stockCountRules, validate, controller.create);
 router.put('/:id/counts', controller.saveCounts);
 router.post('/:id/approve', authorize('Admin', 'Accountant', 'Warehouse Manager', 'Branch Manager'), controller.approve);
 router.post('/:id/cancel', controller.cancel);
