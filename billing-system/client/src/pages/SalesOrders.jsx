@@ -24,6 +24,7 @@ import StatsCard from '../components/StatsCard.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { customersApi, salesOrdersApi, productsApi } from '../services/resource.service.js';
 import SearchableSelect from '../components/SearchableSelect.jsx';
+import SearchBox from '../components/SearchBox.jsx';
 import { currency, date } from '../utils/formatters.js';
 import { printDocument, printPdfBlob } from '../utils/print.js';
 

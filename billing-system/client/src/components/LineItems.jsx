@@ -1,7 +1,7 @@
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import {
-  Button, Divider, Grid, IconButton, MenuItem, Stack, TextField, Typography,
+  Box, Button, Divider, Grid, IconButton, MenuItem, Stack, TextField, Typography,
 } from '@mui/material';
 import SearchableSelect from './SearchableSelect.jsx';
 import { formatPackage, formatProductOption } from '../utils/productFormatters.js';

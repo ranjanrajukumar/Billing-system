@@ -13,7 +13,7 @@ import api from '../services/api.js';
 import { customersApi, invoicesApi, productsApi, settingsApi } from '../services/resource.service.js';
 import CustomerPicker from '../components/CustomerPicker.jsx';
 import { currency } from '../utils/formatters.js';
-import { printPdfBlob } from '../utils/print.js';
+import { printHtml, printPdfBlob } from '../utils/print.js';
 import { buildThermalHtml } from '../utils/thermal.js';
 import { THERMAL_SIZES } from '../utils/thermal.js';
 import ThermalPreview from '../components/ThermalPreview.jsx';
@@ -252,7 +252,6 @@ export default function QuickBill() {
       showToast(`${invoice.invoiceNumber} saved — printing ${size} receipt`);
       // Fetch full invoice (with Customer + InvoiceItems associations)
       const full = await api.get(`/invoices/${invoice.id}`).then(r => r.data?.data || r.data);
-      const { printHtml } = await import('../utils/print.js');
       const html = buildThermalHtml(full, company, {
         size: size || thermalPaperSize,
         showGst: true,
