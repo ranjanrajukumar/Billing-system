@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   assignBarcode, createProduct, deleteProduct, getProduct, listCategories,
-  listProducts, lookupByBarcode, updateProduct,
+  listProducts, lookupByBarcode, updateProduct, importProducts,
 } from '../controllers/product.controller.js';
 import { authorize } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validate.js';
@@ -15,6 +15,7 @@ router.get('/barcode/:code', lookupByBarcode);
 router.get('/', listProducts);
 router.get('/:id', getProduct);
 router.post('/:id/barcode', authorize('Admin', 'Accountant'), assignBarcode);
+router.post('/import', authorize('Admin', 'Accountant'), upload.single('file'), importProducts);
 router.post('/', authorize('Admin', 'Accountant'), upload.single('image'), productRules, validate, createProduct);
 router.put('/:id', authorize('Admin', 'Accountant'), upload.single('image'), productRules, validate, updateProduct);
 router.delete('/:id', authorize('Admin'), deleteProduct);

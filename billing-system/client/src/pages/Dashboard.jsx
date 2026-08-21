@@ -8,6 +8,7 @@ import { alpha, Box, Button, Chip, Grid, LinearProgress, Paper, Stack, Typograph
 import { LineChart } from '@mui/x-charts';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { DataGrid } from '@mui/x-data-grid';
 import DataTable from '../components/DataTable.jsx';
 import Loader from '../components/Loader.jsx';
 import ExpiryAlerts from '../components/ExpiryAlerts.jsx';
@@ -33,7 +34,7 @@ function statusChip(row) {
 }
 
 export default function Dashboard() {
-  const [period, setPeriod] = useState({ period: 'all', from: '', to: '' , month: '' });
+  const [period, setPeriod] = useState({ period: 'thisMonth', from: '', to: '' , month: '' });
   const { data, loading, refreshing, error } = useFetch(() => dashboardApi.get(period), [period]);
   const theme = useTheme();
   const navigate = useNavigate();
@@ -172,13 +173,9 @@ export default function Dashboard() {
               <Stack direction="row" spacing={1} alignItems="center">
                 <Box
                   sx={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 1.5,
+                    width: 32, height: 32, borderRadius: 1.5,
                     bgcolor: alpha(theme.palette.warning.main, 0.12),
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: 'warning.main',
                   }}
                 >
@@ -199,34 +196,28 @@ export default function Dashboard() {
               </Button>
             </Stack>
             {data.lowStockProducts?.length > 0 ? (
-              <Stack spacing={1}>
-                {data.lowStockProducts.slice(0, 6).map((p, i) => (
-                  <Stack
-                    key={i}
-                    direction="row"
-                    justifyContent="space-between"
-                    alignItems="center"
-                    sx={{
-                      px: 1.5,
-                      py: 1,
-                      borderRadius: 2,
-                      bgcolor: alpha(theme.palette.warning.main, 0.05),
-                      border: `1px solid ${alpha(theme.palette.warning.main, 0.1)}`,
-                    }}
-                  >
-                    <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>
-                      {p.productName}
-                    </Typography>
-                    <Chip
-                      label={`${p.stock} left`}
-                      size="small"
-                      color={p.stock <= 0 ? 'error' : 'warning'}
-                      variant="filled"
-                      sx={{ fontSize: '0.7rem', fontWeight: 700 }}
-                    />
-                  </Stack>
-                ))}
-              </Stack>
+              <Box sx={{ height: 260, width: '100%' }}>
+                <DataGrid
+                  rows={data.lowStockProducts}
+                  columns={[
+                    { field: 'productName', headerName: 'Product', flex: 1, renderCell: (params) => (
+                      <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>{params.value}</Typography>
+                    )},
+                    { field: 'stock', headerName: 'Stock', width: 90, renderCell: (params) => (
+                      <Chip
+                        label={`${params.value} left`}
+                        size="small"
+                        color={params.value <= 0 ? 'error' : 'warning'}
+                        variant="filled"
+                        sx={{ fontSize: '0.7rem', fontWeight: 700 }}
+                      />
+                    )}
+                  ]}
+                  hideFooter
+                  disableColumnMenu
+                  disableRowSelectionOnClick
+                />
+              </Box>
             ) : (
               <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
                 <Typography variant="body2">All products stocked 🎉</Typography>

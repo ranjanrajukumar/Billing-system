@@ -15,6 +15,7 @@ const EDITABLE_FIELDS = [
   'multiBranchEnabled', 'businessMode', 'allowNegativeStock',
   'loyaltyEnabled', 'loyaltyPointsPer100', 'loyaltyRedeemValue', 'loyaltyMinRedeem',
   'panNumber', 'licenseNo', 'cin', 'msmeReg',
+  'currency',
   // Thermal / Receipt Printer
   'thermalPaperSize', 'thermalCustomMm', 'thermalFontSize', 'thermalFooter',
   'thermalShowGst', 'thermalShowQr', 'thermalShowLogo',

@@ -1,6 +1,9 @@
 import AddIcon from '@mui/icons-material/Add';
 import CancelIcon from '@mui/icons-material/Cancel';
 import ShoppingBasketIcon from '@mui/icons-material/ShoppingBasket';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import DownloadIcon from '@mui/icons-material/Download';
+import FileUploadIcon from '@mui/icons-material/FileUpload';
 import {
   Box, Button, Chip, Grid, IconButton, MenuItem, Paper,
   Stack, TextField, Tooltip, Typography,
@@ -37,7 +40,7 @@ function calc(items) {
 export default function Purchases() {
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({});
-  const [query, setQuery] = useState({ page: 1, limit: 10 , period: 'all', from: '', to: '', month: '' });
+  const [query, setQuery] = useState({ page: 1, limit: 10 , period: 'thisMonth', from: '', to: '', month: '' });
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [suppliers, setSuppliers] = useState([]);
@@ -92,6 +95,38 @@ export default function Purchases() {
     load();
   };
 
+  const handleUploadBill = async (e, id) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      await purchasesApi.uploadAttachment(id, formData);
+      showToast('Bill uploaded successfully');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to upload bill', 'error');
+    }
+  };
+
+  const handleImportCsv = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const result = await purchasesApi.importCsv(formData);
+      showToast(`Imported ${result.imported} purchases. Failed: ${result.failed}`);
+      if (result.errors?.length) {
+        alert("Errors:\\n" + result.errors.join("\\n"));
+      }
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to import CSV', 'error');
+    }
+    e.target.value = '';
+  };
+
   const stats = useMemo(() => ({
     count: meta.total || rows.length,
     value: rows.reduce((sum, r) => sum + Number(r.grandTotal || 0), 0),
@@ -105,9 +140,15 @@ export default function Purchases() {
         subtitle="Record supplier purchases and bring stock into inventory"
         icon={<ShoppingBasketIcon />}
         action={
-          <Button startIcon={<AddIcon />} variant="contained" onClick={() => setOpen(true)}>
-            New Purchase
-          </Button>
+          <Stack direction="row" spacing={2}>
+            <Button startIcon={<FileUploadIcon />} variant="outlined" component="label">
+              Import CSV
+              <input type="file" hidden accept=".csv" onChange={handleImportCsv} />
+            </Button>
+            <Button startIcon={<AddIcon />} variant="contained" onClick={() => setOpen(true)}>
+              New Purchase
+            </Button>
+          </Stack>
         }
       />
 
@@ -141,17 +182,33 @@ export default function Purchases() {
               { field: 'paymentStatus', headerName: 'Payment', render: (r) => <Chip label={r.paymentStatus} size="small" color={PAYMENT_COLORS[r.paymentStatus] || 'default'} variant="outlined" sx={{ fontWeight: 700, fontSize: '0.7rem' }} /> },
               { field: 'grandTotal', headerName: 'Total', render: (r) => <Typography fontWeight={800} color="success.main">{currency(r.grandTotal)}</Typography> },
               { field: 'actions', headerName: 'Actions', render: (r) => (
-                <Tooltip title="Cancel purchase">
-                  <span>
-                    <IconButton
-                      size="small" color="error" sx={{ borderRadius: 1.5 }}
-                      disabled={r.status === 'Cancelled'}
-                      onClick={() => setCancelling(r)}
-                    >
-                      <CancelIcon fontSize="small" />
-                    </IconButton>
-                  </span>
-                </Tooltip>
+                <Stack direction="row" spacing={1}>
+                  {r.attachmentMimeType ? (
+                    <Tooltip title="View Bill">
+                      <IconButton size="small" color="primary" sx={{ borderRadius: 1.5 }} component="a" href={`/api/purchases/${r.id}/attachment`} target="_blank">
+                        <DownloadIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip title="Upload Bill (PDF/Image)">
+                      <IconButton size="small" color="info" sx={{ borderRadius: 1.5 }} component="label">
+                        <CloudUploadIcon fontSize="small" />
+                        <input type="file" hidden accept="image/*,.pdf" onChange={(e) => handleUploadBill(e, r.id)} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  <Tooltip title="Cancel purchase">
+                    <span>
+                      <IconButton
+                        size="small" color="error" sx={{ borderRadius: 1.5 }}
+                        disabled={r.status === 'Cancelled'}
+                        onClick={() => setCancelling(r)}
+                      >
+                        <CancelIcon fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                </Stack>
               )},
             ]}
             rows={rows}

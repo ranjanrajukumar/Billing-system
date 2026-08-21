@@ -12,10 +12,17 @@ export const makeMasterDataResource = (masterKey) => makeResource(`/master-data/
 
 export const customersApi     = makeResource('/customers');
 export const categoriesApi    = makeResource('/categories');
-export const productsApi      = makeResource('/products');
+export const productsApi = {
+  ...makeResource('/products'),
+  import: (formData) => api.post('/products/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data)
+};
 export const unitsApi         = makeMasterDataResource('unit');
 export const suppliersApi     = makeResource('/suppliers');
-export const purchasesApi     = makeResource('/purchases');
+export const purchasesApi = {
+  ...makeResource('/purchases'),
+  uploadAttachment: (id, formData) => api.post(`/purchases/${id}/attachment`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  importCsv: (formData) => api.post('/purchases/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data)
+};
 export const invoicesApi      = {
   ...makeResource('/invoices'),
   // Confirm a Draft invoice → validates stock availability and deducts it atomically.
@@ -131,6 +138,10 @@ export const grnApi = withAction('/grn', {
   post:    (id)           => api.post(`/grn/${id}/post`).then((r) => r.data),
   invoice: (id, body = {})=> api.post(`/grn/${id}/invoice`, body).then((r) => r.data),
   cancel:  (id)           => api.post(`/grn/${id}/cancel`).then((r) => r.data),
+});
+
+export const srvApi = withAction('/srv', {
+  confirm: (id) => api.post(`/srv/${id}/confirm`).then((r) => r.data),
 });
 
 export const purchaseReturnsApi = withAction('/purchase-returns', {

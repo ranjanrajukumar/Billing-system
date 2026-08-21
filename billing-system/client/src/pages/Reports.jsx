@@ -113,7 +113,7 @@ function summarise(key, rows) {
 export default function Reports() {
   const theme = useTheme();
   const [tab, setTab] = useState(0);
-  const [filters, setFilters] = useState({ from: '', to: '', period: 'all' , month: '' });
+  const [filters, setFilters] = useState({ from: '', to: '', period: 'thisMonth' , month: '' });
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);

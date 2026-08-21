@@ -12,6 +12,7 @@ import Coupons from '../pages/Coupons.jsx';
 import Customers from '../pages/Customers.jsx';
 import Dashboard from '../pages/Dashboard.jsx';
 import DeliveryChallans from '../pages/DeliveryChallans.jsx';
+import Srv from '../pages/Srv.jsx';
 import InvoiceDesigner from '../pages/InvoiceDesigner.jsx';
 import Invoices from '../pages/Invoices.jsx';
 import Khata from '../pages/Khata.jsx';
@@ -22,6 +23,7 @@ import SalesReturns from '../pages/SalesReturns.jsx';
 import Suppliers from '../pages/Suppliers.jsx';
 import Udhar from '../pages/Udhar.jsx';
 import Inventory from '../pages/Inventory.jsx';
+import Subscriptions from '../pages/Subscriptions.jsx';
 import InvoiceTemplateSetup from '../pages/InvoiceTemplateSetup.jsx';
 import Login from '../pages/Login.jsx';
 import Masters from '../pages/Masters.jsx';
@@ -79,6 +81,7 @@ export default function AppRoutes({ mode, onToggleMode }) {
           <Route path="udhar" element={<Udhar />} />
           <Route path="khata" element={<Khata />} />
           <Route path="quick-bill" element={<QuickBill />} />
+          <Route path="subscriptions" element={<Subscriptions />} />
           <Route path="coupons" element={<Coupons />} />
           <Route path="batches" element={<Batches />} />
           <Route path="suppliers" element={<Suppliers />} />
@@ -97,6 +100,7 @@ export default function AppRoutes({ mode, onToggleMode }) {
 
           {/* Advanced mode */}
           <Route path="purchase-orders" element={<PurchaseOrders />} />
+          <Route path="srv" element={<Srv />} />
           <Route path="grn" element={<Grn />} />
           <Route path="purchase-returns" element={<PurchaseReturns />} />
           <Route path="stock-transfers" element={<StockTransfers />} />

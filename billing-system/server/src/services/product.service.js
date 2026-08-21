@@ -28,6 +28,17 @@ const asBoolean = (value, fallback = false) => {
   );
 };
 
+const parseAttributes = (value) => {
+  if (value === undefined || value === null || value === '') return {};
+  if (typeof value === 'object') return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
 /**
  * Turns a product form into columns.
  *
@@ -89,6 +100,7 @@ export function normalizeProductPayload(body, userId) {
     size: optionalText(body.size),
     color: optionalText(body.color),
     description: optionalText(body.description),
+    customAttributes: parseAttributes(body.customAttributes),
     barcode: body.barcode?.trim() || null,
 
     isActive: asBoolean(body.isActive, true),

@@ -47,7 +47,7 @@ export const MODULES = [
   { key: 'warehouses', label: 'Warehouses & Locations', mode: 'Advanced', menus: ['warehouses', 'warehouseOps', 'pickWaves', 'shipments', 'inboundAppointments', 'qcInspections', 'repairs'] },
   { key: 'stockTransfers', label: 'Stock Transfers', mode: 'Advanced', menus: ['stockTransfers'] },
   { key: 'stockAdjustments', label: 'Stock Adjustments & Counting', mode: 'Advanced', menus: ['stockAdjustments', 'stockCounts'] },
-  { key: 'purchaseOrders', label: 'Purchase Orders & GRN', mode: 'Advanced', menus: ['purchaseOrders', 'grn'] },
+  { key: 'purchaseOrders', label: 'Purchase Orders, GRN & SRV', mode: 'Advanced', menus: ['purchaseOrders', 'grn', 'srv'] },
   { key: 'purchaseReturns', label: 'Purchase Returns', mode: 'Advanced', menus: ['purchaseReturns'] },
   { key: 'serials', label: 'Serial Number Tracking', mode: 'Advanced', menus: ['serials'] },
   { key: 'gatepass', label: 'Gatepass', mode: 'Advanced', menus: ['gatepasses'] },

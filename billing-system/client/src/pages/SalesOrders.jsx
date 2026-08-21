@@ -45,7 +45,7 @@ const STATUS_COLORS = { Pending: 'warning', Approved: 'info', Confirmed: 'succes
 export default function SalesOrders() {
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({});
-  const [query, setQuery] = useState({ page: 1, limit: 10 , period: 'all', from: '', to: '', month: '' });
+  const [query, setQuery] = useState({ page: 1, limit: 10 , period: 'thisMonth', from: '', to: '', month: '' });
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [customers, setCustomers] = useState([]);

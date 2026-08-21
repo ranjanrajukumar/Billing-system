@@ -4,6 +4,7 @@ import { sequelize } from './models/index.js';
 import { migrateDatabase } from './config/migration.js';
 import { startScheduler } from './jobs/scheduler.js';
 import { initBackupSchedule } from './services/backupScheduler.js';
+import { startBillingCron } from './services/billing.cron.js';
 
 dotenv.config();
 
@@ -45,6 +46,8 @@ async function start() {
     // Only worth arming once there is a database to back up.
     const schedule = await initBackupSchedule();
     if (schedule.enabled) console.log(`Nightly backup armed for ${schedule.nextRun}`);
+    
+    startBillingCron();
   } catch (error) {
     if (process.env.START_WITHOUT_DB === 'false') {
       console.error('Unable to start server:', error);

@@ -17,8 +17,14 @@ export default (sequelize) => sequelize.define('Purchase', {
   paidAmount: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
   status: { ...enumType(sequelize, purchaseStatuses), defaultValue: 'Received' },
   paymentStatus: { ...enumType(sequelize, paymentStatuses), defaultValue: 'Unpaid' },
-  notes: { type: DataTypes.TEXT }
-,
+  notes: { type: DataTypes.TEXT },
+
+  attachmentData: { type: DataTypes.BLOB('long') },
+  attachmentMimeType: { type: DataTypes.STRING(100) },
+  attachmentUrl: {
+    type: DataTypes.VIRTUAL,
+    get() { return this.attachmentMimeType ? `/media/purchases/${this.id}` : null; }
+  },
   authadd: { type: DataTypes.INTEGER, allowNull: true },
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },
   authdel: { type: DataTypes.INTEGER, allowNull: true },
@@ -29,5 +35,6 @@ export default (sequelize) => sequelize.define('Purchase', {
   createdAt: 'addondt',
   updatedAt: 'editondt',
   tableName: 'purchases',
+  defaultScope: { attributes: { exclude: ['attachmentData'] } },
   indexes: [{ fields: ['purchase_number'] }, { fields: ['purchase_date'] }]
 });

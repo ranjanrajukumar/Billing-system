@@ -73,7 +73,9 @@ function ProductRow({ rank, product, tone, maxQuantity }) {
   );
 }
 
-function RankedPanel({ title, caption, icon, tone, products, emptyText }) {
+import { BarChart } from '@mui/x-charts';
+
+function RankedPanel({ title, caption, icon, tone, products, emptyText, useChart = false }) {
   const theme = useTheme();
   const colour = theme.palette[tone].main;
   const maxQuantity = products.reduce((max, p) => Math.max(max, p.quantity), 0);
@@ -96,11 +98,23 @@ function RankedPanel({ title, caption, icon, tone, products, emptyText }) {
         </Box>
       </Stack>
       {products.length > 0 ? (
-        <Stack spacing={1}>
-          {products.map((product, i) => (
-            <ProductRow key={product.id} rank={i + 1} product={product} tone={tone} maxQuantity={maxQuantity} />
-          ))}
-        </Stack>
+        useChart ? (
+          <Box sx={{ height: 300, width: '100%' }}>
+            <BarChart
+              layout="horizontal"
+              dataset={products.slice(0, 5)}
+              yAxis={[{ scaleType: 'band', dataKey: 'productName' }]}
+              series={[{ dataKey: 'quantity', label: 'Units Sold', color: colour }]}
+              margin={{ left: 120 }}
+            />
+          </Box>
+        ) : (
+          <Stack spacing={1}>
+            {products.map((product, i) => (
+              <ProductRow key={product.id} rank={i + 1} product={product} tone={tone} maxQuantity={maxQuantity} />
+            ))}
+          </Stack>
+        )
       ) : (
         <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
           <InventoryIcon sx={{ fontSize: 36, opacity: 0.3 }} />
@@ -218,6 +232,7 @@ export default function ProductPerformance() {
                 tone="success"
                 products={data?.top || []}
                 emptyText="Nothing sold in this period"
+                useChart={true}
               />
             </Grid>
             <Grid item xs={12} md={6}>

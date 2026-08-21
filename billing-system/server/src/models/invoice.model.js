@@ -28,6 +28,12 @@ export default (sequelize) => sequelize.define('Invoice', {
   status: { ...enumType(sequelize, invoiceStatuses), defaultValue: 'Paid' },
   notes: { type: DataTypes.TEXT },
 
+  // Multi-currency and Subscriptions support
+  currency: { type: DataTypes.STRING(3), defaultValue: 'INR' },
+  exchangeRate: { type: DataTypes.DECIMAL(12, 4), defaultValue: 1.0000 },
+  subscriptionId: { type: unsignedInteger(sequelize) },
+  emailStatus: { ...enumType(sequelize, ['Pending', 'Sent', 'Failed']), defaultValue: 'Pending' },
+
   // Document references printed on a bill of supply.
   orderNumber: { type: DataTypes.STRING(40) },
   orderDate: { type: DataTypes.DATEONLY },

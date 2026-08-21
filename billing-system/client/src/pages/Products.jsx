@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import api from '../services/api.js';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
+
 import DataTable from '../components/DataTable.jsx';
 import Loader from '../components/Loader.jsx';
 import Modal from '../components/Modal.jsx';
@@ -21,6 +22,7 @@ import PageHeader from '../components/PageHeader.jsx';
 import Pagination from '../components/Pagination.jsx';
 import SearchBox from '../components/SearchBox.jsx';
 import StatsCard from '../components/StatsCard.jsx';
+import ImportProductsModal from '../components/ImportProductsModal.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { productsApi, unitsApi } from '../services/resource.service.js';
 import { currency, mediaUrl } from '../utils/formatters.js';
@@ -37,6 +39,18 @@ const DEFAULT_UNITS = [
   { code: 'DOZEN', name: 'Dozen' },
 ];
 
+const parseAttributeDefinitions = (definitions) => {
+  if (typeof definitions === 'string') {
+    try {
+      const parsed = JSON.parse(definitions);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(definitions) ? definitions : [];
+};
+
 const empty = {
   productName: '', sku: '', categoryId: '', hsnCode: '', purchasePrice: 0,
   sellingPrice: 0, mrp: '', wholesalePrice: '', dealerPrice: '',
@@ -47,6 +61,7 @@ const empty = {
   batchRequired: false, expiryRequired: false, serialRequired: false, warrantyMonths: '',
   size: '', color: '', isActive: true,
   packageSize: '', packageUnit: 'Gram', packType: 'Packet',
+  customAttributes: {},
 };
 
 function ProductImage({ row }) {
@@ -76,12 +91,14 @@ function StockChip({ row }) {
 export default function Products() {
   const [rows, setRows] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [attributeDefinitions, setAttributeDefinitions] = useState([]);
   const [units, setUnits] = useState(DEFAULT_UNITS);
   const [meta, setMeta] = useState({});
   const [query, setQuery] = useState({ page: 1, limit: 10, search: '', categoryId: '' });
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [importing, setImporting] = useState(false);
   const { showToast } = useToast();
   const theme = useTheme();
   const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm({ defaultValues: empty });
@@ -93,14 +110,16 @@ export default function Products() {
     try {
       const params = { ...query };
       if (!params.categoryId) delete params.categoryId;
-      const [result, cats, masterUnitsRes] = await Promise.all([
+      const [result, cats, masterUnitsRes, attributeDefs] = await Promise.all([
         productsApi.list(params),
         api.get('/products/categories').then((r) => r.data).catch(() => []),
         unitsApi.list({ limit: 100 }).catch(() => ({ data: [] })),
+        api.get('/settings').then((r) => r.data?.company?.productAttributeDefinitions || []).catch(() => []),
       ]);
       setRows(result?.data || []);
       setMeta(result?.meta || {});
       setCategories(Array.isArray(cats) ? cats : []);
+      setAttributeDefinitions(parseAttributeDefinitions(attributeDefs));
       const fetchedUnits = masterUnitsRes?.data || [];
       const mergedUnits = [...DEFAULT_UNITS];
       fetchedUnits.forEach((u) => {
@@ -162,6 +181,7 @@ export default function Products() {
       packageSize: blankIfNull(row.packageSize),
       packageUnit: row.packageUnit || 'Gram',
       packType: row.packType || 'Packet',
+      customAttributes: row.customAttributes || {},
     });
   };
 
@@ -169,7 +189,9 @@ export default function Products() {
     const fd = new FormData();
     Object.keys(values).forEach((k) => {
       if (k === 'image' && values[k]?.[0]) fd.append('image', values[k][0]);
-      else if (!['image', 'imagePath', 'imageUrl', 'imageMimeType'].includes(k)) fd.append(k, values[k] ?? '');
+      else if (!['image', 'imagePath', 'imageUrl', 'imageMimeType'].includes(k)) {
+        fd.append(k, k === 'customAttributes' ? JSON.stringify(values[k] || {}) : values[k] ?? '');
+      }
     });
     editing.id ? await api.put(`/products/${editing.id}`, fd) : await api.post('/products', fd);
     showToast('Product saved');
@@ -191,9 +213,14 @@ export default function Products() {
         subtitle="Manage your products, pricing, and stock levels"
         icon={<Inventory2Icon />}
         action={
-          <Button startIcon={<AddIcon />} variant="contained" onClick={() => openForm()}>
-            Add Product
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button variant="outlined" onClick={() => setImporting(true)}>
+              Import
+            </Button>
+            <Button startIcon={<AddIcon />} variant="contained" onClick={() => openForm()}>
+              Add Product
+            </Button>
+          </Stack>
         }
       />
 
@@ -499,6 +526,34 @@ export default function Products() {
             </Box>
           </Grid>
 
+          {attributeDefinitions.length > 0 && (
+            <Grid item xs={12}>
+              <Box sx={{ p: 2, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: alpha(theme.palette.secondary.main, 0.03) }}>
+                <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5, color: 'secondary.main' }}>
+                  Business-specific details
+                </Typography>
+                <Grid container spacing={2}>
+                  {attributeDefinitions.map((definition) => (
+                    <Grid item xs={12} sm={6} md={4} key={definition.key}>
+                      <TextField
+                        fullWidth type={definition.type === 'number' || definition.type === 'date' ? definition.type : 'text'}
+                        select={definition.type === 'select'} label={`${definition.label}${definition.required ? ' *' : ''}`}
+                        {...register(`customAttributes.${definition.key}`, { required: definition.required && `${definition.label} is required` })}
+                        error={Boolean(errors.customAttributes?.[definition.key])}
+                        helperText={errors.customAttributes?.[definition.key]?.message}
+                        InputLabelProps={{ shrink: true }}
+                      >
+                        {definition.type === 'select' && (definition.options || []).map((option) => (
+                          <MenuItem key={option} value={option}>{option}</MenuItem>
+                        ))}
+                      </TextField>
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+            </Grid>
+          )}
+
           <Grid item xs={12}>
             <FormControlLabel control={<Switch defaultChecked {...register('isActive')} />} label="Active for billing" />
           </Grid>
@@ -519,6 +574,15 @@ export default function Products() {
         message={`Are you sure you want to delete "${deleting?.productName}"? This action cannot be undone.`}
         onCancel={() => setDeleting(null)}
         onConfirm={remove}
+      />
+
+      <ImportProductsModal
+        open={importing}
+        onClose={() => setImporting(false)}
+        onImported={() => {
+          setImporting(false);
+          load();
+        }}
       />
     </Stack>
   );

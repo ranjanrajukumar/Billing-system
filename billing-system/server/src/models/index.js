@@ -55,6 +55,8 @@ import PurchaseOrderModel from './purchaseOrder.model.js';
 import PurchaseOrderItemModel from './purchaseOrderItem.model.js';
 import GrnModel from './grn.model.js';
 import GrnItemModel from './grnItem.model.js';
+import SrvModel from './srv.model.js';
+import SrvItemModel from './srvItem.model.js';
 import PurchaseReturnModel from './purchaseReturn.model.js';
 import PurchaseReturnItemModel from './purchaseReturnItem.model.js';
 import ProductSerialModel from './productSerial.model.js';
@@ -81,6 +83,8 @@ import PickWaveModel from './pickWave.model.js';
 import ShipmentModel from './shipment.model.js';
 import RepairOrderModel from './repairOrder.model.js';
 import { installAuditHooks } from '../services/audit.service.js';
+import SubscriptionModel from './subscription.model.js';
+
 export const Role = RoleModel(sequelize);
 export const User = UserModel(sequelize);
 export const Customer = CustomerModel(sequelize);
@@ -137,6 +141,8 @@ export const PurchaseOrder = PurchaseOrderModel(sequelize);
 export const PurchaseOrderItem = PurchaseOrderItemModel(sequelize);
 export const Grn = GrnModel(sequelize);
 export const GrnItem = GrnItemModel(sequelize);
+export const Srv = SrvModel(sequelize);
+export const SrvItem = SrvItemModel(sequelize);
 export const PurchaseReturn = PurchaseReturnModel(sequelize);
 export const PurchaseReturnItem = PurchaseReturnItemModel(sequelize);
 export const ProductSerial = ProductSerialModel(sequelize);
@@ -162,9 +168,15 @@ export const QcInspection = QcInspectionModel(sequelize);
 export const PickWave = PickWaveModel(sequelize);
 export const Shipment = ShipmentModel(sequelize);
 export const RepairOrder = RepairOrderModel(sequelize);
+export const Subscription = SubscriptionModel(sequelize);
 
 Role.hasMany(User, { foreignKey: 'roleId', onDelete: 'RESTRICT', onUpdate: 'CASCADE' });
 User.belongsTo(Role, { foreignKey: 'roleId', onDelete: 'RESTRICT', onUpdate: 'CASCADE' });
+
+Customer.hasMany(Subscription, { foreignKey: 'customerId' });
+Subscription.belongsTo(Customer, { foreignKey: 'customerId' });
+Product.hasMany(Subscription, { foreignKey: 'productId' });
+Subscription.belongsTo(Product, { foreignKey: 'productId' });
 
 Category.hasMany(Product, { foreignKey: 'categoryId' });
 Product.belongsTo(Category, { foreignKey: 'categoryId' });
@@ -392,6 +404,13 @@ GrnItem.belongsTo(Product, { foreignKey: 'productId' });
 GrnItem.belongsTo(PurchaseOrderItem, { foreignKey: 'poItemId' });
 Grn.belongsTo(User, { foreignKey: 'receivedBy', as: 'receiver' });
 Grn.belongsTo(Purchase, { foreignKey: 'purchaseId' });
+
+Srv.belongsTo(Supplier, { foreignKey: 'supplierId' });
+Srv.belongsTo(Branch, { foreignKey: 'branchId' });
+Srv.hasMany(SrvItem, { foreignKey: 'srvId', onDelete: 'CASCADE' });
+SrvItem.belongsTo(Srv, { foreignKey: 'srvId' });
+SrvItem.belongsTo(Product, { foreignKey: 'productId' });
+Srv.belongsTo(User, { foreignKey: 'receivedBy', as: 'receiver' });
 
 InboundAppointment.belongsTo(Supplier, { foreignKey: 'supplierId' });
 Supplier.hasMany(InboundAppointment, { foreignKey: 'supplierId' });

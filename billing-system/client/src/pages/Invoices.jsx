@@ -109,13 +109,16 @@ function DownloadMenu({ id }) {
   );
 }
 
-function ShareMenu({ row }) {
+function ShareMenu({ row, onEmail }) {
   const [anchor, setAnchor] = useState(null);
   const share = (method) => {
     setAnchor(null);
-    const text = `Hello ${row.Customer?.customerName}, here is Invoice ${row.invoiceNumber} for ${currency(row.grandTotal)}.`;
-    if (method === 'whatsapp') window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-    else window.location.href = `mailto:?subject=Invoice ${row.invoiceNumber}&body=${encodeURIComponent(text)}`;
+    if (method === 'whatsapp') {
+      const text = `Hello ${row.Customer?.customerName}, here is Invoice ${row.invoiceNumber} for ${currency(row.grandTotal)}.`;
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    } else if (method === 'email') {
+      if (onEmail) onEmail(row.id);
+    }
   };
   return (
     <>
@@ -177,7 +180,7 @@ function ThermalMenu({ row, onPreview }) {
 export default function Invoices() {
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({});
-  const [query, setQuery] = useState({ page: 1, limit: 10 , period: 'all', from: '', to: '', month: '' });
+  const [query, setQuery] = useState({ page: 1, limit: 10 , period: 'thisMonth', from: '', to: '', month: '' });
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -218,6 +221,7 @@ export default function Invoices() {
       invoiceDate: new Date().toISOString().slice(0, 10), customerId: '', paymentMethod: 'Cash', notes: '',
       orderNumber: '', orderDate: '', dmNumber: '', dmDate: '', manualDm: '', manualDmDate: '',
       transporter: '', vehicleNo: '', lrNumber: '', totalBags: '', remark: '',
+      currency: 'INR', exchangeRate: 1.0000,
       // Registered so `reset()` clears them between invoices.
       ...Object.fromEntries(CHARGE_FIELDS.map(([name]) => [name, ''])),
     },
@@ -431,6 +435,8 @@ export default function Invoices() {
         notes: invoice.notes || '',
         ...Object.fromEntries(DOCUMENT_TEXT_FIELDS.map((f) => [f, invoice[f] ?? ''])),
         ...Object.fromEntries(CHARGE_FIELDS.map(([name]) => [name, invoice[name] ?? ''])),
+        currency: invoice.currency || 'INR',
+        exchangeRate: invoice.exchangeRate || 1.0000,
       });
       setCouponCode(invoice.couponCode || '');
       setApplied(invoice.couponCode
@@ -539,6 +545,17 @@ export default function Invoices() {
     }
   };
 
+  const emailInvoice = async (id) => {
+    try {
+      showToast('Sending email...');
+      const res = await api.post(`/invoices/${id}/email`);
+      showToast(res.data.message || 'Email sent successfully');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to send email', 'error');
+    }
+  };
+
   // Summary stats
   const stats = useMemo(() => ({
     total: rows.length,
@@ -631,7 +648,7 @@ export default function Invoices() {
                       </IconButton>
                     </Tooltip>
                   )}
-                  <ShareMenu row={row} />
+                  <ShareMenu row={row} onEmail={emailInvoice} />
                   {/* Thermal / Receipt printer */}
                   <ThermalMenu row={row} onPreview={openThermalPreview} />
                   {/* Confirm Invoice — only for Draft invoices: deducts stock atomically */}
@@ -723,6 +740,12 @@ export default function Invoices() {
               <TextField fullWidth select label="Payment Method" {...register('paymentMethod')}>
                 {['Cash', 'Card', 'UPI', 'Bank Transfer', 'Credit'].map((m) => <MenuItem value={m} key={m}>{m}</MenuItem>)}
               </TextField>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField fullWidth label="Currency" InputLabelProps={{ shrink: true }} {...register('currency')} />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField fullWidth type="number" inputProps={{ step: '0.0001' }} label="Exchange Rate" InputLabelProps={{ shrink: true }} {...register('exchangeRate')} />
             </Grid>
           </Grid>
 

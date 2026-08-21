@@ -1,10 +1,12 @@
 import { Op } from 'sequelize';
 import { Category, Product, ProductBatch } from '../models/index.js';
+import ExcelJS from 'exceljs';
 import { normalizeProductPayload, normalizeProductUpdate } from '../services/product.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { getPagination, paged } from '../utils/pagination.js';
 import { imageColumns } from '../utils/imageUpload.js';
 import { getBranchStock, setBranchStock } from '../services/stock.service.js';
+import { Readable } from 'stream';
 
 export const listProducts = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
@@ -438,4 +440,119 @@ export const assignBarcode = asyncHandler(async (req, res) => {
 
   await product.update({ barcode: code, authlstedit: req.user?.id });
   res.json({ id: product.id, productName: product.productName, barcode: code });
+});
+
+export const importProducts = asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+
+  let workbook;
+  try {
+    workbook = new ExcelJS.Workbook();
+    if (req.file.originalname.endsWith('.csv')) {
+      await workbook.csv.read(Readable.from(req.file.buffer));
+    } else {
+      await workbook.xlsx.load(req.file.buffer);
+    }
+  } catch (err) {
+    return res.status(400).json({ message: 'Failed to parse file. Please upload a valid Excel or CSV file.' });
+  }
+  
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) return res.status(400).json({ message: 'Excel file is empty' });
+
+  const headers = {};
+  worksheet.getRow(1).eachCell((cell, colNumber) => {
+    if (cell.value) {
+      headers[cell.value.toString().trim().toLowerCase()] = colNumber;
+    }
+  });
+
+  const expectedHeaders = ['productname', 'sku', 'barcode', 'purchaseprice', 'sellingprice', 'gstpercent', 'stock', 'hsncode', 'primaryunit', 'category'];
+  
+  const colMap = {};
+  for (const h of expectedHeaders) {
+    if (headers[h]) colMap[h] = headers[h];
+  }
+
+  if (!colMap.productname) {
+    return res.status(400).json({ message: 'Missing required column: productName' });
+  }
+
+  let successCount = 0;
+  let errorCount = 0;
+  const errors = [];
+  
+  const categories = await Category.findAll();
+  const categoryMap = {};
+  categories.forEach(c => { categoryMap[c.name.toLowerCase()] = c.id; });
+
+  for (let i = 2; i <= worksheet.rowCount; i++) {
+    const row = worksheet.getRow(i);
+    if (!row.values || row.values.length === 0) continue;
+
+    const getVal = (colName) => {
+      if (!colMap[colName]) return null;
+      const cell = row.getCell(colMap[colName]);
+      return cell.value !== null && cell.value !== undefined ? cell.value.toString().trim() : null;
+    };
+
+    const productName = getVal('productname');
+    if (!productName) continue; // Skip empty rows
+
+    const sku = getVal('sku');
+    const barcode = getVal('barcode');
+    const purchasePrice = parseFloat(getVal('purchaseprice')) || 0;
+    const sellingPrice = parseFloat(getVal('sellingprice')) || 0;
+    const gstPercent = parseFloat(getVal('gstpercent')) || 0;
+    const stock = parseInt(getVal('stock'), 10) || 0;
+    const hsnCode = getVal('hsncode') || '';
+    const primaryUnit = getVal('primaryunit') || 'PCS';
+    const categoryName = getVal('category');
+
+    let categoryId = null;
+    if (categoryName) {
+      const catKey = categoryName.toLowerCase();
+      if (categoryMap[catKey]) {
+        categoryId = categoryMap[catKey];
+      } else {
+        const newCat = await Category.create({ name: categoryName, description: 'Imported from Excel', authlstedit: req.user?.id });
+        categoryMap[catKey] = newCat.id;
+        categoryId = newCat.id;
+      }
+    }
+
+    try {
+      let product = null;
+      if (sku) product = await Product.findOne({ where: { sku, detstatus: false } });
+      if (!product && barcode) product = await Product.findOne({ where: { barcode, detstatus: false } });
+
+      const payload = {
+        productName, sku, barcode, purchasePrice, sellingPrice, gstPercent,
+        hsnCode, primaryUnit, categoryId,
+        authlstedit: req.user?.id
+      };
+
+      if (product) {
+        await product.update(payload);
+      } else {
+        payload.authadd = req.user?.id;
+        payload.stock = stock;
+        const newProd = await Product.create(payload);
+        if (stock > 0) {
+          await setBranchStock({
+            productId: newProd.id,
+            branchId: req.branchId,
+            quantity: stock,
+            userId: req.user?.id,
+          });
+        }
+      }
+      successCount++;
+    } catch (err) {
+      errorCount++;
+      errors.push(`Row ${i}: ${err.message}`);
+    }
+  }
+
+  res.json({ successCount, errorCount, errors });
 });

@@ -74,7 +74,10 @@ async function ensureMissingColumns() {
       if (!fieldName || existing.has(fieldName.toLowerCase())) continue;
 
       try {
-        await queryInterface.addColumn(tableName, fieldName, attribute);
+        const columnAttribute = attribute.type?.key === 'JSON'
+          ? { ...attribute, allowNull: true, defaultValue: undefined }
+          : attribute;
+        await queryInterface.addColumn(tableName, fieldName, columnAttribute);
         console.log(`Added missing column ${describedTable}.${fieldName}`);
       } catch (error) {
         if (error.original?.code !== 'ER_DUP_FIELDNAME') throw error;
@@ -197,7 +200,12 @@ export async function seedDefaults() {
   }
   await Company.findOrCreate({
     where: { id: 1 },
-    defaults: { name: 'Your Company', state: process.env.COMPANY_STATE || 'Tamil Nadu' }
+    defaults: {
+      name: 'Your Company',
+      state: process.env.COMPANY_STATE || 'Tamil Nadu',
+      businessType: 'General Store',
+      productAttributeDefinitions: [],
+    }
   });
   await Category.bulkCreate([{ name: 'General' }, { name: 'Electronics' }, { name: 'Services' }], { ignoreDuplicates: true });
 

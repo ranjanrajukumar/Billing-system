@@ -45,6 +45,8 @@ export default function QuickBill() {
   const [customers, setCustomers] = useState([]);
   const [customerId, setCustomerId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [currencyCode, setCurrencyCode] = useState('INR');
+  const [exchangeRate, setExchangeRate] = useState(1.0);
   const [scan, setScan] = useState('');
   const [lines, setLines] = useState([]);
   const [lastAdded, setLastAdded] = useState(null);
@@ -208,6 +210,8 @@ export default function QuickBill() {
         invoiceDate: new Date().toISOString().slice(0, 10),
         customerId,
         paymentMethod,
+        currency: currencyCode,
+        exchangeRate,
         items: lines.map((l) => ({
           productId: l.productId,
           quantity: l.quantity,
@@ -242,6 +246,8 @@ export default function QuickBill() {
         invoiceDate: new Date().toISOString().slice(0, 10),
         customerId,
         paymentMethod,
+        currency: currencyCode,
+        exchangeRate,
         items: lines.map((l) => ({
           productId: l.productId, quantity: l.quantity,
           rate: l.rate, discount: l.discount,
@@ -317,7 +323,7 @@ export default function QuickBill() {
               defaultState={companyState}
             />
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={12} sm={6} md={2}>
             <TextField
               fullWidth select label="Payment"
               value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}
@@ -327,6 +333,12 @@ export default function QuickBill() {
                 <MenuItem key={m} value={m}>{m}</MenuItem>
               ))}
             </TextField>
+          </Grid>
+          <Grid item xs={6} md={1}>
+            <TextField fullWidth label="Currency" InputLabelProps={{ shrink: true }} value={currencyCode} onChange={(e) => setCurrencyCode(e.target.value)} />
+          </Grid>
+          <Grid item xs={6} md={1}>
+            <TextField fullWidth type="number" inputProps={{ step: '0.0001' }} label="Exc. Rate" InputLabelProps={{ shrink: true }} value={exchangeRate} onChange={(e) => setExchangeRate(Number(e.target.value) || 1)} />
           </Grid>
         </Grid>
         {lastAdded && (

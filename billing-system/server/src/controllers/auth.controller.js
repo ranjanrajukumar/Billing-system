@@ -29,10 +29,10 @@ const buildAuthResponse = async (user) => {
       profileImageUrl: user.profileImageUrl,
       // Menu rights travel with the user so the sidebar can render correctly.
       menus: visibleMenus(user.Role, modules),
-      // The sidebar renders from this, so grouping lives on the server only.
       navigation: navigationFor(user.Role, modules),
       modules: [...modules],
       businessMode: mode,
+      currency: (await getConfig()).currency,
     }
   };
 };

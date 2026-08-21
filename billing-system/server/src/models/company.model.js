@@ -26,6 +26,8 @@ export default (sequelize) => sequelize.define('Company', {
   },
   signatureUrl: { type: DataTypes.STRING(255) },
   defaultInvoiceTemplate: { type: DataTypes.STRING(50), defaultValue: 'standard' },
+  // Default currency code (e.g., INR, USD, EUR) used for formatting globally.
+  currency: { type: DataTypes.STRING(3), allowNull: false, defaultValue: 'INR' },
   // Days a credit (udhar) sale is allowed before it counts as overdue.
   creditDays: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 30 },
   // Off by default: the app runs against a single implicit branch and behaves

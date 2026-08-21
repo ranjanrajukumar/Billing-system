@@ -31,7 +31,7 @@ const STATUS_COLORS = { Pending: 'warning', Delivered: 'success', Returned: 'err
 export default function DeliveryChallans() {
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({});
-  const [query, setQuery] = useState({ page: 1, limit: 10, search: '' , period: 'all', from: '', to: '', month: '' });
+  const [query, setQuery] = useState({ page: 1, limit: 10, search: '' , period: 'thisMonth', from: '', to: '', month: '' });
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [customers, setCustomers] = useState([]);

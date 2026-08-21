@@ -6,6 +6,7 @@ import { calculateInvoice } from '../utils/invoiceMath.js';
 import { getPagination, paged } from '../utils/pagination.js';
 import { buildInvoicePdf } from '../services/pdf.service.js';
 import { renderInvoiceHtml } from '../services/invoiceHtml.service.js';
+import { sendInvoiceEmail } from '../services/email.service.js';
 import { assertAvailable, deductReserved, postStockTransaction } from '../services/stock.service.js';
 import { postSale, reverseEntry } from '../services/accounting.service.js';
 import { priceFor, unitSnapshot } from '../utils/units.js';
@@ -147,6 +148,9 @@ export const createInvoice = asyncHandler(async (req, res) => {
       pointsRedeemed: redemption.points,
       pointsDiscount: redemption.amount,
       notes: req.body.notes,
+      currency: req.body.currency || 'INR',
+      exchangeRate: req.body.exchangeRate || 1.0000,
+      subscriptionId: req.body.subscriptionId || null,
       // Document references, dispatch details and the printed charge boxes.
       ...Object.fromEntries(DOCUMENT_FIELDS
         .filter((field) => req.body[field] !== undefined && req.body[field] !== '')
@@ -285,6 +289,13 @@ export const createInvoice = asyncHandler(async (req, res) => {
     return invoice;
   });
   const invoice = await Invoice.findOne({ where: { id: created.id}, include: [{ model: Customer }, { model: InvoiceItem, include: Product }, Payment] });
+  
+  if (invoice.Customer?.mobile) {
+    import('../services/sms.service.js')
+      .then(({ sendInvoiceSMS }) => sendInvoiceSMS(invoice.Customer.mobile, invoice.invoiceNumber, invoice.grandTotal))
+      .catch(err => console.error('Failed to send invoice SMS:', err));
+  }
+
   res.status(201).json(invoice);
 });
 
@@ -429,6 +440,8 @@ export const updateInvoice = asyncHandler(async (req, res) => {
       pointsDiscount: redemption.amount,
       pointsEarned: 0,
       notes: req.body.notes ?? existing.notes,
+      currency: req.body.currency ?? existing.currency,
+      exchangeRate: req.body.exchangeRate ?? existing.exchangeRate,
       authlstedit: req.user.id,
       ...Object.fromEntries(DOCUMENT_FIELDS
         .filter((field) => req.body[field] !== undefined && req.body[field] !== '')
@@ -655,6 +668,38 @@ export const downloadInvoicePdf = asyncHandler(async (req, res) => {
   res.send(buffer);
 });
 
+export const emailInvoice = asyncHandler(async (req, res) => {
+  const invoice = await Invoice.findOne({
+    where: { id: req.params.id, detstatus: false },
+    include: [{ model: Customer }, { model: InvoiceItem, include: Product }]
+  });
+  if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+  if (!invoice.Customer || !invoice.Customer.email) {
+    return res.status(400).json({ message: 'Customer does not have an email address' });
+  }
+
+  const company = await Company.unscoped().findOne();
+  const selectedTemplate = req.query.template || company?.defaultInvoiceTemplate || 'standard';
+  let template = selectedTemplate;
+
+  if (String(selectedTemplate).startsWith('template:')) {
+    const templateId = String(selectedTemplate).replace('template:', '');
+    const savedTemplate = await InvoiceTemplate.findOne({ where: { id: templateId, detstatus: false, isActive: true } });
+    template = savedTemplate ? savedTemplate.toJSON() : 'standard';
+  }
+
+  const buffer = await buildInvoicePdf(invoice, company, template, template.invoiceTitle || 'TAX INVOICE');
+  
+  const result = await sendInvoiceEmail(invoice.Customer.email, invoice, buffer);
+  if (result.success) {
+    await invoice.update({ emailStatus: 'Sent' });
+    res.json({ message: 'Email sent successfully', messageId: result.messageId });
+  } else {
+    await invoice.update({ emailStatus: 'Failed' });
+    res.status(500).json({ message: 'Failed to send email' });
+  }
+});
+
 /**
  * Confirm a Draft invoice — validates available stock and deducts it.
  *
@@ -742,6 +787,13 @@ export const confirmInvoice = asyncHandler(async (req, res) => {
     where: { id: invoice.id },
     include: [{ model: Customer }, { model: InvoiceItem, include: Product }, Payment],
   });
+
+  if (updated.Customer?.mobile) {
+    import('../services/sms.service.js')
+      .then(({ sendInvoiceSMS }) => sendInvoiceSMS(updated.Customer.mobile, updated.invoiceNumber, updated.grandTotal))
+      .catch(err => console.error('Failed to send invoice SMS:', err));
+  }
+
   res.json(updated);
 });
 

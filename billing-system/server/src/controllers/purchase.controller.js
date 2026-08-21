@@ -235,3 +235,143 @@ export const removePurchase = asyncHandler(async (req, res) => {
 
   res.json({ message: 'Purchase cancelled and stock reversed' });
 });
+
+export const uploadAttachment = asyncHandler(async (req, res) => {
+  if (!req.file) throw Object.assign(new Error('No file provided'), { status: 400 });
+
+  const purchase = await Purchase.findOne({ where: { id: req.params.id, detstatus: false } });
+  if (!purchase) throw Object.assign(new Error('Purchase not found'), { status: 404 });
+
+  await purchase.update({
+    attachmentData: req.file.buffer,
+    attachmentMimeType: req.file.mimetype,
+    authlstedit: req.user.id
+  });
+
+  res.json({ message: 'Attachment uploaded successfully' });
+});
+
+export const getPurchaseAttachment = asyncHandler(async (req, res) => {
+  const purchase = await Purchase.findOne({
+    where: { id: req.params.id, detstatus: false },
+    attributes: ['attachmentData', 'attachmentMimeType', 'purchaseNumber']
+  });
+
+  if (!purchase || !purchase.attachmentData) {
+    return res.status(404).json({ message: 'Attachment not found' });
+  }
+
+  res.set('Content-Type', purchase.attachmentMimeType);
+  res.set('Content-Disposition', `inline; filename="Bill_${purchase.purchaseNumber}"`);
+  res.send(purchase.attachmentData);
+});
+
+import { parse } from 'csv-parse/sync';
+
+export const importPurchases = asyncHandler(async (req, res) => {
+  if (!req.file) throw Object.assign(new Error('No CSV file provided'), { status: 400 });
+  const records = parse(req.file.buffer, { columns: true, skip_empty_lines: true, trim: true });
+
+  const grouped = {};
+  for (const row of records) {
+    const ref = row.ReferenceNumber || row.InvoiceNo || row.PurchaseNumber;
+    if (!ref) continue;
+    if (!grouped[ref]) grouped[ref] = [];
+    grouped[ref].push(row);
+  }
+
+  const results = { imported: 0, failed: 0, errors: [] };
+
+  for (const [ref, rows] of Object.entries(grouped)) {
+    try {
+      await sequelize.transaction(async (transaction) => {
+        const supplierName = rows[0].SupplierName;
+        let supplier = await Supplier.findOne({ where: { supplierName, detstatus: false }, transaction });
+        if (!supplier) {
+          supplier = await Supplier.create({ supplierName, authadd: req.user.id }, { transaction });
+        }
+
+        const items = [];
+        for (const row of rows) {
+          const productIdent = row.ProductCode || row.ProductName;
+          const product = await Product.findOne({
+            where: {
+              [Op.or]: [{ productCode: productIdent }, { productName: productIdent }],
+              detstatus: false
+            },
+            transaction
+          });
+          if (!product) throw new Error(`Product ${productIdent} not found`);
+
+          items.push({
+            productId: product.id,
+            quantity: Number(row.Quantity || 0),
+            rate: Number(row.Rate || 0),
+            gstPercent: Number(row.TaxPercent || 0),
+            um: row.Unit || product.baseUm || 'PCS'
+          });
+        }
+
+        const productIds = items.map(i => i.productId);
+        const products = await Product.findAll({ where: { id: productIds }, transaction });
+        const byId = new Map(products.map(p => [p.id, p]));
+
+        const totals = calculateItems(items, byId);
+        const purchaseDate = rows[0].Date || new Date().toISOString().slice(0, 10);
+
+        const purchase = await Purchase.create({
+          purchaseNumber: ref,
+          purchaseDate,
+          branchId: req.branchId,
+          supplierId: supplier.id,
+          createdBy: req.user.id,
+          subtotal: totals.subtotal,
+          taxAmount: totals.taxAmount,
+          grandTotal: totals.grandTotal,
+          paidAmount: 0,
+          paymentStatus: 'Unpaid',
+          status: 'Received',
+          notes: 'Imported via CSV bulk upload'
+        }, { transaction });
+
+        await PurchaseItem.bulkCreate(totals.items.map((item) => ({
+          purchaseId: purchase.id,
+          productId: item.productId,
+          um: item.um,
+          primaryUnit: item.primaryUnit,
+          unitConversionFactor: item.unitConversionFactor,
+          primaryQty: item.primaryQty,
+          quantity: item.quantity,
+          rate: item.rate,
+          gstPercent: item.gstPercent,
+          gstAmount: item.gstAmount,
+          amount: item.amount
+        })), { transaction });
+
+        for (const item of totals.items) {
+          await postStockTransaction({
+            productId: item.productId,
+            branchId: req.branchId,
+            quantity: Number(item.primaryQty),
+            movementType: 'Purchase',
+            referenceType: 'Purchase',
+            referenceId: purchase.id,
+            referenceNumber: purchase.purchaseNumber,
+            unitCost: item.rate,
+            transactionDate: purchase.purchaseDate,
+            notes: `Bulk Imported ${purchase.purchaseNumber}`,
+            transaction,
+            userId: req.user.id,
+          });
+        }
+        await postPurchase({ purchase, transaction, userId: req.user.id });
+      });
+      results.imported++;
+    } catch (err) {
+      results.failed++;
+      results.errors.push(`Row Ref [${ref}]: ${err.message}`);
+    }
+  }
+
+  res.json(results);
+});

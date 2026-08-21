@@ -17,6 +17,7 @@ export function AuthProvider({ children }) {
       .then((data) => {
         if (cancelled || !data?.user) return;
         localStorage.setItem('user', JSON.stringify(data.user));
+        if (data.user?.currency) localStorage.setItem('currency', data.user.currency);
         setUser(data.user);
       })
       // A failure here just leaves the cached user in place; the API rejects
@@ -29,6 +30,7 @@ export function AuthProvider({ children }) {
     const data = await authService.login(payload);
     localStorage.setItem('token', data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
+    if (data.user?.currency) localStorage.setItem('currency', data.user.currency);
     setToken(data.token);
     setUser(data.user);
     return data.user;
@@ -38,6 +40,7 @@ export function AuthProvider({ children }) {
     const data = await authService.register(payload);
     localStorage.setItem('token', data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
+    if (data.user?.currency) localStorage.setItem('currency', data.user.currency);
     setToken(data.token);
     setUser(data.user);
     return data.user;

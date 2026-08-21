@@ -53,6 +53,8 @@ import {
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
+import AutorenewIcon from '@mui/icons-material/Autorenew';
+
 const DRAWER_WIDTH = 256;
 
 /**
@@ -68,6 +70,7 @@ const ICONS = {
 
   quickBill: <BoltIcon fontSize="small" />,
   invoices: <ReceiptIcon fontSize="small" />,
+  subscriptions: <AutorenewIcon fontSize="small" />,
   salesOrders: <ShoppingCartIcon fontSize="small" />,
   quotations: <RequestQuoteIcon fontSize="small" />,
   deliveryChallans: <LocalShippingIcon fontSize="small" />,
@@ -81,6 +84,7 @@ const ICONS = {
 
   purchaseOrders: <AssignmentIcon fontSize="small" />,
   grn: <MoveToInboxIcon fontSize="small" />,
+  srv: <ReceiptIcon fontSize="small" />,
   purchases: <ShoppingBasketIcon fontSize="small" />,
   purchaseReturns: <UndoIcon fontSize="small" />,
   suppliers: <StorefrontIcon fontSize="small" />,

@@ -57,6 +57,7 @@ export default (sequelize) => sequelize.define('Product', {
   packType: { type: DataTypes.STRING(20), allowNull: true }, // e.g. Packet
 
   description: { type: DataTypes.TEXT, allowNull: true },
+  customAttributes: { type: DataTypes.JSON, allowNull: false, defaultValue: {} },
   // Not unique in the database: products are soft deleted, and a unique index
   // would keep a removed product's barcode locked forever. Uniqueness among
   // live products is enforced in the controller instead.

@@ -43,11 +43,38 @@ async function syncProductTotal(productId, transaction) {
     where: { productId, ownerId: house },
     transaction,
   });
+  const currentTotal = Number(total || 0);
+  
   await Product.update(
-    { stock: Number(total || 0) },
+    { stock: currentTotal },
     { where: { id: productId }, transaction },
   );
-  return Number(total || 0);
+
+  // Trigger low stock email and SMS if applicable
+  try {
+    const product = await Product.findByPk(productId, { transaction });
+    if (product && currentTotal <= product.lowStockThreshold) {
+      const { Company } = await import('../models/index.js');
+      const company = await Company.findOne({ transaction });
+      
+      const emailPromise = import('./email.service.js').then(({ sendLowStockAlert }) => {
+        return sendLowStockAlert(product).catch(err => console.error('Failed to send low stock alert email:', err));
+      });
+
+      let smsPromise = Promise.resolve();
+      if (company?.mobile) {
+        smsPromise = import('./sms.service.js').then(({ sendLowStockSMS }) => {
+          return sendLowStockSMS(company.mobile, product.productName, currentTotal).catch(err => console.error('Failed to send low stock SMS:', err));
+        });
+      }
+
+      await Promise.all([emailPromise, smsPromise]);
+    }
+  } catch (err) {
+    console.error('Failed to check low stock for alerts:', err);
+  }
+
+  return currentTotal;
 }
 
 /**

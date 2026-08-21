@@ -72,7 +72,7 @@ export default function PeriodFilter({
 
   const isCustom = Boolean(value.from || value.to);
   const isMonth = !isCustom && value.period === 'month' && Boolean(value.month);
-  const active = isCustom ? 'custom' : (value.period || 'all');
+  const active = isCustom ? 'custom' : (value.period || 'thisMonth');
   const inline = options.filter((o) => INLINE.includes(o.key));
   const more = options.filter((o) => !INLINE.includes(o.key));
   const activeLabel = options.find((o) => o.key === active)?.label;
@@ -93,7 +93,7 @@ export default function PeriodFilter({
   };
   const setCustom = (patch) => onChange({ ...value, ...patch, period: 'custom', month: '' });
   const clearCustom = () => {
-    onChange({ period: 'all', from: '', to: '', month: '' });
+    onChange({ period: 'thisMonth', from: '', to: '', month: '' });
     setShowDates(false);
   };
 

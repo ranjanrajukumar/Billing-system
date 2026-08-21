@@ -37,6 +37,7 @@ export async function getConfig() {
     allowNegativeStock: Boolean(company?.allowNegativeStock),
     multiBranch: Boolean(company?.multiBranchEnabled),
     companyState: company?.state || null,
+    currency: company?.currency || 'INR',
   };
 
   cache = { at: Date.now(), value };

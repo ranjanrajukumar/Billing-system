@@ -90,7 +90,10 @@ export default function Settings() {
       fd.append(k, values[k] ?? '');
     });
     try {
-      await settingsApi.saveCompany(fd);
+      const savedCompany = await settingsApi.saveCompany(fd);
+      if (savedCompany?.currency) {
+        localStorage.setItem('currency', savedCompany.currency);
+      }
       showToast('Settings saved successfully');
       reload();
     } catch (err) {
@@ -114,7 +117,8 @@ export default function Settings() {
     { name: 'city', label: 'City', sm: 4 },
     { name: 'state', label: 'State', sm: 4, required: true },
     { name: 'pincode', label: 'Pincode', sm: 4 },
-    { name: 'signatureUrl', label: 'Signature URL', sm: 12 },
+    { name: 'currency', label: 'Currency Code (e.g. INR, USD, EUR)', sm: 4, required: true },
+    { name: 'signatureUrl', label: 'Signature URL', sm: 8 },
   ];
 
   return (

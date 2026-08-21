@@ -35,6 +35,7 @@ export const MENU_KEY_BY_PATH = {
   '/': 'dashboard',
   '/quick-bill': 'quickBill',
   '/invoices': 'invoices',
+  '/subscriptions': 'subscriptions',
   '/sales-orders': 'salesOrders',
   '/quotations': 'quotations',
   '/delivery-challans': 'deliveryChallans',
@@ -61,6 +62,7 @@ export const MENU_KEY_BY_PATH = {
 
   // Advanced mode.
   '/purchase-orders': 'purchaseOrders',
+  '/srv': 'grn', // Using grn permission/menu for now
   '/grn': 'grn',
   '/purchase-returns': 'purchaseReturns',
   '/stock-transfers': 'stockTransfers',

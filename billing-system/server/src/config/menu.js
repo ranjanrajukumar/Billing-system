@@ -17,6 +17,7 @@ export const MENU_CATALOGUE = [
   { group: 'Sales', items: [
     { key: 'quickBill', label: 'Quick Bill', path: '/quick-bill' },
     { key: 'invoices', label: 'Invoices', path: '/invoices' },
+    { key: 'subscriptions', label: 'Subscriptions', path: '/subscriptions' },
     { key: 'salesOrders', label: 'Sales Orders', path: '/sales-orders' },
     { key: 'quotations', label: 'Quotations', path: '/quotations' },
     { key: 'deliveryChallans', label: 'Delivery Challans', path: '/delivery-challans' },
@@ -42,6 +43,7 @@ export const MENU_CATALOGUE = [
   { group: 'Inventory', items: [
     { key: 'products', label: 'Products', path: '/products' },
     { key: 'inventory', label: 'Inventory', path: '/inventory' },
+    { key: 'srv', label: 'Store Receipt Voucher (SRV)', path: '/srv' },
     { key: 'batches', label: 'Batches & Expiry', path: '/batches' },
     { key: 'stockAudit', label: 'Stock Audit', path: '/stock-audit' },
     { key: 'masters', label: 'Masters', path: '/masters' },
@@ -95,18 +97,18 @@ export const DEFAULT_MENUS_BY_ROLE = {
   Admin: ALL_MENU_KEYS,
   Accountant: ALL_MENU_KEYS.filter((key) => key !== 'users'),
   Sales: [
-    'dashboard', 'quickBill', 'invoices', 'salesOrders', 'quotations', 'deliveryChallans',
+    'dashboard', 'quickBill', 'invoices', 'subscriptions', 'salesOrders', 'quotations', 'deliveryChallans',
     'salesReturns', 'customers', 'udhar', 'khata', 'ledgers',
     // Counter staff need to see lots to pick one while billing.
     'products', 'inventory', 'batches', 'profile',
   ],
   'Purchase Manager': [
-    'dashboard', 'purchaseOrders', 'grn', 'purchases', 'purchaseReturns', 'suppliers',
+    'dashboard', 'purchaseOrders', 'grn', 'srv', 'purchases', 'purchaseReturns', 'suppliers',
     'products', 'inventory', 'approvals', 'reports', 'profile',
   ],
   'Warehouse Manager': [
     'dashboard', 'inventory', 'stockTransfers', 'stockAdjustments', 'stockCounts',
-    'batches', 'serials', 'grn', 'products', 'warehouses', 'warehouseOps', 'stockOwners',
+    'batches', 'serials', 'grn', 'srv', 'products', 'warehouses', 'warehouseOps', 'stockOwners',
     'stockAudit', 'approvals', 'inboundAppointments', 'qcInspections', 'pickWaves', 'shipments', 'repairs', 'profile',
   ],
   'Branch Manager': [
