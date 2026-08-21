@@ -318,3 +318,38 @@ export const warehousesApi = {
   updateBin: (id, binId, body) => api.put(`/warehouses/${id}/bins/${binId}`, body).then((r) => r.data ?? {}),
   removeBin: (id, binId)     => api.delete(`/warehouses/${id}/bins/${binId}`).then((r) => r.data ?? {}),
 };
+
+/**
+ * Demand planning: what we expect to sell, and how right we have been.
+ *
+ * `run` regenerates a location's forecasts and rescores the periods that have
+ * closed, so accuracy on screen is a measurement rather than a claim.
+ */
+export const demandPlanningApi = {
+  list:     (params)      => api.get('/demand-planning', { params }).then((r) => r.data ?? { data: [], meta: {} }),
+  summary:  (params)      => api.get('/demand-planning/summary', { params }).then((r) => r.data ?? {}),
+  trend:    (productId, params) => api.get(`/demand-planning/trend/${productId}`, { params }).then((r) => r.data ?? []),
+  run:      (body)        => api.post('/demand-planning/run', body).then((r) => r.data ?? {}),
+  override: (id, body)    => api.put(`/demand-planning/${id}/override`, body).then((r) => r.data ?? {}),
+};
+
+/**
+ * Replenishment: what to bring in, and the policies the engine plans with.
+ *
+ * `decide` covers approve, modify and reject — approving with a different
+ * quantity is what "modify" means, so it is one call rather than three.
+ */
+export const replenishmentApi = {
+  list:       (params)   => api.get('/replenishment', { params }).then((r) => r.data ?? { data: [], meta: {} }),
+  summary:    (params)   => api.get('/replenishment/summary', { params }).then((r) => r.data ?? {}),
+  run:        (body)     => api.post('/replenishment/run', body || {}).then((r) => r.data ?? {}),
+  decide:     (id, body) => api.put(`/replenishment/${id}/decide`, body).then((r) => r.data ?? {}),
+  bulkDecide: (body)     => api.post('/replenishment/bulk-decide', body).then((r) => r.data ?? {}),
+
+  policies: {
+    list:      (params) => api.get('/replenishment/policies', { params }).then((r) => r.data ?? { data: [], meta: {} }),
+    save:      (body)   => api.post('/replenishment/policies', body).then((r) => r.data ?? {}),
+    remove:    (id)     => api.delete(`/replenishment/policies/${id}`).then((r) => r.data ?? {}),
+    effective: (params) => api.get('/replenishment/policies/effective', { params }).then((r) => r.data ?? {}),
+  },
+};

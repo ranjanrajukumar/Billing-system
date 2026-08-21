@@ -18,10 +18,20 @@ import { houseOwnerId } from './stockOwner.service.js';
  * the one bug an inventory system cannot recover from.
  */
 
-async function stockRow(productId, branchId, ownerId, transaction) {
+/**
+ * The balance row for one product, at one location, for one owner, in one
+ * packaged size.
+ *
+ * `variantId` is 0 for the product's loose or plain stock and the variant's id
+ * for a packaged size, which is what keeps the 100g pouches, the 250g pouches
+ * and the open bucket as three balances rather than one blended number. It
+ * defaults to 0 so that every existing caller — fourteen controllers that have
+ * never heard of a variant — keeps addressing exactly the row it always did.
+ */
+async function stockRow(productId, branchId, ownerId, transaction, variantId = 0) {
   const [row] = await BranchStock.findOrCreate({
-    where: { branchId, productId, ownerId },
-    defaults: { branchId, productId, ownerId, stock: 0 },
+    where: { branchId, productId, ownerId, variantId: variantId || 0 },
+    defaults: { branchId, productId, ownerId, variantId: variantId || 0, stock: 0 },
     transaction,
     lock: transaction ? transaction.LOCK.UPDATE : undefined,
   });
@@ -36,14 +46,47 @@ async function stockRow(productId, branchId, ownerId, transaction) {
  * sell". Counting a client's goods there would put a warehouse full of somebody
  * else's stock into your own availability, silence reorder alerts on goods you
  * have none of, and value another company's inventory as your asset.
+ *
+ * Packaged sizes are converted to base units before being added, never summed
+ * raw. Adding 250 pouches to 8,890 grams gives 9,140 of nothing; multiplying
+ * each pouch by what it contains gives the quantity of the actual substance
+ * held, which is the only reading of "how much do we have" that survives being
+ * asked about a product sold four ways. A variant with no pack size — a colour
+ * or a garment size — counts as one unit each, which is what it is.
  */
 async function syncProductTotal(productId, transaction) {
   const house = await houseOwnerId(transaction);
-  const total = await BranchStock.sum('stock', {
+  const rows = await BranchStock.findAll({
     where: { productId, ownerId: house },
     transaction,
   });
-  const currentTotal = Number(total || 0);
+
+  let currentTotal = 0;
+  if (rows.length) {
+    const variantIds = [...new Set(
+      rows.map((row) => Number(row.variantId)).filter((id) => id > 0),
+    )];
+
+    const packSizeById = new Map();
+    if (variantIds.length) {
+      const { ProductVariant } = await import('../models/index.js');
+      const variants = await ProductVariant.findAll({
+        where: { id: variantIds },
+        attributes: ['id', 'packSize'],
+        transaction,
+      });
+      for (const variant of variants) {
+        packSizeById.set(Number(variant.id), variant.packSize === null ? 1 : Number(variant.packSize));
+      }
+    }
+
+    for (const row of rows) {
+      const variantId = Number(row.variantId);
+      const multiplier = variantId > 0 ? (packSizeById.get(variantId) ?? 1) : 1;
+      currentTotal += Number(row.stock) * multiplier;
+    }
+    currentTotal = Math.round(currentTotal * 10_000) / 10_000;
+  }
   
   await Product.update(
     { stock: currentTotal },
@@ -82,13 +125,45 @@ async function syncProductTotal(productId, transaction) {
  * that predates ownership keeps asking the same question and getting the same
  * answer.
  */
-export async function getBranchStock(productId, branchId, transaction, ownerId = null) {
+export async function getBranchStock(productId, branchId, transaction, ownerId = null, variantId = 0) {
   const owner = ownerId ?? await houseOwnerId(transaction);
   const row = await BranchStock.findOne({
-    where: { branchId, productId, ownerId: owner },
+    where: { branchId, productId, ownerId: owner, variantId: variantId || 0 },
     transaction,
   });
   return Number(row?.stock || 0);
+}
+
+/**
+ * The loose balance and every packaged size, for one product at one location.
+ *
+ * The shape the Product 360 view and the till both need: "250 pouches of 100g,
+ * 120 of 250g, and 8,890g loose" is four numbers that must never be added
+ * together, and a caller given a single total will add them together.
+ */
+export async function stockByVariant(productId, branchId, transaction = null, ownerId = null) {
+  const owner = ownerId ?? await houseOwnerId(transaction);
+  const rows = await BranchStock.findAll({
+    where: { branchId, productId, ownerId: owner },
+    transaction,
+  });
+
+  const bulk = rows.find((row) => Number(row.variantId) === 0);
+  return {
+    bulk: {
+      stock: Number(bulk?.stock || 0),
+      reserved: Number(bulk?.reservedQuantity || 0),
+      available: Number(bulk?.stock || 0) - Number(bulk?.reservedQuantity || 0),
+    },
+    packaged: rows
+      .filter((row) => Number(row.variantId) > 0)
+      .map((row) => ({
+        variantId: Number(row.variantId),
+        stock: Number(row.stock),
+        reserved: Number(row.reservedQuantity || 0),
+        available: Number(row.stock) - Number(row.reservedQuantity || 0),
+      })),
+  };
 }
 
 /**
@@ -113,9 +188,12 @@ export async function getPhysicalStock(productId, branchId, transaction) {
  * For outbound moves (delta < 0) the available amount is stock − reservedQuantity;
  * only that figure is checked — reserved stock is already spoken for.
  */
-export async function adjustStock({ productId, branchId, delta, transaction, userId, allowNegative = false, ownerId = null }) {
+export async function adjustStock({
+  productId, branchId, delta, transaction, userId,
+  allowNegative = false, ownerId = null, variantId = 0,
+}) {
   const owner = ownerId ?? await houseOwnerId(transaction);
-  const row = await stockRow(productId, branchId, owner, transaction);
+  const row = await stockRow(productId, branchId, owner, transaction, variantId);
   const previous = Number(row.stock);
   const reserved = Number(row.reservedQuantity || 0);
   const available = previous - reserved;
@@ -268,6 +346,10 @@ export async function postStockTransaction({
   userId = null,
   allowNegative = false,
   ownerId = null,
+  // 0 addresses the product's loose or plain stock; a variant id addresses one
+  // packaged size. Callers that predate variants pass nothing and keep moving
+  // exactly the balance they always moved.
+  variantId = 0,
 }) {
   const qty = Number(quantity);
   if (!Number.isFinite(qty)) {
@@ -280,7 +362,7 @@ export async function postStockTransaction({
   const owner = ownerId ?? await houseOwnerId(transaction);
 
   const { previous, current } = await adjustStock({
-    productId, branchId, delta: qty, transaction, userId, allowNegative, ownerId: owner,
+    productId, branchId, delta: qty, transaction, userId, allowNegative, ownerId: owner, variantId,
   });
 
   // Goods that left the building must leave their shelves too.
@@ -294,7 +376,10 @@ export async function postStockTransaction({
   //
   // Safe on every path because it clamps rather than deducts: where the pick
   // already reduced the bin, there is no excess and nothing happens.
-  if (qty < 0) {
+  //
+  // Bins hold loose stock, so this applies to the base balance only. A packaged
+  // size is a sealed pack on a shelf and is not tracked bin by bin.
+  if (qty < 0 && !variantId) {
     const { releaseExcessFromBins } = await import('./binStock.service.js');
     await releaseExcessFromBins({ branchId, productId, ownerId: owner, transaction, userId });
   }
@@ -305,6 +390,7 @@ export async function postStockTransaction({
     productId,
     branchId,
     ownerId: owner,
+    variantId: variantId || 0,
     locationType: location?.locationType || 'Branch',
     movementType,
     quantity: qty,

@@ -656,17 +656,253 @@ async function deduplicateBinCodes() {
   }
 }
 
+/**
+ * Storage snapshots write 0 — not NULL — for "no bin" and "no batch", because
+ * the unique grain key is what stops a re-run billing a client twice, and MySQL
+ * and SQL Server both treat NULLs in a unique key as distinct. The sentinel is
+ * load-bearing.
+ *
+ * An older schema also put foreign keys on those two columns, and 0 is not a
+ * real bin, so every row the job tried to write died on the constraint. The
+ * association was later dropped from the model, but the constraint stayed
+ * behind in databases created before that — leaving storage billing capturing
+ * nothing at all, quietly, because the scheduler logs the failure and moves on.
+ *
+ * The constraints go rather than the sentinel: a snapshot is a historical fact
+ * about a day that may already have been invoiced, not a live reference. The
+ * old keys were ON DELETE SET NULL, so retiring a bin would have rewritten
+ * finished billing history — the opposite of what this table exists to do.
+ */
+async function dropSentinelForeignKeys() {
+  const dialect = sequelize.getDialect();
+  if (dialect !== 'mysql' && dialect !== 'mariadb') return;
+
+  const targets = [
+    { table: 'warehouse_storage_snapshots', columns: ['bin_id', 'batch_id'] },
+  ];
+
+  for (const { table, columns } of targets) {
+    const [keys] = await sequelize.query(`
+      SELECT CONSTRAINT_NAME AS name, COLUMN_NAME AS columnName
+      FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = :table
+        AND COLUMN_NAME IN (:columns)
+        AND REFERENCED_TABLE_NAME IS NOT NULL
+    `, { replacements: { table, columns } }).catch(() => [[]]);
+
+    for (const key of keys || []) {
+      try {
+        await sequelize.query(`ALTER TABLE \`${table}\` DROP FOREIGN KEY \`${key.name}\``);
+        console.warn(
+          `Dropped foreign key ${key.name} on ${table}.${key.columnName}: the column uses `
+          + '0 to mean "none", which no foreign key can express.',
+        );
+      } catch (error) {
+        console.warn(`Could not drop foreign key ${key.name} on ${table}: ${error.message}`);
+      }
+    }
+  }
+}
+
+/**
+ * Widens the quantity columns from integer to decimal.
+ *
+ * Stock is held in a product's base unit, and a base unit is not always
+ * countable: seed sold loose by the gram, cable by the metre, oil by the litre.
+ * An integer balance rounds every fractional movement — MySQL stores 0.5 as 1
+ * and 0.4 as 0 — so a shop selling 100g from a 50kg bucket was either given
+ * free stock or billed for stock it still had, silently, with a ledger entry
+ * that looked correct.
+ *
+ * The widening is lossless: every existing integer is representable exactly as
+ * a decimal, so this cannot damage the balances already recorded. It is done
+ * explicitly here rather than left to `sync({ alter })` because a column type
+ * change on live stock is not something to discover in a diff.
+ */
+async function widenQuantityColumns() {
+  const dialect = sequelize.getDialect();
+  if (dialect !== 'mysql' && dialect !== 'mariadb') return;
+
+  const targets = [
+    { table: 'branch_stock', column: 'stock', nullable: false, fallback: '0' },
+    { table: 'branch_stock', column: 'reserved_quantity', nullable: false, fallback: '0' },
+    { table: 'products', column: 'stock', nullable: false, fallback: '0' },
+    { table: 'stock_movements', column: 'quantity', nullable: false, fallback: null },
+    { table: 'stock_movements', column: 'quantity_in', nullable: false, fallback: '0' },
+    { table: 'stock_movements', column: 'quantity_out', nullable: false, fallback: '0' },
+    { table: 'bin_stock', column: 'quantity', nullable: false, fallback: '0' },
+  ];
+
+  for (const target of targets) {
+    const [[existing]] = await sequelize.query(`
+      SELECT COLUMN_TYPE AS type
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table AND COLUMN_NAME = :column
+    `, { replacements: { table: target.table, column: target.column } }).catch(() => [[]]);
+
+    if (!existing) continue;
+    if (String(existing.type).toLowerCase() === 'decimal(18,4)') continue;
+
+    const nullClause = target.nullable ? 'NULL' : 'NOT NULL';
+    const defaultClause = target.fallback === null ? '' : ` DEFAULT ${target.fallback}`;
+
+    try {
+      await sequelize.query(
+        `ALTER TABLE \`${target.table}\` MODIFY COLUMN \`${target.column}\` `
+        + `DECIMAL(18,4) ${nullClause}${defaultClause}`,
+      );
+      console.warn(
+        `Widened ${target.table}.${target.column} from ${existing.type} to decimal(18,4) `
+        + 'so fractional quantities stop being rounded.',
+      );
+    } catch (error) {
+      console.error(`Could not widen ${target.table}.${target.column}: ${error.message}`);
+    }
+  }
+}
+
+/**
+ * Retires the old two-column unique key on `branch_stock`.
+ *
+ * The balance grain has widened twice: first when stock gained an owner, so a
+ * 3PL location could hold the same product for several clients, and now again
+ * for variants, so the 100g pouches and the loose bucket are separate balances
+ * of one product. A UNIQUE key on (branch_id, product_id) contradicts both — it
+ * permits exactly one row per product per location, which is the shape the
+ * table had years ago.
+ *
+ * It survived the earlier ownership migration because MySQL refuses to drop an
+ * index a foreign key is relying on, and the `branch_id` foreign key was using
+ * this composite as its backing index. The boot log has been reporting that
+ * failure on every start. Giving `branch_id` an index of its own first frees
+ * the composite to be dropped.
+ */
+async function widenBranchStockGrain() {
+  const dialect = sequelize.getDialect();
+  if (dialect !== 'mysql' && dialect !== 'mariadb') return;
+
+  const [indexes] = await sequelize.query(`
+    SELECT INDEX_NAME AS name, NON_UNIQUE AS nonUnique,
+           GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS cols
+    FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'branch_stock'
+    GROUP BY INDEX_NAME, NON_UNIQUE
+  `).catch(() => [[]]);
+
+  const byName = new Map((indexes || []).map((index) => [index.name, index]));
+
+  // The wider key must already exist, or dropping the narrow one would leave
+  // the table with no protection against duplicate balances at all.
+  const grain = [...byName.values()].find(
+    (index) => index.cols === 'branch_id,product_id,variant_id,owner_id' && Number(index.nonUnique) === 0,
+  );
+  if (!grain) return;
+
+  const stale = [...byName.values()].find(
+    (index) => index.cols === 'branch_id,product_id' && Number(index.nonUnique) === 0,
+  );
+  if (!stale) return;
+
+  try {
+    // Give the foreign key somewhere else to point before taking its index away.
+    if (!byName.has('branch_stock_branch_id')) {
+      await sequelize.query('CREATE INDEX `branch_stock_branch_id` ON `branch_stock` (`branch_id`)');
+    }
+    await sequelize.query(`ALTER TABLE \`branch_stock\` DROP INDEX \`${stale.name}\``);
+    console.warn(
+      `Dropped stale unique index ${stale.name} on branch_stock (branch_id, product_id): `
+      + 'a location may hold the same product as several variants and for several owners.',
+    );
+  } catch (error) {
+    console.error(`Could not retire ${stale.name} on branch_stock: ${error.message}`);
+  }
+}
+
+/**
+ * Removes a redundant index left where a column was declared unique twice.
+ *
+ * A column that is both `unique: true` and separately listed in `indexes` gets
+ * two indexes covering it, and sync then tries to create the second one on
+ * every boot. Whether that succeeds depends on whether the duplicate sweep
+ * happened to drop it first, so the process crashed on some starts and not
+ * others — a start-up failure that came and went was the worst part of it.
+ *
+ * The models no longer declare both. This clears the extra index out of
+ * databases created while they did, so sync stops trying to reconcile it.
+ * Only plainly redundant ones go: a non-unique index whose column is already
+ * covered by a unique index is doing nothing a query planner needs.
+ */
+async function dropRedundantUniqueIndexes() {
+  const dialect = sequelize.getDialect();
+  if (dialect !== 'mysql' && dialect !== 'mariadb') return;
+
+  const targets = [
+    { table: 'invoices', column: 'invoice_number' },
+    { table: 'stock_owners', column: 'owner_code' },
+    { table: 'warehouse_tasks', column: 'task_number' },
+    { table: 'idempotency_keys', column: 'idempotency_key' },
+  ];
+
+  for (const { table, column } of targets) {
+    const [indexes] = await sequelize.query(`
+      SELECT INDEX_NAME AS name, NON_UNIQUE AS nonUnique, COUNT(*) AS colCount
+      FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table
+      GROUP BY INDEX_NAME, NON_UNIQUE
+      HAVING colCount = 1
+    `, { replacements: { table } }).catch(() => [[]]);
+
+    const onColumn = [];
+    for (const index of indexes || []) {
+      const [[first]] = await sequelize.query(`
+        SELECT COLUMN_NAME AS col FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table AND INDEX_NAME = :name
+      `, { replacements: { table, name: index.name } }).catch(() => [[]]);
+      if (first?.col === column) onColumn.push(index);
+    }
+
+    // Only act when the column really is indexed twice and one of them is the
+    // unique constraint that must survive.
+    const unique = onColumn.find((index) => Number(index.nonUnique) === 0);
+    const redundant = onColumn.filter((index) => Number(index.nonUnique) === 1);
+    if (!unique || redundant.length === 0) continue;
+
+    for (const index of redundant) {
+      try {
+        await sequelize.query(`ALTER TABLE \`${table}\` DROP INDEX \`${index.name}\``);
+        console.warn(
+          `Dropped redundant index ${index.name} on ${table}.${column}; `
+          + `the unique index ${unique.name} already covers it.`,
+        );
+      } catch (error) {
+        console.warn(`Could not drop ${index.name} on ${table}: ${error.message}`);
+      }
+    }
+  }
+}
+
 export async function migrateDatabase() {
   await ensureDatabase();
   await sequelize.authenticate();
 
   await dropDuplicateIndexes();
+  // Before sync, so sync does not meet an index it will try to create again.
+  await dropRedundantUniqueIndexes();
   // Before sync, so the wider owner-aware keys can be created in its place.
   await migrateStockOwnership();
   await deduplicateBinCodes();
   await sequelize.sync({ alter: { drop: false } });
   await ensureMissingColumns();
   await ensureEnumValues();
+  // After sync, so a constraint sync has just re-created is still removed.
+  await dropSentinelForeignKeys();
+  // After sync too: sync may recreate an integer column from an older model
+  // cache, and this is the authority on quantity precision.
+  await widenQuantityColumns();
+  // After sync has created the wider unique key, so the narrow one is only
+  // dropped once its replacement is in place.
+  await widenBranchStockGrain();
 
   // Seeding is the system setting itself up, not a user acting, so it is not
   // audited — see withoutAudit for why that also matters mechanically.

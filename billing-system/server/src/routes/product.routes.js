@@ -7,6 +7,7 @@ import { authorize } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validate.js';
 import { productRules } from '../validators/product.validator.js';
 import { upload } from '../middleware/upload.js';
+import { uploadSheet } from '../middleware/uploadSheet.js';
 
 const router = Router();
 router.get('/categories', listCategories);
@@ -15,7 +16,8 @@ router.get('/barcode/:code', lookupByBarcode);
 router.get('/', listProducts);
 router.get('/:id', getProduct);
 router.post('/:id/barcode', authorize('Admin', 'Accountant'), assignBarcode);
-router.post('/import', authorize('Admin', 'Accountant'), upload.single('file'), importProducts);
+// A spreadsheet, not an image — `upload` would reject every file sent here.
+router.post('/import', authorize('Admin', 'Accountant'), uploadSheet.single('file'), importProducts);
 router.post('/', authorize('Admin', 'Accountant'), upload.single('image'), productRules, validate, createProduct);
 router.put('/:id', authorize('Admin', 'Accountant'), upload.single('image'), productRules, validate, updateProduct);
 router.delete('/:id', authorize('Admin'), deleteProduct);

@@ -45,6 +45,9 @@ import grnRoutes from './grn.routes.js';
 import purchaseReturnRoutes from './purchaseReturn.routes.js';
 import warehouseRoutes from './warehouse.routes.js';
 import stockOwnerRoutes from './stockOwner.routes.js';
+import productInventoryRoutes from './productInventory.routes.js';
+import demandPlanningRoutes from './demandPlanning.routes.js';
+import replenishmentRoutes from './replenishment.routes.js';
 import warehouseFoundationRoutes from './warehouseFoundation.routes.js';
 import expenseRoutes from './expense.routes.js';
 import cashRoutes from './cash.routes.js';
@@ -112,6 +115,13 @@ router.use('/purchase-returns', purchaseReturnRoutes);
 router.use('/warehouses', warehouseRoutes);
 // Whose goods are on the shelf — one row for a shop, one per client for a 3PL.
 router.use('/stock-owners', stockOwnerRoutes);
+// Mounted at the root of /api rather than under a prefix: these paths extend
+// existing resources (/products/:id/units) as well as adding new ones
+// (/movements, /containers), and burying them under /inventory-engine would
+// make the product endpoints read as if they belonged to a different system.
+router.use('/', productInventoryRoutes);
+router.use('/demand-planning', demandPlanningRoutes);
+router.use('/replenishment', replenishmentRoutes);
 // Bin routing, exceptions, tasks and storage snapshots — the layer picking,
 // replenishment, packing and billing are built on.
 router.use('/warehouse', warehouseFoundationRoutes);

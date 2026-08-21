@@ -38,6 +38,14 @@ export const MENU_CATALOGUE = [
     { key: 'purchaseReturns', label: 'Purchase Returns', path: '/purchase-returns' },
     { key: 'suppliers', label: 'Suppliers', path: '/suppliers' },
   ]},
+  // Planning is what the business intends to happen; Inventory below is what
+  // has happened. Kept as its own group because the people who work in it —
+  // planners and buyers — rarely touch the day-to-day stock screens.
+  { group: 'Planning', items: [
+    { key: 'demandPlanning', label: 'Demand Planning', path: '/demand-planning' },
+    { key: 'replenishment', label: 'Replenishment', path: '/replenishment' },
+    { key: 'inventoryPolicies', label: 'Stock Policies', path: '/inventory-policies' },
+  ]},
   // Inventory answers "what do we sell and how much is there" — the questions
   // a shop with a single room still has.
   { group: 'Inventory', items: [
@@ -104,17 +112,17 @@ export const DEFAULT_MENUS_BY_ROLE = {
   ],
   'Purchase Manager': [
     'dashboard', 'purchaseOrders', 'grn', 'srv', 'purchases', 'purchaseReturns', 'suppliers',
-    'products', 'inventory', 'approvals', 'reports', 'profile',
+    'products', 'inventory', 'approvals', 'reports', 'demandPlanning', 'replenishment', 'inventoryPolicies', 'profile',
   ],
   'Warehouse Manager': [
     'dashboard', 'inventory', 'stockTransfers', 'stockAdjustments', 'stockCounts',
     'batches', 'serials', 'grn', 'srv', 'products', 'warehouses', 'warehouseOps', 'stockOwners',
-    'stockAudit', 'approvals', 'inboundAppointments', 'qcInspections', 'pickWaves', 'shipments', 'repairs', 'profile',
+    'stockAudit', 'approvals', 'demandPlanning', 'replenishment', 'inboundAppointments', 'qcInspections', 'pickWaves', 'shipments', 'repairs', 'profile',
   ],
   'Branch Manager': [
     'dashboard', 'quickBill', 'invoices', 'salesReturns', 'customers', 'udhar', 'khata',
     'ledgers', 'products', 'inventory', 'stockTransfers', 'expenses', 'cashRegisters',
-    'cashFlow', 'stockAudit', 'reports', 'approvals', 'profile',
+    'cashFlow', 'stockAudit', 'reports', 'approvals', 'demandPlanning', 'replenishment', 'profile',
   ],
   Cashier: [
     'dashboard', 'quickBill', 'invoices', 'customers', 'udhar', 'khata',

@@ -33,7 +33,7 @@ export default (sequelize) => sequelize.define('BinStock', {
   // impossible to pick out at counting time.
   ownerId: { type: unsignedInteger(sequelize), allowNull: false, defaultValue: 1 },
 
-  quantity: { type: DataTypes.DECIMAL(14, 3), allowNull: false, defaultValue: 0 },
+  quantity: { type: DataTypes.DECIMAL(18, 4), allowNull: false, defaultValue: 0 },
 
   authadd: { type: DataTypes.INTEGER, allowNull: true },
   authlstedit: { type: DataTypes.INTEGER, allowNull: true },

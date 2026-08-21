@@ -9,7 +9,8 @@ export default (sequelize) => sequelize.define('Product', {
   sellingPrice: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
   gstPercent: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 0 },
   // Mirror of the total across all locations; `branch_stock` is the authority.
-  stock: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  // Decimal for the same reason branch_stock is — see the note there.
+  stock: { type: DataTypes.DECIMAL(18, 4), allowNull: false, defaultValue: 0 },
 
   // ---- Product master ----
   sku: { type: DataTypes.STRING(60), allowNull: true },
@@ -24,6 +25,48 @@ export default (sequelize) => sequelize.define('Product', {
   minimumStock: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   reorderLevel: { type: DataTypes.INTEGER, allowNull: true },
   reorderQuantity: { type: DataTypes.INTEGER, allowNull: true },
+
+  // ---- How this product is stocked and sold ----
+  //
+  // One product, configured — not four product types with four code paths.
+  //   Standard  counted in whole units, the ordinary case
+  //   Variant   sold only as packaged sizes, each its own SKU
+  //   Bulk      sold loose, measured out of open stock
+  //   Both      packaged sizes on the shelf and loose stock in the bucket
+  //
+  // A shop that never sells anything loose leaves this at Standard and never
+  // meets a unit conversion.
+  stockMode: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'Standard' },
+
+  // The unit every balance for this product is held in. Should be the smallest
+  // unit it is genuinely traded in — gram rather than kilogram — so a 10g sale
+  // is an exact integer rather than 0.01 of something. Null falls back to
+  // primaryUnit, which is what every existing product has.
+  baseUnitCode: { type: DataTypes.STRING(20), allowNull: true },
+
+  // Whether the till may accept a typed quantity, or only the configured
+  // quick-pick sizes. Off by default: free-text quantity at a counter is how
+  // 1000g gets keyed as 10000g.
+  allowCustomQty: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+
+  // Whether loose stock for this product is tracked vessel by vessel.
+  trackContainers: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+
+  // ---- Planning defaults ----
+  // Fallbacks for locations with no `inventory_policies` row of their own, so
+  // planning works on day one without anyone configuring fifty stores. A
+  // per-location policy always wins where one exists.
+  maximumStock: { type: DataTypes.INTEGER, allowNull: true },
+  safetyStock: { type: DataTypes.INTEGER, allowNull: true },
+  // Days from placing an order on the supplier to the goods being sellable.
+  leadTimeDays: { type: DataTypes.INTEGER, allowNull: true },
+  // Case or pallet size the supplier ships in, and the smallest order they
+  // will accept. Recommendations are rounded up to respect both.
+  orderMultiple: { type: DataTypes.INTEGER, allowNull: true },
+  minimumOrderQty: { type: DataTypes.INTEGER, allowNull: true },
+  // Movement classification, maintained by the inventory intelligence pass
+  // rather than typed in: Fast, Normal, Slow, NonMoving.
+  movementClass: { type: DataTypes.STRING(20), allowNull: true },
 
   // ---- Tracking, opt-in per product ----
   batchRequired: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },

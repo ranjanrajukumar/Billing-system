@@ -122,7 +122,7 @@ export default function Purchases() {
       }
       load();
     } catch (err) {
-      showToast(err.response?.data?.message || 'Failed to import CSV', 'error');
+      showToast(err.response?.data?.message || 'Failed to import the file', 'error');
     }
     e.target.value = '';
   };
@@ -142,8 +142,13 @@ export default function Purchases() {
         action={
           <Stack direction="row" spacing={2}>
             <Button startIcon={<FileUploadIcon />} variant="outlined" component="label">
-              Import CSV
-              <input type="file" hidden accept=".csv" onChange={handleImportCsv} />
+              Import
+              <input
+                type="file"
+                hidden
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                onChange={handleImportCsv}
+              />
             </Button>
             <Button startIcon={<AddIcon />} variant="contained" onClick={() => setOpen(true)}>
               New Purchase

@@ -37,7 +37,33 @@ const buildAuthResponse = async (user) => {
   };
 };
 
+/**
+ * Whether a stranger may still create an account.
+ *
+ * This endpoint is unauthenticated, and a billing system reachable from the
+ * internet with open sign-up hands anyone a working account and whatever the
+ * default role can see — invoices, customers, stock. It is left open only for
+ * the bootstrap case: a brand-new install where nobody can sign in yet.
+ *
+ * Deployments that genuinely want public sign-up can set
+ * ALLOW_PUBLIC_REGISTRATION=true; the startup check says so out loud.
+ * Everybody else adds staff through the authenticated Users screen, which is
+ * where roles and branches are set anyway.
+ */
+const publicRegistrationAllowed = async () => {
+  if (process.env.ALLOW_PUBLIC_REGISTRATION === 'true') return true;
+  // A seeded System Admin already counts, so this is only ever true before the
+  // very first migration has run.
+  return (await User.count()) === 0;
+};
+
 export const register = asyncHandler(async (req, res) => {
+  if (!(await publicRegistrationAllowed())) {
+    return res.status(403).json({
+      message: 'Public registration is disabled. Ask an administrator to create your account.',
+    });
+  }
+
   const { name, email, password, mobile } = req.body;
   const existingUser = await User.findOne({ where: { email } });
   if (existingUser) return res.status(409).json({ message: 'Email is already registered' });

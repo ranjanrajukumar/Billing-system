@@ -267,10 +267,73 @@ export const getPurchaseAttachment = asyncHandler(async (req, res) => {
 });
 
 import { parse } from 'csv-parse/sync';
+import ExcelJS from 'exceljs';
+
+/**
+ * Reads an uploaded .xlsx into the same shape csv-parse produces: one object
+ * per row, keyed by the header text.
+ *
+ * Suppliers send price lists as Excel far more often than as CSV, and asking
+ * somebody to re-save as CSV first is a step that gets skipped and then blamed
+ * on the software.
+ */
+async function rowsFromWorkbook(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) throw Object.assign(new Error('The spreadsheet has no sheets'), { status: 400 });
+
+  const headers = [];
+  worksheet.getRow(1).eachCell((cell, column) => {
+    headers[column] = cell.value === null || cell.value === undefined ? '' : cell.value.toString().trim();
+  });
+
+  if (!headers.some(Boolean)) {
+    throw Object.assign(new Error('The first row must be column headings'), { status: 400 });
+  }
+
+  const rows = [];
+  for (let index = 2; index <= worksheet.rowCount; index += 1) {
+    const row = worksheet.getRow(index);
+    const record = {};
+    let hasValue = false;
+
+    row.eachCell((cell, column) => {
+      const heading = headers[column];
+      if (!heading) return;
+      // A formula cell carries both the formula and its computed result; the
+      // result is what the importer is being told.
+      const raw = cell.value && typeof cell.value === 'object' && 'result' in cell.value
+        ? cell.value.result
+        : cell.value;
+      if (raw === null || raw === undefined) return;
+      record[heading] = raw.toString().trim();
+      if (record[heading] !== '') hasValue = true;
+    });
+
+    if (hasValue) rows.push(record);
+  }
+
+  return rows;
+}
 
 export const importPurchases = asyncHandler(async (req, res) => {
-  if (!req.file) throw Object.assign(new Error('No CSV file provided'), { status: 400 });
-  const records = parse(req.file.buffer, { columns: true, skip_empty_lines: true, trim: true });
+  if (!req.file) throw Object.assign(new Error('No file provided'), { status: 400 });
+
+  const isCsv = /\.csv$/i.test(req.file.originalname || '');
+  let records;
+  try {
+    records = isCsv
+      ? parse(req.file.buffer, { columns: true, skip_empty_lines: true, trim: true })
+      : await rowsFromWorkbook(req.file.buffer);
+  } catch (error) {
+    if (error.status) throw error;
+    throw Object.assign(
+      new Error('Could not read that file. Upload a spreadsheet saved as .xlsx or .csv.'),
+      { status: 400 },
+    );
+  }
 
   const grouped = {};
   for (const row of records) {

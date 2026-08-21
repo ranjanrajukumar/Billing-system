@@ -24,7 +24,8 @@ import { unsignedInteger } from './types.js';
 export default (sequelize) => sequelize.define('StockOwner', {
   id: { type: unsignedInteger(sequelize), autoIncrement: true, primaryKey: true },
   ownerName: { type: DataTypes.STRING(160), allowNull: false },
-  ownerCode: { type: DataTypes.STRING(30), allowNull: false, unique: true },
+  // Uniqueness lives in the indexes block below, declared once.
+  ownerCode: { type: DataTypes.STRING(30), allowNull: false },
 
   // Exactly one row is the house — the company's own goods. It is created on
   // boot, refuses deletion, and is the default owner for every movement that

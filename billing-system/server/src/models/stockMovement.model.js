@@ -20,10 +20,10 @@ export const MOVEMENT_TYPES = [
 export default (sequelize) => sequelize.define('StockMovement', {
   id: { type: unsignedInteger(sequelize), autoIncrement: true, primaryKey: true },
   movementType: { ...enumType(sequelize, MOVEMENT_TYPES), allowNull: false },
-  quantity: { type: DataTypes.DECIMAL(14, 3), allowNull: false },
+  quantity: { type: DataTypes.DECIMAL(18, 4), allowNull: false },
   // Ledger split, both always positive.
-  quantityIn: { type: DataTypes.DECIMAL(14, 3), allowNull: false, defaultValue: 0 },
-  quantityOut: { type: DataTypes.DECIMAL(14, 3), allowNull: false, defaultValue: 0 },
+  quantityIn: { type: DataTypes.DECIMAL(18, 4), allowNull: false, defaultValue: 0 },
+  quantityOut: { type: DataTypes.DECIMAL(18, 4), allowNull: false, defaultValue: 0 },
   // The running balance at this location, captured at the moment of the move.
   previousQuantity: { type: DataTypes.DECIMAL(14, 3), allowNull: true },
   currentQuantity: { type: DataTypes.DECIMAL(14, 3), allowNull: true },
@@ -36,6 +36,11 @@ export default (sequelize) => sequelize.define('StockMovement', {
   // from — and it is the only record of that, since balances show the present
   // and say nothing about how much passed through.
   ownerId: { type: unsignedInteger(sequelize), allowNull: false, defaultValue: 1 },
+  // Which balance moved: 0 for the product's loose or plain stock, or a
+  // variant id for one packaged size. Without it the ledger could not explain
+  // how a location arrived at "250 pouches and 8,890g loose" — every row would
+  // look like a movement of the same undifferentiated pile.
+  variantId: { type: unsignedInteger(sequelize), allowNull: false, defaultValue: 0 },
   unitCost: { type: DataTypes.DECIMAL(14, 4), allowNull: true },
   batchId: { type: unsignedInteger(sequelize), allowNull: true },
   serialNumber: { type: DataTypes.STRING(120), allowNull: true },

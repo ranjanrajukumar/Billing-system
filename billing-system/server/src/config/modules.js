@@ -46,6 +46,16 @@ export const MODULES = [
   // ---- Advanced only ----
   { key: 'warehouses', label: 'Warehouses & Locations', mode: 'Advanced', menus: ['warehouses', 'warehouseOps', 'pickWaves', 'shipments', 'inboundAppointments', 'qcInspections', 'repairs'] },
   { key: 'stockTransfers', label: 'Stock Transfers', mode: 'Advanced', menus: ['stockTransfers'] },
+  // Forecasting and replenishment are one module, not two. A forecast nobody
+  // orders against is a chart, and a replenishment engine with nothing to
+  // predict demand from is a reorder-level alert with extra steps — switching
+  // on half of this would leave a screen that cannot answer its own question.
+  {
+    key: 'demandPlanning',
+    label: 'Demand Planning & Replenishment',
+    mode: 'Advanced',
+    menus: ['demandPlanning', 'replenishment', 'inventoryPolicies'],
+  },
   { key: 'stockAdjustments', label: 'Stock Adjustments & Counting', mode: 'Advanced', menus: ['stockAdjustments', 'stockCounts'] },
   { key: 'purchaseOrders', label: 'Purchase Orders, GRN & SRV', mode: 'Advanced', menus: ['purchaseOrders', 'grn', 'srv'] },
   { key: 'purchaseReturns', label: 'Purchase Returns', mode: 'Advanced', menus: ['purchaseReturns'] },

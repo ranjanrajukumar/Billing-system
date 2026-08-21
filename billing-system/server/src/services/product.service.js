@@ -85,6 +85,18 @@ export function normalizeProductPayload(body, userId) {
     serialRequired: asBoolean(body.serialRequired),
     warrantyMonths: optionalInt(body.warrantyMonths),
 
+    // How this product is stocked and sold: Standard, Variant, Bulk or Both.
+    // Whitelisted here for the same reason as the columns below — a field the
+    // normaliser does not know about is silently dropped, so a product saved as
+    // "sold loose and packaged" would come back as Standard and the till would
+    // never offer a weight.
+    stockMode: optionalText(body.stockMode) || 'Standard',
+    // The unit every balance for this product is held in. Null falls back to
+    // primaryUnit, which is what every product created before this existed has.
+    baseUnitCode: optionalText(body.baseUnitCode),
+    allowCustomQty: asBoolean(body.allowCustomQty),
+    trackContainers: asBoolean(body.trackContainers),
+
     // How this product must be stored, which is what put-away rules match on.
     storageClass: optionalText(body.storageClass) || 'Standard',
     // Space and weight per unit. Storage charges bill on volume where it is

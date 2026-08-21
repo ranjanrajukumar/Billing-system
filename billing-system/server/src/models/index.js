@@ -40,6 +40,12 @@ import IdempotencyKeyModel from './idempotencyKey.model.js';
 import WarehouseExceptionModel from './warehouseException.model.js';
 import WarehouseTaskModel from './warehouseTask.model.js';
 import WarehouseStorageSnapshotModel from './warehouseStorageSnapshot.model.js';
+import ProductUomModel from './productUom.model.js';
+import ProductVariantModel from './productVariant.model.js';
+import ProductContainerModel from './productContainer.model.js';
+import InventoryPolicyModel from './inventoryPolicy.model.js';
+import DemandForecastModel from './demandForecast.model.js';
+import ReplenishmentRecommendationModel from './replenishmentRecommendation.model.js';
 import CouponModel from './coupon.model.js';
 import CouponUsageModel from './couponUsage.model.js';
 import LoyaltyTransactionModel from './loyaltyTransaction.model.js';
@@ -125,6 +131,12 @@ export const IdempotencyKey = IdempotencyKeyModel(sequelize);
 export const WarehouseException = WarehouseExceptionModel(sequelize);
 export const WarehouseTask = WarehouseTaskModel(sequelize);
 export const WarehouseStorageSnapshot = WarehouseStorageSnapshotModel(sequelize);
+export const ProductUom = ProductUomModel(sequelize);
+export const ProductVariant = ProductVariantModel(sequelize);
+export const ProductContainer = ProductContainerModel(sequelize);
+export const InventoryPolicy = InventoryPolicyModel(sequelize);
+export const DemandForecast = DemandForecastModel(sequelize);
+export const ReplenishmentRecommendation = ReplenishmentRecommendationModel(sequelize);
 export const BranchStock = BranchStockModel(sequelize);
 export const Coupon = CouponModel(sequelize);
 export const CouponUsage = CouponUsageModel(sequelize);
@@ -283,6 +295,37 @@ WarehouseTask.belongsTo(User, { foreignKey: 'assignedUserId', as: 'assignedTo' }
 WarehouseStorageSnapshot.belongsTo(Branch, { foreignKey: 'branchId' });
 WarehouseStorageSnapshot.belongsTo(Product, { foreignKey: 'productId' });
 WarehouseStorageSnapshot.belongsTo(StockOwner, { foreignKey: 'ownerId' });
+
+// ---- Units, variants and containers ----
+// All hang off the product master: a pack size is a size *of* something, and
+// duplicating the product per size is what makes "how much do we hold" stop
+// being answerable.
+Product.hasMany(ProductUom, { foreignKey: 'productId', onDelete: 'CASCADE' });
+ProductUom.belongsTo(Product, { foreignKey: 'productId' });
+
+Product.hasMany(ProductVariant, { foreignKey: 'productId', onDelete: 'CASCADE' });
+ProductVariant.belongsTo(Product, { foreignKey: 'productId' });
+
+Product.hasMany(ProductContainer, { foreignKey: 'productId' });
+ProductContainer.belongsTo(Product, { foreignKey: 'productId' });
+ProductContainer.belongsTo(Branch, { foreignKey: 'branchId' });
+Branch.hasMany(ProductContainer, { foreignKey: 'branchId' });
+ProductContainer.belongsTo(ProductBatch, { foreignKey: 'batchId' });
+ProductContainer.belongsTo(Supplier, { foreignKey: 'supplierId' });
+
+// ---- Demand planning and replenishment ----
+// Product and location on all three, because every question asked of this data
+// is "for this line, here" — never one without the other.
+for (const model of [InventoryPolicy, DemandForecast, ReplenishmentRecommendation]) {
+  model.belongsTo(Product, { foreignKey: 'productId' });
+  Product.hasMany(model, { foreignKey: 'productId' });
+  model.belongsTo(Branch, { foreignKey: 'branchId' });
+  Branch.hasMany(model, { foreignKey: 'branchId' });
+}
+InventoryPolicy.belongsTo(Supplier, { foreignKey: 'preferredSupplierId', as: 'preferredSupplier' });
+ReplenishmentRecommendation.belongsTo(Supplier, { foreignKey: 'supplierId' });
+// The location a transfer would pull from, as opposed to the one being filled.
+ReplenishmentRecommendation.belongsTo(Branch, { foreignKey: 'sourceBranchId', as: 'sourceBranch' });
 // binId and batchId are deliberately plain columns with no foreign key.
 //
 // A snapshot is a historical billing record and has to outlive the things it

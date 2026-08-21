@@ -30,7 +30,10 @@ export default (sequelize) => sequelize.define('IdempotencyKey', {
 
   // Supplied by the device, unique across the whole installation. A UUID from
   // the scanner is the expected form.
-  idempotencyKey: { type: DataTypes.STRING(120), allowNull: false, unique: true },
+  // Uniqueness is declared once, as the named index below. Declaring it here as
+  // well would have sync create a second index on the same column and crash the
+  // boot with "Duplicate key name".
+  idempotencyKey: { type: DataTypes.STRING(120), allowNull: false },
 
   // Which handheld sent it. Kept because a device replaying keys after a factory
   // reset is a real failure mode, and it is unanswerable without this.

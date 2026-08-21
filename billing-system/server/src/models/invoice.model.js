@@ -69,5 +69,11 @@ export default (sequelize) => sequelize.define('Invoice', {
   createdAt: 'addondt',
   updatedAt: 'editondt',
   tableName: 'invoices',
-  indexes: [{ fields: ['invoice_number'] }, { fields: ['invoice_date'] }]
+  // No index on invoice_number here: the column is already `unique: true`,
+  // which creates one. Declaring both makes sync try to add a second index on
+  // the same column every boot, and whether that succeeds depends on whether
+  // the duplicate-index sweep happened to remove it first — so the process
+  // crashes on some starts and not others, with a "Duplicate key name" error
+  // that points at the symptom rather than the two declarations causing it.
+  indexes: [{ fields: ['invoice_date'] }]
 });

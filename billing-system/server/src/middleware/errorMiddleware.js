@@ -21,6 +21,12 @@ export function errorHandler(error, _req, res, _next) {
     message = error.errors?.[0]?.message || 'Validation failed';
   }
 
+  // A blocked cross-origin caller is being refused, not failing. Answering 500
+  // would file it under "the API is broken" in every dashboard watching this.
+  if (/is not allowed by CORS$/.test(error.message || '')) {
+    status = 403;
+  }
+
   // Multer surfaces upload problems (oversized file, unexpected field) as client errors.
   if (error.name === 'MulterError') {
     status = 400;

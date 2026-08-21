@@ -53,7 +53,8 @@ export const TASK_TRANSITIONS = {
 export default (sequelize) => sequelize.define('WarehouseTask', {
   id: { type: unsignedInteger(sequelize), autoIncrement: true, primaryKey: true },
 
-  taskNumber: { type: DataTypes.STRING(40), allowNull: true, unique: true },
+  // Uniqueness lives in the indexes block below, declared once.
+  taskNumber: { type: DataTypes.STRING(40), allowNull: true },
   taskType: { ...enumType(sequelize, TASK_TYPES), allowNull: false },
 
   branchId: { type: unsignedInteger(sequelize), allowNull: false },
