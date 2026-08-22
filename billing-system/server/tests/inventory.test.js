@@ -23,10 +23,10 @@ import test, { before, after, describe } from 'node:test';
 // Imported after the environment is set, or the models would connect to
 // whatever the developer's .env points at — which is the live database.
 const models = await import('../src/models/index.js');
-const engine = await import('../src/services/inventoryEngine.service.js');
-const uom = await import('../src/services/uom.service.js');
-const containers = await import('../src/services/container.service.js');
-const stock = await import('../src/services/stock.service.js');
+const engine = await import('../src/modules/inventory/inventoryEngine.service.js');
+const uom = await import('../src/modules/inventory/uom.service.js');
+const containers = await import('../src/modules/inventory/container.service.js');
+const stock = await import('../src/modules/inventory/stock.service.js');
 
 const {
   sequelize, Branch, Product, ProductUom, ProductVariant, StockOwner, StockMovement,
