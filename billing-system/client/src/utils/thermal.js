@@ -372,7 +372,7 @@ export const THERMAL_SIZES = [
 ];
 
 /** Return a paper-size label for display. */
-export function thermalSizeLabel(size, customMm) {
+function thermalSizeLabel(size, customMm) {
   if (size === 'custom') return `Custom (${customMm}mm)`;
   return THERMAL_SIZES.find(s => s.value === size)?.label ?? size;
 }

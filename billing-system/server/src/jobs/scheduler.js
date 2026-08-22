@@ -1,5 +1,6 @@
-import { catchUp } from '../services/storageSnapshot.service.js';
-import { sweep } from '../services/idempotency.service.js';
+import { catchUp } from '../modules/warehouse/storageSnapshot.service.js';
+import { sweep } from '../modules/platform/idempotency.service.js';
+import { dispatchDue } from '../modules/platform/webhook.service.js';
 
 /**
  * The background jobs this application runs on its own.
@@ -68,6 +69,10 @@ async function tick() {
   try {
     await safely('storage snapshot', () => catchUp());
     await safely('idempotency sweep', () => sweep());
+    // Retries anything a receiver was not reachable for, and picks up rows a
+    // server that died mid-send left PENDING. Bounded per tick so a large
+    // backlog cannot hold the scheduler open past the next one.
+    await safely('webhook dispatch', () => dispatchDue({ limit: 100 }));
   } finally {
     running = false;
   }
@@ -85,11 +90,11 @@ export function startScheduler() {
     timers.push(setInterval(tick, TICK_MS));
   }, BOOT_DELAY_MS));
 
-  console.log('Background jobs scheduled: daily storage snapshot, idempotency sweep.');
+  console.log('Background jobs scheduled: daily storage snapshot, idempotency sweep, webhook dispatch.');
 }
 
 /** Stops them. Used by tests, and by a clean shutdown. */
-export function stopScheduler() {
+function stopScheduler() {
   for (const timer of timers) {
     clearTimeout(timer);
     clearInterval(timer);
@@ -98,6 +103,6 @@ export function stopScheduler() {
 }
 
 /** Runs a tick immediately. Exposed so the job can be triggered by hand. */
-export async function runJobsNow() {
+async function runJobsNow() {
   await tick();
 }

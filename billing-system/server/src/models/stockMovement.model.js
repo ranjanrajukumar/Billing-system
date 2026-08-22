@@ -15,6 +15,12 @@ export const MOVEMENT_TYPES = [
   // Added with the warehouse/ERP workflow.
   'Purchase Return', 'Transfer In', 'Transfer Out', 'Stock Count Adjustment',
   'Damage', 'Expired', 'GRN',
+  // Material issued out of the store with no sale behind it, and the unused
+  // part of it coming back. Distinct types rather than reusing Adjustment
+  // Out/In because the ledger is where "why did this leave" is answered, and
+  // an issue that reads as an adjustment is indistinguishable from a counting
+  // correction the moment anybody looks at it a month later.
+  'Issue', 'Issue Return',
 ];
 
 export default (sequelize) => sequelize.define('StockMovement', {

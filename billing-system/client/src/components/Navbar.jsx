@@ -28,7 +28,7 @@ import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { mediaUrl } from '../utils/formatters.js';
 import CalculatorDialog from './CalculatorDialog.jsx';
-import DailyBriefing, { shouldShowBriefing } from './DailyBriefing.jsx';
+import DailyBriefing, { shouldShowBriefing } from '../modules/reporting/DailyBriefing.jsx';
 import BranchSwitcher from './BranchSwitcher.jsx';
 import NotificationCentre from './NotificationCentre.jsx';
 import { notificationsApi } from '../services/resource.service.js';

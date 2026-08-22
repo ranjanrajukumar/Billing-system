@@ -535,7 +535,7 @@ function operatingNotes(doc) {
 
 // ---------------------------------------------------------------------------
 
-export function generateWorkflowDoc(outputPath = OUT) {
+function generateWorkflowDoc(outputPath = OUT) {
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
   // Pages are buffered so the footer can say "3 of 9" — the total is not known

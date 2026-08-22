@@ -1,6 +1,6 @@
 import api from './api.js';
 
-export const makeResource = (base) => ({
+const makeResource = (base) => ({
   list: (params) => api.get(base, { params }).then((r) => r.data ?? { data: [], meta: {} }),
   get: (id) => api.get(`${base}/${id}`).then((r) => r.data ?? null),
   create: (payload) => api.post(base, payload).then((r) => r.data ?? {}),
@@ -32,6 +32,10 @@ export const salesOrdersApi   = {
   ...makeResource('/sales-orders'),
   confirm: (id) => api.post(`/sales-orders/${id}/confirm`).then((r) => r.data),
   cancel:  (id) => api.post(`/sales-orders/${id}/cancel`).then((r) => r.data),
+  // Bill the order. What gets billed depends on how far the warehouse has got
+  // with it — ordered quantities before dispatch, dispatched ones after — and
+  // that decision is the server's, so nothing is sent but the order id.
+  invoice: (id, payload = {}) => api.post(`/sales-orders/${id}/invoice`, payload).then((r) => r.data),
   downloadPdf: (id) => api.get(`/sales-orders/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data),
 };
 export const quotationsApi    = makeResource('/quotations');
@@ -49,7 +53,7 @@ export const inventoryApi = {
   wmsStock:  (params) => api.get('/inventory/wms-stock', { params }).then((r) => r.data ?? { data: [], meta: {} }),
 };
 
-export const invoiceTemplatesApi = {
+const invoiceTemplatesApi = {
   ...makeResource('/invoice-templates'),
   preview: (id) => api.get(`/invoice-templates/${id}/preview`, { responseType: 'blob' }).then((r) => r.data),
 };
@@ -76,6 +80,10 @@ export const usersApi = {
 
 export const dashboardApi = {
   get: (params) => api.get('/dashboard', { params }).then((r) => r.data ?? {}),
+  // Today against yesterday, what is pending and how long it has waited, and
+  // where each area stands. Read on its own rhythm from the charts, so it is
+  // its own call rather than a fatter payload on the one above.
+  operations: () => api.get('/dashboard/operations').then((r) => r.data ?? null),
   productPerformance: (params) =>
     api.get('/dashboard/product-performance', { params }).then((r) => r.data ?? {}),
 };
@@ -143,6 +151,70 @@ export const grnApi = withAction('/grn', {
 export const srvApi = withAction('/srv', {
   confirm: (id) => api.post(`/srv/${id}/confirm`).then((r) => r.data),
 });
+
+/**
+ * Store issues, and the material returns raised against them.
+ *
+ * Returns live under the issue's endpoint rather than getting their own
+ * resource, because a return only ever exists against an issue — there is no
+ * "all returns" the server would let you create one from.
+ */
+export const stockIssuesApi = withAction('/stock-issues', {
+  // The deliberate act that takes the material out. A saved draft has moved
+  // nothing, which is what makes it safe to check first.
+  issue: (id)             => api.post(`/stock-issues/${id}/issue`).then((r) => r.data),
+  // "The rest is not coming back." Moves no stock; it only stops the voucher
+  // sitting on the outstanding report for ever.
+  close: (id, remarks)    => api.post(`/stock-issues/${id}/close`, { remarks }).then((r) => r.data),
+  outstanding: (params)   => api.get('/stock-issues/outstanding', { params }).then((r) => r.data ?? { data: [], totals: {} }),
+
+  returns: {
+    list:   (params)      => api.get('/stock-issues/returns', { params }).then((r) => r.data ?? { data: [], meta: {} }),
+    get:    (id)          => api.get(`/stock-issues/returns/${id}`).then((r) => r.data),
+    create: (issueId, body) => api.post(`/stock-issues/${issueId}/returns`, body).then((r) => r.data),
+    post:   (id)          => api.post(`/stock-issues/returns/${id}/post`).then((r) => r.data),
+    remove: (id)          => api.delete(`/stock-issues/returns/${id}`).then((r) => r.data),
+  },
+});
+
+export const departmentsApi = makeMasterDataResource('department');
+
+/**
+ * The two ways one product comes in more than one size.
+ *
+ * They are genuinely different things, not two spellings of one. A **unit** is
+ * how the same pile is counted — a bucket is ten kilos of the same loose stock,
+ * and there is one balance. A **pack** is a sealed thing with its own barcode,
+ * its own price and its own balance: a hundred 100g pouches is not the same as
+ * 10kg loose, and selling one must not decrement the other.
+ */
+export const packagingApi = {
+  units: {
+    list:   (productId)          => api.get(`/products/${productId}/units`).then((r) => r.data ?? { units: [] }),
+    save:   (productId, body)    => api.post(`/products/${productId}/units`, body).then((r) => r.data),
+    remove: (productId, unitId)  => api.delete(`/products/${productId}/units/${unitId}`).then((r) => r.data),
+  },
+  packs: {
+    list:   (productId)          => api.get(`/products/${productId}/variants`).then((r) => r.data ?? []),
+    create: (productId, body)    => api.post(`/products/${productId}/variants`, body).then((r) => r.data),
+    update: (productId, id, body)=> api.put(`/products/${productId}/variants/${id}`, body).then((r) => r.data),
+    remove: (productId, id)      => api.delete(`/products/${productId}/variants/${id}`).then((r) => r.data),
+  },
+  // What this product can be sold as, packs and units together. The counter
+  // screens will read this; the setup panel does not need it.
+  sellOptions: (productId) => api.get(`/products/${productId}/sell-options`).then((r) => r.data),
+};
+
+/**
+ * A process overview: the stages of one flow and how much is waiting in each.
+ *
+ * Keyed by the slug in the URL (`order-to-cash`), which the server resolves to
+ * the menu entry. Read-only — a process is a view over documents, never a thing
+ * you create.
+ */
+export const processApi = {
+  get: (slug) => api.get(`/process/${slug}`).then((r) => r.data),
+};
 
 export const purchaseReturnsApi = withAction('/purchase-returns', {
   returnable: (purchaseId) => api.get(`/purchase-returns/returnable/${purchaseId}`).then((r) => r.data),
@@ -352,4 +424,81 @@ export const replenishmentApi = {
     remove:    (id)     => api.delete(`/replenishment/policies/${id}`).then((r) => r.data ?? {}),
     effective: (params) => api.get('/replenishment/policies/effective', { params }).then((r) => r.data ?? {}),
   },
+};
+
+/**
+ * Connected hardware: handhelds, sensor gateways and RFID readers.
+ *
+ * Every write here is idempotent on the server and *requires* an
+ * `Idempotency-Key`. The browser is not the client those routes were built for
+ * — a person sees a failure and decides what to do — but the key is required of
+ * everyone, so one is generated per call rather than leaving the UI unable to
+ * use its own API.
+ */
+const keyed = () => ({ headers: { 'Idempotency-Key': crypto.randomUUID() } });
+
+export const devicesApi = {
+  list:       (params) => api.get('/warehouse-devices/devices', { params }).then((r) => r.data ?? []),
+  get:        (id)     => api.get(`/warehouse-devices/devices/${id}`).then((r) => r.data ?? null),
+  register:   (body)   => api.post('/warehouse-devices/devices', body).then((r) => r.data ?? {}),
+  update:     (id, b)  => api.put(`/warehouse-devices/devices/${id}`, b).then((r) => r.data ?? {}),
+  retire:     (id)     => api.delete(`/warehouse-devices/devices/${id}`).then((r) => r.data ?? {}),
+  health:     (params) => api.get('/warehouse-devices/devices/health', { params }).then((r) => r.data ?? {}),
+  vocabulary: ()       => api.get('/warehouse-devices/devices/vocabulary').then((r) => r.data ?? {}),
+};
+
+export const scanApi = {
+  // GET: resolving a code changes nothing, and a handheld does it constantly.
+  resolve:    (code)   => api.get(`/warehouse-devices/scan/resolve/${encodeURIComponent(code)}`).then((r) => r.data ?? null),
+  putAway:    (body)   => api.post('/warehouse-devices/scan/put-away', body, keyed()).then((r) => r.data ?? {}),
+  move:       (body)   => api.post('/warehouse-devices/scan/move', body, keyed()).then((r) => r.data ?? {}),
+  pick:       (body)   => api.post('/warehouse-devices/scan/pick', body, keyed()).then((r) => r.data ?? {}),
+  count:      (body)   => api.post('/warehouse-devices/scan/count', body, keyed()).then((r) => r.data ?? {}),
+  sync:       (body)   => api.post('/warehouse-devices/scan/sync', body, keyed()).then((r) => r.data ?? {}),
+};
+
+export const sensorsApi = {
+  status:     (params) => api.get('/warehouse-devices/sensors/status', { params }).then((r) => r.data ?? {}),
+  readings:   (params) => api.get('/warehouse-devices/sensors/readings', { params }).then((r) => r.data ?? []),
+  record:     (body)   => api.post('/warehouse-devices/sensors/readings', body, keyed()).then((r) => r.data ?? {}),
+  thresholds: (params) => api.get('/warehouse-devices/sensors/thresholds', { params }).then((r) => r.data ?? []),
+  saveThreshold:   (body)  => api.post('/warehouse-devices/sensors/thresholds', body).then((r) => r.data ?? {}),
+  updateThreshold: (id, b) => api.put(`/warehouse-devices/sensors/thresholds/${id}`, b).then((r) => r.data ?? {}),
+  removeThreshold: (id)    => api.delete(`/warehouse-devices/sensors/thresholds/${id}`).then((r) => r.data ?? {}),
+};
+
+export const rfidApi = {
+  tags:       (params) => api.get('/warehouse-devices/rfid/tags', { params }).then((r) => r.data ?? []),
+  summary:    (params) => api.get('/warehouse-devices/rfid/summary', { params }).then((r) => r.data ?? {}),
+  vocabulary: ()       => api.get('/warehouse-devices/rfid/vocabulary').then((r) => r.data ?? {}),
+  registerTag:(body)   => api.post('/warehouse-devices/rfid/tags', body, keyed()).then((r) => r.data ?? {}),
+  retireTag:  (id)     => api.delete(`/warehouse-devices/rfid/tags/${id}`).then((r) => r.data ?? {}),
+  read:       (body)   => api.post('/warehouse-devices/rfid/reads', body, keyed()).then((r) => r.data ?? {}),
+  reconcile:  (body)   => api.post('/warehouse-devices/rfid/reconcile', body, keyed()).then((r) => r.data ?? {}),
+};
+
+export const webhooksApi = {
+  vocabulary: ()      => api.get('/webhooks/vocabulary').then((r) => r.data ?? {}),
+  list:       ()      => api.get('/webhooks/endpoints').then((r) => r.data ?? []),
+  create:     (body)  => api.post('/webhooks/endpoints', body).then((r) => r.data ?? {}),
+  update:     (id, b) => api.put(`/webhooks/endpoints/${id}`, b).then((r) => r.data ?? {}),
+  remove:     (id)    => api.delete(`/webhooks/endpoints/${id}`).then((r) => r.data ?? {}),
+  // Both return a secret exactly once. It is never readable afterwards.
+  rotate:     (id)    => api.post(`/webhooks/endpoints/${id}/rotate-secret`).then((r) => r.data ?? {}),
+  test:       (id)    => api.post(`/webhooks/endpoints/${id}/test`).then((r) => r.data ?? {}),
+  deliveries: (params)=> api.get('/webhooks/deliveries', { params }).then((r) => r.data ?? []),
+  dispatch:   ()      => api.post('/webhooks/dispatch').then((r) => r.data ?? {}),
+};
+
+/**
+ * Third-party (3PL) stock owners.
+ *
+ * `house` sits outside the module gate on the server, because every screen that
+ * shows stock needs to know which owner is ours — including a shop that has
+ * never heard of 3PL and has exactly one owner.
+ */
+export const stockOwnersApi = {
+  ...makeResource('/stock-owners'),
+  house:    ()            => api.get('/stock-owners/house').then((r) => r.data ?? null),
+  holdings: (id, params)  => api.get(`/stock-owners/${id}/holdings`, { params }).then((r) => r.data ?? null),
 };

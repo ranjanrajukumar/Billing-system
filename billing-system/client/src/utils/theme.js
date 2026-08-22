@@ -325,7 +325,7 @@ export function buildTheme(mode) {
 }
 
 // Design tokens for use across components
-export const tokens = {
+const tokens = {
   gradients: {
     primary: 'linear-gradient(135deg, #4f46e5 0%, #7c74f0 100%)',
     secondary: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',

@@ -19,7 +19,7 @@
  */
 export const UNSEQUENCED = Number.MAX_SAFE_INTEGER;
 
-export const sequenceOf = (stop) => (
+const sequenceOf = (stop) => (
   stop?.pickSequence === null || stop?.pickSequence === undefined
     ? UNSEQUENCED
     : Number(stop.pickSequence)

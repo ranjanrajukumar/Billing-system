@@ -8,72 +8,80 @@ import Loader from '../components/Loader.jsx';
 // Eager: the two screens a signed-out visitor can land on. Everything else is
 // split out below, so the first load is the shell and the page being asked for
 // rather than all fifty-odd screens in the application.
-import Login from '../pages/Login.jsx';
-import NotFound from '../pages/NotFound.jsx';
+import Login from '../modules/platform/Login.jsx';
+import NotFound from '../modules/platform/NotFound.jsx';
 
-const AuditLogs = lazy(() => import('../pages/AuditLogs.jsx'));
-const Branches = lazy(() => import('../pages/Branches.jsx'));
-const Backups = lazy(() => import('../pages/Backups.jsx'));
-const QuickBill = lazy(() => import('../pages/QuickBill.jsx'));
-const Batches = lazy(() => import('../pages/Batches.jsx'));
-const TaxReports = lazy(() => import('../pages/TaxReports.jsx'));
-const Coupons = lazy(() => import('../pages/Coupons.jsx'));
-const Customers = lazy(() => import('../pages/Customers.jsx'));
-const Dashboard = lazy(() => import('../pages/Dashboard.jsx'));
-const DeliveryChallans = lazy(() => import('../pages/DeliveryChallans.jsx'));
-const Srv = lazy(() => import('../pages/Srv.jsx'));
-const InvoiceDesigner = lazy(() => import('../pages/InvoiceDesigner.jsx'));
-const Invoices = lazy(() => import('../pages/Invoices.jsx'));
-const Khata = lazy(() => import('../pages/Khata.jsx'));
-const Purchases = lazy(() => import('../pages/Purchases.jsx'));
-const Quotations = lazy(() => import('../pages/Quotations.jsx'));
-const SalesOrders = lazy(() => import('../pages/SalesOrders.jsx'));
-const SalesReturns = lazy(() => import('../pages/SalesReturns.jsx'));
-const Suppliers = lazy(() => import('../pages/Suppliers.jsx'));
-const Udhar = lazy(() => import('../pages/Udhar.jsx'));
-const Inventory = lazy(() => import('../pages/Inventory.jsx'));
-const Subscriptions = lazy(() => import('../pages/Subscriptions.jsx'));
-const InvoiceTemplateSetup = lazy(() => import('../pages/InvoiceTemplateSetup.jsx'));
-const Masters = lazy(() => import('../pages/Masters.jsx'));
-const Products = lazy(() => import('../pages/Products.jsx'));
-const Profile = lazy(() => import('../pages/Profile.jsx'));
-const Register = lazy(() => import('../pages/Register.jsx'));
-const Reports = lazy(() => import('../pages/Reports.jsx'));
-const Settings = lazy(() => import('../pages/Settings.jsx'));
-const Users = lazy(() => import('../pages/Users.jsx'));
+const AuditLogs = lazy(() => import('../modules/platform/AuditLogs.jsx'));
+const StockOwners = lazy(() => import('../modules/warehouse/StockOwners.jsx'));
+const Devices = lazy(() => import('../modules/warehouse/Devices.jsx'));
+const Sensors = lazy(() => import('../modules/warehouse/Sensors.jsx'));
+const RfidTags = lazy(() => import('../modules/warehouse/RfidTags.jsx'));
+const Webhooks = lazy(() => import('../modules/platform/Webhooks.jsx'));
+const Branches = lazy(() => import('../modules/platform/Branches.jsx'));
+const Backups = lazy(() => import('../modules/platform/Backups.jsx'));
+const QuickBill = lazy(() => import('../modules/sales/QuickBill.jsx'));
+const Batches = lazy(() => import('../modules/inventory/Batches.jsx'));
+const TaxReports = lazy(() => import('../modules/sales/TaxReports.jsx'));
+const Coupons = lazy(() => import('../modules/sales/Coupons.jsx'));
+const Customers = lazy(() => import('../modules/sales/Customers.jsx'));
+const Dashboard = lazy(() => import('../modules/reporting/Dashboard.jsx'));
+const DeliveryChallans = lazy(() => import('../modules/sales/DeliveryChallans.jsx'));
+const Srv = lazy(() => import('../modules/purchasing/Srv.jsx'));
+const StockIssues = lazy(() => import('../modules/inventory/StockIssues.jsx'));
+const ProcessOverview = lazy(() => import('../modules/reporting/ProcessOverview.jsx'));
+const StockIssueReturns = lazy(() => import('../modules/inventory/StockIssueReturns.jsx'));
+const InvoiceDesigner = lazy(() => import('../modules/sales/InvoiceDesigner.jsx'));
+const Invoices = lazy(() => import('../modules/sales/Invoices.jsx'));
+const Khata = lazy(() => import('../modules/sales/Khata.jsx'));
+const Purchases = lazy(() => import('../modules/purchasing/Purchases.jsx'));
+const Quotations = lazy(() => import('../modules/sales/Quotations.jsx'));
+const SalesOrders = lazy(() => import('../modules/sales/SalesOrders.jsx'));
+const SalesReturns = lazy(() => import('../modules/sales/SalesReturns.jsx'));
+const Suppliers = lazy(() => import('../modules/purchasing/Suppliers.jsx'));
+const Udhar = lazy(() => import('../modules/sales/Udhar.jsx'));
+const Inventory = lazy(() => import('../modules/inventory/Inventory.jsx'));
+const Subscriptions = lazy(() => import('../modules/sales/Subscriptions.jsx'));
+const InvoiceTemplateSetup = lazy(() => import('../modules/sales/InvoiceTemplateSetup.jsx'));
+const Masters = lazy(() => import('../modules/inventory/Masters.jsx'));
+const Products = lazy(() => import('../modules/inventory/Products.jsx'));
+const Profile = lazy(() => import('../modules/platform/Profile.jsx'));
+const Register = lazy(() => import('../modules/platform/Register.jsx'));
+const Reports = lazy(() => import('../modules/reporting/Reports.jsx'));
+const Settings = lazy(() => import('../modules/platform/Settings.jsx'));
+const Users = lazy(() => import('../modules/platform/Users.jsx'));
 // Planning: forecast demand, decide what to bring in, and set the parameters
 // the engine plans with.
-const DemandPlanning = lazy(() => import('../pages/DemandPlanning.jsx'));
-const Replenishment = lazy(() => import('../pages/Replenishment.jsx'));
-const InventoryPolicies = lazy(() => import('../pages/InventoryPolicies.jsx'));
+const DemandPlanning = lazy(() => import('../modules/planning/DemandPlanning.jsx'));
+const Replenishment = lazy(() => import('../modules/planning/Replenishment.jsx'));
+const InventoryPolicies = lazy(() => import('../modules/planning/InventoryPolicies.jsx'));
 // Advanced (ERP) screens. Their routes always exist; the sidebar and the API
 // decide whether this company can reach them. Splitting them out means a Basic
 // shop never downloads the warehouse and accounting screens at all.
-const PurchaseOrders = lazy(() => import('../pages/PurchaseOrders.jsx'));
-const Grn = lazy(() => import('../pages/Grn.jsx'));
-const PurchaseReturns = lazy(() => import('../pages/PurchaseReturns.jsx'));
-const StockTransfers = lazy(() => import('../pages/StockTransfers.jsx'));
-const StockAdjustments = lazy(() => import('../pages/StockAdjustments.jsx'));
-const StockCounts = lazy(() => import('../pages/StockCounts.jsx'));
-const Serials = lazy(() => import('../pages/Serials.jsx'));
-const Warehouses = lazy(() => import('../pages/Warehouses.jsx'));
-const Ledgers = lazy(() => import('../pages/Ledgers.jsx'));
-const Expenses = lazy(() => import('../pages/Expenses.jsx'));
-const CashRegisters = lazy(() => import('../pages/CashRegisters.jsx'));
-const BankAccounts = lazy(() => import('../pages/BankAccounts.jsx'));
-const ChartOfAccounts = lazy(() => import('../pages/ChartOfAccounts.jsx'));
-const JournalEntries = lazy(() => import('../pages/JournalEntries.jsx'));
-const Financials = lazy(() => import('../pages/Financials.jsx'));
-const Approvals = lazy(() => import('../pages/Approvals.jsx'));
-const CashFlow = lazy(() => import('../pages/CashFlow.jsx'));
-const StockAudit = lazy(() => import('../pages/StockAudit.jsx'));
-const WarehouseFloor = lazy(() => import('../pages/WarehouseFloor.jsx'));
-const Gatepasses = lazy(() => import('../pages/Gatepasses.jsx'));
-const InboundAppointments = lazy(() => import('../pages/InboundAppointments.jsx'));
-const QcInspections = lazy(() => import('../pages/QcInspections.jsx'));
-const PickWaves = lazy(() => import('../pages/PickWaves.jsx'));
-const Shipments = lazy(() => import('../pages/Shipments.jsx'));
-const Repairs = lazy(() => import('../pages/Repairs.jsx'));
+const PurchaseOrders = lazy(() => import('../modules/purchasing/PurchaseOrders.jsx'));
+const Grn = lazy(() => import('../modules/purchasing/Grn.jsx'));
+const PurchaseReturns = lazy(() => import('../modules/purchasing/PurchaseReturns.jsx'));
+const StockTransfers = lazy(() => import('../modules/inventory/StockTransfers.jsx'));
+const StockAdjustments = lazy(() => import('../modules/inventory/StockAdjustments.jsx'));
+const StockCounts = lazy(() => import('../modules/inventory/StockCounts.jsx'));
+const Serials = lazy(() => import('../modules/inventory/Serials.jsx'));
+const Warehouses = lazy(() => import('../modules/warehouse/Warehouses.jsx'));
+const Ledgers = lazy(() => import('../modules/accounting/Ledgers.jsx'));
+const Expenses = lazy(() => import('../modules/accounting/Expenses.jsx'));
+const CashRegisters = lazy(() => import('../modules/accounting/CashRegisters.jsx'));
+const BankAccounts = lazy(() => import('../modules/accounting/BankAccounts.jsx'));
+const ChartOfAccounts = lazy(() => import('../modules/accounting/ChartOfAccounts.jsx'));
+const JournalEntries = lazy(() => import('../modules/accounting/JournalEntries.jsx'));
+const Financials = lazy(() => import('../modules/accounting/Financials.jsx'));
+const Approvals = lazy(() => import('../modules/platform/Approvals.jsx'));
+const CashFlow = lazy(() => import('../modules/accounting/CashFlow.jsx'));
+const StockAudit = lazy(() => import('../modules/inventory/StockAudit.jsx'));
+const WarehouseFloor = lazy(() => import('../modules/warehouse/WarehouseFloor.jsx'));
+const Gatepasses = lazy(() => import('../modules/warehouse/Gatepasses.jsx'));
+const InboundAppointments = lazy(() => import('../modules/purchasing/InboundAppointments.jsx'));
+const QcInspections = lazy(() => import('../modules/purchasing/QcInspections.jsx'));
+const PickWaves = lazy(() => import('../modules/warehouse/PickWaves.jsx'));
+const Shipments = lazy(() => import('../modules/warehouse/Shipments.jsx'));
+const Repairs = lazy(() => import('../modules/warehouse/Repairs.jsx'));
 
 /**
  * Shown while a screen's chunk is being fetched. The same skeleton the pages
@@ -133,6 +141,11 @@ export default function AppRoutes({ mode, onToggleMode }) {
             {/* Advanced mode */}
             <Route path="purchase-orders" element={<PurchaseOrders />} />
             <Route path="srv" element={<Srv />} />
+            {/* One route for every process; which flows exist is the server's
+                to say, and the page renders whichever it is handed. */}
+            <Route path="process/:key" element={<ProcessOverview />} />
+            <Route path="stock-issues" element={<StockIssues />} />
+            <Route path="stock-issue-returns" element={<StockIssueReturns />} />
             <Route path="grn" element={<Grn />} />
             <Route path="purchase-returns" element={<PurchaseReturns />} />
             <Route path="stock-transfers" element={<StockTransfers />} />
@@ -157,6 +170,11 @@ export default function AppRoutes({ mode, onToggleMode }) {
             <Route path="cash-flow" element={<CashFlow />} />
             <Route path="stock-audit" element={<StockAudit />} />
             <Route path="warehouse-floor" element={<WarehouseFloor />} />
+            <Route path="stock-owners" element={<StockOwners />} />
+            <Route path="devices" element={<Devices />} />
+            <Route path="sensors" element={<Sensors />} />
+            <Route path="rfid-tags" element={<RfidTags />} />
+            <Route path="webhooks" element={<Webhooks />} />
           </Route>
         </Route>
         <Route path="/404" element={<NotFound />} />

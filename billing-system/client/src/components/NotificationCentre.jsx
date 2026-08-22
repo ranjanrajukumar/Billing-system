@@ -133,6 +133,6 @@ export default function NotificationCentre({
 }
 
 /** Shared by the bell so the badge and the list never disagree. */
-export async function fetchAlerts() {
+async function fetchAlerts() {
   return notificationsApi.alerts();
 }

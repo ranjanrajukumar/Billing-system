@@ -12,18 +12,46 @@ function underThousand(n) {
   return `${h ? `${ones[h]} Hundred ` : ''}${r ? underHundred(r) : ''}`.trim();
 }
 
-export function amountInWords(amount) {
+// What one unit of each currency is called when a bill spells its total out.
+// An unlisted currency uses its own code — "One Thousand AUD Only" reads
+// plainly enough, and is never wrong the way calling dollars "Rupees" is.
+const CURRENCY_NAMES = {
+  INR: 'Rupees', USD: 'Dollars', EUR: 'Euros',
+  GBP: 'Pounds', JPY: 'Yen', AED: 'Dirhams',
+};
+
+/**
+ * The total in words, in the currency the bill was actually raised in.
+ *
+ * Rupees group the Indian way — thousand, lakh, crore — and everything else
+ * the Western way, because "One Lakh Dollars" is not a sum anybody writes.
+ * The currency used to be hard-coded, so a dollar invoice read "Rupees Only"
+ * on its face while the figures printed beside it said otherwise.
+ */
+export function amountInWords(amount, currencyCode = 'INR') {
+  const code = String(currencyCode || 'INR').toUpperCase();
+  const unit = CURRENCY_NAMES[code] || code;
   let n = Math.round(Number(amount || 0));
-  if (n === 0) return 'Zero Rupees Only';
+  if (n === 0) return `Zero ${unit} Only`;
+
   const parts = [];
-  const crore = Math.floor(n / 10000000); n %= 10000000;
-  const lakh = Math.floor(n / 100000); n %= 100000;
-  const thousand = Math.floor(n / 1000); n %= 1000;
-  if (crore) parts.push(`${underThousand(crore)} Crore`);
-  if (lakh) parts.push(`${underThousand(lakh)} Lakh`);
-  if (thousand) parts.push(`${underThousand(thousand)} Thousand`);
+  if (code === 'INR') {
+    const crore = Math.floor(n / 10000000); n %= 10000000;
+    const lakh = Math.floor(n / 100000); n %= 100000;
+    const thousand = Math.floor(n / 1000); n %= 1000;
+    if (crore) parts.push(`${underThousand(crore)} Crore`);
+    if (lakh) parts.push(`${underThousand(lakh)} Lakh`);
+    if (thousand) parts.push(`${underThousand(thousand)} Thousand`);
+  } else {
+    const billion = Math.floor(n / 1000000000); n %= 1000000000;
+    const million = Math.floor(n / 1000000); n %= 1000000;
+    const thousand = Math.floor(n / 1000); n %= 1000;
+    if (billion) parts.push(`${underThousand(billion)} Billion`);
+    if (million) parts.push(`${underThousand(million)} Million`);
+    if (thousand) parts.push(`${underThousand(thousand)} Thousand`);
+  }
   if (n) parts.push(underThousand(n));
-  return `${parts.join(' ')} Rupees Only`;
+  return `${parts.join(' ')} ${unit} Only`;
 }
 
 /**
@@ -105,6 +133,6 @@ export function calculateInvoice(items, customerState, companyState, options = {
     deduction,
     cess,
     roundOff: grandTotal - totalBeforeRound,
-    amountInWords: amountInWords(grandTotal)
+    amountInWords: amountInWords(grandTotal, options.currency)
   };
 }

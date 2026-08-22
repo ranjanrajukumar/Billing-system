@@ -1,6 +1,6 @@
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { alpha, Box, IconButton, MenuItem, Select, Stack, Typography, useTheme } from '@mui/material';
+import { alpha, IconButton, MenuItem, Select, Stack, Typography, useTheme } from '@mui/material';
 
 export default function Pagination({ meta, onChangePage, onChangeLimit }) {
   const theme = useTheme();

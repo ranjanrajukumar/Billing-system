@@ -32,6 +32,15 @@ export default (sequelize) => sequelize.define('Invoice', {
   currency: { type: DataTypes.STRING(3), defaultValue: 'INR' },
   exchangeRate: { type: DataTypes.DECIMAL(12, 4), defaultValue: 1.0000 },
   subscriptionId: { type: unsignedInteger(sequelize) },
+
+  // The sales order this bill was raised against, when it came from one.
+  //
+  // This is the seam between billing and the warehouse: it is what lets a bill
+  // know whether the goods have already left the building at dispatch — in
+  // which case the invoice is a financial document and must not move stock a
+  // second time — or are still on the shelf under a reservation this bill is
+  // the one to consume. Null for a counter sale, which has no order behind it.
+  salesOrderId: { type: unsignedInteger(sequelize) },
   emailStatus: { ...enumType(sequelize, ['Pending', 'Sent', 'Failed']), defaultValue: 'Pending' },
 
   // Document references printed on a bill of supply.
@@ -75,5 +84,5 @@ export default (sequelize) => sequelize.define('Invoice', {
   // the duplicate-index sweep happened to remove it first — so the process
   // crashes on some starts and not others, with a "Duplicate key name" error
   // that points at the symptom rather than the two declarations causing it.
-  indexes: [{ fields: ['invoice_date'] }]
+  indexes: [{ fields: ['invoice_date'] }, { fields: ['sales_order_id'] }]
 });

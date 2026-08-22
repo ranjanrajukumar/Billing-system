@@ -6,14 +6,14 @@ import {
   PurchaseOrderItem, sequelize, StockTransfer, StockTransferItem, Supplier,
   Unit, User,
 } from '../models/index.js';
-import { postStockTransaction, setBranchStock } from '../services/stock.service.js';
-import { postPurchase, postSale, seedChartOfAccounts } from '../services/accounting.service.js';
-import { recordCashMovement } from '../services/cash.service.js';
-import { allocate, consume } from '../services/batch.service.js';
+import { postStockTransaction, setBranchStock } from '../modules/inventory/stock.service.js';
+import { postPurchase, postSale, seedChartOfAccounts } from '../modules/accounting/accounting.service.js';
+import { recordCashMovement } from '../modules/accounting/cash.service.js';
+import { allocate, consume } from '../modules/inventory/batch.service.js';
 import { calculateInvoice } from '../utils/invoiceMath.js';
 import { unitSnapshot, priceFor } from '../utils/units.js';
-import { withoutAudit } from '../services/audit.service.js';
-import { invalidateConfig } from '../services/config.service.js';
+import { withoutAudit } from '../modules/platform/audit.service.js';
+import { invalidateConfig } from '../modules/platform/config.service.js';
 
 /**
  * A worked example: a seed and agri-input shop.
@@ -29,7 +29,7 @@ import { invalidateConfig } from '../services/config.service.js';
  * be told apart from real trading and removed deliberately.
  */
 
-export const DEMO_TAG = '[demo]';
+const DEMO_TAG = '[demo]';
 
 // ---------------------------------------------------------------------------
 // The shop

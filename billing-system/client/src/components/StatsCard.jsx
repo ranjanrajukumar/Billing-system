@@ -1,10 +1,33 @@
-import { alpha, Box, Stack, Typography, useTheme } from '@mui/material';
-import { tokens } from '../utils/theme.js';
+import { alpha, Box, Typography, useTheme } from '@mui/material';
 
 /**
- * StatsCard — premium gradient-icon metric card
- * Props: title, value, detail, icon, gradient (key from tokens.gradients), trend
+ * A summary tile — the strip of figures that sits above a table.
+ *
+ * Laid out to the Zentory proportions: a 38px tinted icon square on the left,
+ * the figure and its label stacked beside it, 16px of horizontal padding and
+ * 12px of vertical. That comes out around 62px tall against the 120px this card
+ * used to be, which is the whole point — six of these used to push the table
+ * itself below the fold, and the table is what people came to read. The figures
+ * are context; they should cost a glance, not half the screen.
+ *
+ * The icon carries the colour now, rather than a gradient wash across the tile
+ * and a coloured bar along the top. On a row of six, six gradients compete with
+ * each other and with the data underneath; a small tinted square says the same
+ * thing quietly.
  */
+
+/** Maps the existing `gradient` prop onto a palette colour. */
+const TONES = {
+  primary: 'primary',
+  secondary: 'warning',
+  success: 'success',
+  warning: 'warning',
+  error: 'error',
+  info: 'info',
+  dark: 'primary',
+  hero: 'primary',
+};
+
 export default function StatsCard({
   title,
   value,
@@ -13,104 +36,92 @@ export default function StatsCard({
   gradient = 'primary',
   trend,
   onClick,
+  active = false,
 }) {
   const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
-  const gradientBg = tokens.gradients[gradient] || tokens.gradients.primary;
+  const tone = theme.palette[TONES[gradient] || 'primary'];
+  const text = String(value ?? '');
+
+  // Long figures step down rather than overflow — "₹1,24,53,900" must still fit
+  // a tile sized for "532".
+  const valueSize = text.length > 9 ? '1rem' : text.length > 7 ? '1.125rem' : '1.25rem';
 
   return (
     <Box
-      className="animate-fadeInUp card-hover"
+      className="animate-fadeInUp"
       onClick={onClick}
+      // `detail` predates this layout and is usually a whole sentence
+      // ("Units across branches"). Rendering it as a third line would undo the
+      // height saving that is the point of the change, so the forty-odd pages
+      // that pass one keep it as the tile's tooltip rather than losing it.
+      title={detail || undefined}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (event) => { if (event.key === 'Enter' || event.key === ' ') onClick(); } : undefined}
       sx={{
-        borderRadius: 3,
-        p: 2.5,
-        background: isDark ? alpha('#ffffff', 0.04) : '#ffffff',
-        border: `1px solid ${isDark ? alpha('#ffffff', 0.07) : alpha('#000000', 0.06)}`,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        px: 2,
+        py: 1.5,
+        minWidth: 150,
+        flex: 1,
+        borderRadius: 1.25,
+        bgcolor: active ? alpha(tone.main, 0.08) : 'background.paper',
+        border: '1px solid',
+        borderColor: active ? tone.main : 'divider',
+        boxShadow: active ? `0 0 0 2px ${alpha(tone.main, 0.19)}` : 'none',
         cursor: onClick ? 'pointer' : 'default',
-        position: 'relative',
-        overflow: 'hidden',
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 3,
-          background: gradientBg,
-          opacity: 0.7,
-        },
+        transition: 'box-shadow 120ms, border-color 120ms',
+        '&:hover': onClick ? { boxShadow: theme.shadows[1] } : undefined,
       }}
     >
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography
-            variant="caption"
-            sx={{
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.07em',
-              color: 'text.secondary',
-              fontSize: '0.7rem',
-              display: 'block',
-              mb: 0.75,
-            }}
-          >
-            {title}
-          </Typography>
-          <Typography
-            variant="h4"
-            sx={{ fontWeight: 800, lineHeight: 1.1, mb: 0.5, letterSpacing: '-0.02em', fontSize: { xs: '1.5rem', sm: '1.75rem' } }}
-          >
-            {value}
-          </Typography>
-          {detail && (
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.78rem' }}>
-              {detail}
-            </Typography>
-          )}
-          {trend !== undefined && (
-            <Typography
-              variant="caption"
-              sx={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 0.25,
-                mt: 0.5,
-                color: trend >= 0 ? 'success.main' : 'error.main',
-                fontWeight: 700,
-              }}
-            >
-              {trend >= 0 ? '↑' : '↓'} {Math.abs(trend)}%
-            </Typography>
-          )}
+      {icon && (
+        <Box
+          sx={{
+            width: 38,
+            height: 38,
+            flexShrink: 0,
+            borderRadius: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: alpha(tone.main, 0.12),
+            color: tone.main,
+            '& .MuiSvgIcon-root': { fontSize: 20 },
+          }}
+        >
+          {icon}
         </Box>
-        {icon && (
-          <Box
-            sx={{
-              width: 48,
-              height: 48,
-              borderRadius: 2.5,
-              background: gradientBg,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#fff',
-              flexShrink: 0,
-              ml: 1.5,
-              boxShadow: `0 6px 20px ${alpha(
-                gradient === 'primary' ? '#4f46e5' :
-                gradient === 'success' ? '#10b981' :
-                gradient === 'warning' ? '#f59e0b' :
-                gradient === 'error' ? '#ef4444' : '#4f46e5',
-                0.35
-              )}`,
-            }}
-          >
-            {icon}
-          </Box>
-        )}
-      </Stack>
+      )}
+
+      <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+        <Typography
+          title={text}
+          sx={{ fontSize: valueSize, fontWeight: 800, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+        >
+          {value}
+        </Typography>
+
+        <Typography
+          title={title}
+          sx={{
+            fontSize: '0.72rem', fontWeight: 500, color: 'text.secondary',
+            lineHeight: 1.2, mt: 0.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}
+        >
+          {title}
+          {trend !== undefined && (
+            <Box
+              component="span"
+              sx={{ ml: 0.75, fontWeight: 700, color: trend >= 0 ? 'success.main' : 'error.main' }}
+            >
+              {trend >= 0 ? '↑' : '↓'}{Math.abs(trend)}%
+            </Box>
+          )}
+        </Typography>
+
+      </Box>
     </Box>
   );
 }

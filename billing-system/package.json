@@ -4,7 +4,6 @@
   "private": true,
   "scripts": {
     "install:all": "npm install --prefix server && npm install --prefix client",
-    "dev": "node scripts/dev.mjs",
     "server": "npm run dev --prefix server",
     "client": "npm run dev --prefix client",
     "dev:server": "npm run dev --prefix server",

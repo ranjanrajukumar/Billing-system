@@ -34,7 +34,7 @@ function isProduction() {
  * Collects every problem before reporting, so a misconfigured deployment is
  * fixed in one pass rather than one restart per missing variable.
  */
-export function checkEnvironment() {
+function checkEnvironment() {
   const errors = [];
   const warnings = [];
 

@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { sequelize, User, Branch, WarehouseBin, Supplier, Customer, Product, Category, PurchaseOrder, PurchaseOrderItem, InboundAppointment, Grn, GrnItem, QcInspection, SalesOrder, SalesOrderItem, PickWave, Shipment, Invoice, SalesReturn, SalesReturnItem, RepairOrder } from './src/models/index.js';
-import { postStockTransaction } from './src/services/stock.service.js';
+import { postStockTransaction } from './src/modules/inventory/stock.service.js';
 
 async function seed() {
   console.log('Connecting to database...');

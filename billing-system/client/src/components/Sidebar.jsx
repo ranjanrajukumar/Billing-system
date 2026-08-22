@@ -38,11 +38,18 @@ import TuneIcon from '@mui/icons-material/Tune';
 import UndoIcon from '@mui/icons-material/Undo';
 import WarehouseIcon from '@mui/icons-material/Warehouse';
 import BuildIcon from '@mui/icons-material/Build';
+import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import OutboxIcon from '@mui/icons-material/Outbox';
+import AssignmentReturnIcon from '@mui/icons-material/AssignmentReturn';
 import {
   alpha,
   Box,
+  Collapse,
   Divider,
   Drawer,
+  IconButton,
   List,
   ListItemButton,
   ListItemIcon,
@@ -50,7 +57,8 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
-import { NavLink } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
 import AutorenewIcon from '@mui/icons-material/Autorenew';
@@ -85,6 +93,19 @@ const ICONS = {
   purchaseOrders: <AssignmentIcon fontSize="small" />,
   grn: <MoveToInboxIcon fontSize="small" />,
   srv: <ReceiptIcon fontSize="small" />,
+  stockIssues: <OutboxIcon fontSize="small" />,
+  stockIssueReturns: <AssignmentReturnIcon fontSize="small" />,
+
+  // The process parents. One icon for all three on purpose: it is the mark
+  // that says "this is a flow, not a screen", and three different pictures
+  // would make them read as three unrelated things.
+  orderToCash: <AccountTreeOutlinedIcon fontSize="small" />,
+  procureToStock: <AccountTreeOutlinedIcon fontSize="small" />,
+  issueToReturn: <AccountTreeOutlinedIcon fontSize="small" />,
+  planToReplenish: <AccountTreeOutlinedIcon fontSize="small" />,
+  pickToShip: <AccountTreeOutlinedIcon fontSize="small" />,
+  countToCorrect: <AccountTreeOutlinedIcon fontSize="small" />,
+  recordToReport: <AccountTreeOutlinedIcon fontSize="small" />,
   purchases: <ShoppingBasketIcon fontSize="small" />,
   purchaseReturns: <UndoIcon fontSize="small" />,
   suppliers: <StorefrontIcon fontSize="small" />,
@@ -129,7 +150,7 @@ const ICONS = {
 
 const FALLBACK_ICON = <ListAltIcon fontSize="small" />;
 
-function NavItem({ label, path, icon, onClose }) {
+function NavItem({ label, path, icon, onClose, nested = false, trailing = null }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
@@ -141,8 +162,11 @@ function NavItem({ label, path, icon, onClose }) {
       onClick={onClose}
       sx={{
         borderRadius: '10px',
+        // Nested items sit in from the parent and lose a little height, so a
+        // glance down the rail reads the hierarchy without needing the labels.
         px: 1.5,
-        py: 0.9,
+        pl: nested ? 3.25 : 1.5,
+        py: nested ? 0.65 : 0.9,
         mb: 0.25,
         color: 'text.secondary',
         '&.active': {
@@ -173,12 +197,92 @@ function NavItem({ label, path, icon, onClose }) {
         position: 'relative',
       }}
     >
-      <ListItemIcon sx={{ color: 'inherit', minWidth: 34 }}>{icon}</ListItemIcon>
+      <ListItemIcon sx={{ color: 'inherit', minWidth: nested ? 28 : 34 }}>{icon}</ListItemIcon>
       <ListItemText
         primary={label}
-        primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
+        primaryTypographyProps={{
+          fontSize: nested ? '0.82rem' : '0.875rem',
+          fontWeight: nested ? 400 : 500,
+        }}
       />
+      {trailing}
     </ListItemButton>
+  );
+}
+
+/**
+ * A process and the documents inside it.
+ *
+ * The row does two jobs, and they are deliberately separate targets: the label
+ * opens the process overview, the chevron expands the documents. Collapsing
+ * them into one control would force a choice between "clicking a flow shows
+ * you where the work is" and "clicking a flow lists its screens", and both are
+ * things people want from the same row.
+ *
+ * It opens itself when the current page is inside it, so arriving at an invoice
+ * from a link never leaves the sidebar disagreeing with the content.
+ */
+function NavProcess({ item, icon, onClose }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+  const { pathname } = useLocation();
+
+  const holdsCurrentPage = item.children.some((child) => pathname === child.path);
+  const [open, setOpen] = useState(holdsCurrentPage);
+
+  // Only ever forced open, never forced shut: a section the user collapsed by
+  // hand should stay collapsed while they move around inside it.
+  useEffect(() => {
+    if (holdsCurrentPage) setOpen(true);
+  }, [holdsCurrentPage]);
+
+  return (
+    <>
+      <NavItem
+        label={item.label}
+        path={item.path}
+        icon={icon}
+        onClose={onClose}
+        trailing={(
+          <IconButton
+            size="small"
+            aria-label={open ? `Collapse ${item.label}` : `Expand ${item.label}`}
+            onClick={(event) => {
+              // The chevron sits inside the link, so without this the click
+              // both toggles and navigates.
+              event.preventDefault();
+              event.stopPropagation();
+              setOpen((was) => !was);
+            }}
+            sx={{ color: 'inherit', mr: 0.5, p: 0.25 }}
+          >
+            {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+          </IconButton>
+        )}
+      />
+      <Collapse in={open} timeout="auto" unmountOnExit>
+        <Box
+          sx={{
+            ml: 2.4,
+            pl: 0.6,
+            borderLeft: `1px solid ${isDark ? alpha('#ffffff', 0.09) : alpha(theme.palette.primary.main, 0.14)}`,
+          }}
+        >
+          <List disablePadding>
+            {item.children.map((child) => (
+              <NavItem
+                key={child.key}
+                nested
+                label={child.label}
+                path={child.path}
+                icon={ICONS[child.key] || FALLBACK_ICON}
+                onClose={onClose}
+              />
+            ))}
+          </List>
+        </Box>
+      </Collapse>
+    </>
   );
 }
 
@@ -263,7 +367,14 @@ function SidebarContent({ onClose }) {
               {group.group}
             </Typography>
             <List disablePadding>
-              {group.items.map((item) => (
+              {group.items.map((item) => (item.children ? (
+                <NavProcess
+                  key={item.key}
+                  item={item}
+                  icon={ICONS[item.key] || FALLBACK_ICON}
+                  onClose={onClose}
+                />
+              ) : (
                 <NavItem
                   key={item.key}
                   label={item.label}
@@ -271,7 +382,7 @@ function SidebarContent({ onClose }) {
                   icon={ICONS[item.key] || FALLBACK_ICON}
                   onClose={onClose}
                 />
-              ))}
+              )))}
             </List>
             {index < groups.length - 1 && (
               <Divider sx={{ mt: 1.5, opacity: 0.5 }} />

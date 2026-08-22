@@ -1,4 +1,4 @@
-import { claim, complete, fail, storedResponse } from '../services/idempotency.service.js';
+import { claim, complete, fail, storedResponse } from '../modules/platform/idempotency.service.js';
 
 /**
  * Makes a route safe to call twice.

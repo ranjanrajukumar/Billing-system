@@ -1,4 +1,4 @@
-import { Chip } from '@mui/material';
+import { alpha, Chip } from '@mui/material';
 
 /**
  * One place that decides what a document status looks like.
@@ -25,6 +25,8 @@ const COLOURS = {
   ReadyToShip: 'info',
   Sealed: 'info',
   Dispatched: 'info',
+  // Material is out of the store and somebody still has it.
+  Issued: 'info',
   InTransit: 'info',
   'Partially Received': 'info',
   PartiallyReceived: 'info',
@@ -40,6 +42,8 @@ const COLOURS = {
   Closed: 'success',
   Delivered: 'success',
   'In Stock': 'success',
+  // The condition a returned item came back in.
+  Good: 'success',
 
   // Stopped.
   Rejected: 'error',
@@ -49,15 +53,39 @@ const COLOURS = {
   Scrapped: 'error',
 };
 
+/**
+ * A status pill.
+ *
+ * Uppercase text on a tinted background rather than a solid fill, matching the
+ * Zentory tables: a column of solid chips draws the eye harder than the data
+ * beside it, and status is context, not the headline. The tint keeps the colour
+ * coding readable while letting the row's actual content stay dominant.
+ */
 export default function StatusChip({ status, size = 'small' }) {
   if (!status) return null;
+
+  const colour = COLOURS[status] || 'default';
+  const label = String(status).replace(/([a-z])([A-Z])/g, '$1 $2').toUpperCase();
+
   return (
     <Chip
-      label={String(status).replace(/([a-z])([A-Z])/g, '$1 $2')}
+      label={label}
       size={size}
-      color={COLOURS[status] || 'default'}
-      variant={COLOURS[status] ? 'filled' : 'outlined'}
-      sx={{ fontWeight: 700, fontSize: '0.7rem' }}
+      sx={(theme) => {
+        const palette = colour === 'default' ? null : theme.palette[colour];
+        return {
+          fontWeight: 800,
+          fontSize: '0.68rem',
+          letterSpacing: '0.03em',
+          height: 22,
+          borderRadius: 0.5,
+          border: '1px solid',
+          borderColor: palette ? alpha(palette.main, 0.35) : 'divider',
+          color: palette ? palette.main : 'text.secondary',
+          bgcolor: palette ? alpha(palette.main, 0.12) : 'action.hover',
+          '& .MuiChip-label': { px: 0.9 },
+        };
+      }}
     />
   );
 }

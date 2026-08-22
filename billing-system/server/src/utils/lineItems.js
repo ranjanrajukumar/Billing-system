@@ -1,4 +1,4 @@
-export function lineTotal({ quantity, rate, discount, gstPercent }) {
+function lineTotal({ quantity, rate, discount, gstPercent }) {
   const taxable = Math.max(Number(quantity || 0) * Number(rate || 0) - Number(discount || 0), 0);
   return taxable + taxable * (Number(gstPercent || 0) / 100);
 }

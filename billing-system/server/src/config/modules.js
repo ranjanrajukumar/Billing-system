@@ -58,6 +58,11 @@ export const MODULES = [
   },
   { key: 'stockAdjustments', label: 'Stock Adjustments & Counting', mode: 'Advanced', menus: ['stockAdjustments', 'stockCounts'] },
   { key: 'purchaseOrders', label: 'Purchase Orders, GRN & SRV', mode: 'Advanced', menus: ['purchaseOrders', 'grn', 'srv'] },
+  // Issuing material out of the store and getting the unused part back. One
+  // module, not two: an issue nobody can return against is a stock adjustment,
+  // and a return with no issue behind it is a receipt — switching on half of
+  // this would leave a screen that cannot answer its own question.
+  { key: 'stockIssues', label: 'Store Issue & Material Return', mode: 'Advanced', menus: ['stockIssues', 'stockIssueReturns'] },
   { key: 'purchaseReturns', label: 'Purchase Returns', mode: 'Advanced', menus: ['purchaseReturns'] },
   { key: 'serials', label: 'Serial Number Tracking', mode: 'Advanced', menus: ['serials'] },
   { key: 'gatepass', label: 'Gatepass', mode: 'Advanced', menus: ['gatepasses'] },
@@ -69,6 +74,20 @@ export const MODULES = [
   // Advanced mode: most warehouses hold only their own stock, and a business
   // that owns everything it stores should never be asked whose goods these are.
   { key: 'thirdParty', label: 'Third-Party (3PL) Stock', mode: 'Advanced', default: false, menus: ['stockOwners'] },
+
+  // Hardware on the floor that talks to us without a person watching. One
+  // module, not three: a handheld, a fixed RFID reader and a sensor gateway
+  // are the same device register, the same heartbeat and the same idempotent
+  // write path, and a site that switches on scanning and not the register
+  // would have scanners nobody can name. Off by default even in Advanced —
+  // most businesses run this on a laptop and a till, and asking them whose
+  // gateway is offline is asking about a building they do not have.
+  { key: 'devices', label: 'Scanners, Sensors & RFID', mode: 'Advanced', default: false, menus: ['devices', 'sensors', 'rfidTags'] },
+
+  // Sending this company's trading activity to an address somebody typed.
+  // Off by default for the same reason it is Admin-only in the router: it is
+  // an ownership decision rather than an operational one.
+  { key: 'webhooks', label: 'API & Webhooks', mode: 'Advanced', default: false, menus: ['webhooks'] },
 ];
 
 export const MODULE_BY_KEY = Object.fromEntries(MODULES.map((m) => [m.key, m]));

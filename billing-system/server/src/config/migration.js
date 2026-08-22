@@ -8,13 +8,13 @@ import {
 } from '../models/index.js';
 import { DEFAULT_TEMPLATES } from './defaultTemplates.js';
 import { assertSupportedAuth, getConnectionOptions, getDbSettings } from './dbSettings.js';
-import { withoutAudit } from '../services/audit.service.js';
+import { withoutAudit } from '../modules/platform/audit.service.js';
 
 function quoteSqlServerName(name) {
   return `[${String(name).replaceAll(']', ']]')}]`;
 }
 
-export async function ensureDatabase() {
+async function ensureDatabase() {
   const settings = getDbSettings();
   const dbName = settings.database;
   const dbDialect = settings.dialect;
@@ -143,7 +143,7 @@ async function ensureEnumValues() {
   }
 }
 
-export async function seedDefaults() {
+async function seedDefaults() {
   const fullPermissions = {
     users: { view: true, create: true, edit: true, delete: true },
     roles: { view: true, create: true, edit: true, delete: true },
@@ -592,7 +592,7 @@ async function migrateStockOwnership() {
 
 /** Points every pre-ownership stock row at the house. */
 async function attributeExistingStockToHouse() {
-  const { ensureHouseOwner } = await import('../services/stockOwner.service.js');
+  const { ensureHouseOwner } = await import('../modules/warehouse/stockOwner.service.js');
   const house = await ensureHouseOwner();
 
   // `IS NULL OR NOT IN (owners)` rather than a plain null check, so a row left
@@ -922,7 +922,7 @@ export async function migrateDatabase() {
     // no use for.
     const company = await Company.findOne();
     if (company?.businessMode === 'Advanced') {
-      const { seedChartOfAccounts } = await import('../services/accounting.service.js');
+      const { seedChartOfAccounts } = await import('../modules/accounting/accounting.service.js');
       await seedChartOfAccounts();
     }
   });

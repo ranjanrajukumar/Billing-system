@@ -1,12 +1,12 @@
 import { Op } from 'sequelize';
 import { Branch, Company } from '../models/index.js';
-import { accessMap, levelAllows, primaryLocationId } from '../services/locationAccess.service.js';
+import { accessMap, levelAllows, primaryLocationId } from '../modules/platform/locationAccess.service.js';
 
 let cached = { branchId: null, multiBranch: null, checkedAt: 0 };
 const CACHE_MS = 30_000;
 
 /** Default branch id and whether multi-branch mode is on, cached briefly. */
-export async function branchSettings() {
+async function branchSettings() {
   if (Date.now() - cached.checkedAt < CACHE_MS && cached.branchId) return cached;
 
   const [company, branch] = await Promise.all([

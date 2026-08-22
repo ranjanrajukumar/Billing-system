@@ -13,6 +13,30 @@ import {
  * transfer's single quantity and a GRN's received/accepted/rejected split
  * without either screen re-implementing add, remove and product selection.
  */
+/**
+ * Whether a cell has been filled in.
+ *
+ * `positive` is how a column says zero will not do. A quantity of zero is a
+ * line nobody meant to add; a rate of zero is a giveaway somebody did mean, so
+ * only the columns that say so are held to it.
+ */
+function hasValue(value, col) {
+  if (value === undefined || value === null || String(value).trim() === '') return false;
+  return !col.positive || Number(value) > 0;
+}
+
+/**
+ * Which lines are still incomplete, given the columns that were declared
+ * required. Exported so a page can refuse to save without re-deriving the rule
+ * its own way — the grid owns what "a finished line" means.
+ */
+export function incompleteLines(lines = [], columns = []) {
+  const needed = columns.filter((col) => col.required);
+  return lines.filter((line) => (
+    !line.productId || needed.some((col) => !hasValue(line[col.key], col))
+  ));
+}
+
 export default function DocumentLines({
   lines,
   onChange,
@@ -22,6 +46,9 @@ export default function DocumentLines({
   emptyLine = {},
   readOnly = false,
   footer = null,
+  // Set once the user has tried to save. Before that a freshly added blank row
+  // is not a mistake, it is a row waiting to be typed into.
+  showErrors = false,
 }) {
   const update = (index, patch) => {
     const next = [...lines];
@@ -74,6 +101,11 @@ export default function DocumentLines({
                   ) : (
                     <TextField
                       select fullWidth size="small" value={line.productId || ''}
+                      // A line without a product is not a line. Marked here
+                      // rather than at each call site so every document that
+                      // uses this grid says it the same way.
+                      required
+                      error={showErrors && !line.productId}
                       onChange={(e) => chooseProduct(index, e.target.value)}
                     >
                       <MenuItem value=""><em>Select product</em></MenuItem>
@@ -97,6 +129,8 @@ export default function DocumentLines({
                           size="small"
                           type={col.type || 'number'}
                           value={line[col.key] ?? ''}
+                          required={Boolean(col.required)}
+                          error={Boolean(col.required) && showErrors && !hasValue(line[col.key], col)}
                           onChange={(e) => update(index, { [col.key]: e.target.value })}
                           inputProps={{ style: { textAlign: col.align === 'left' ? 'left' : 'right' }, ...col.inputProps }}
                           sx={{ width: col.width || 110 }}

@@ -1,7 +1,7 @@
 // Pure calculator state machine, kept out of the component so the arithmetic
 // can be tested directly.
 
-export const MAX_DIGITS = 14;
+const MAX_DIGITS = 14;
 
 export const OPERATORS = {
   '÷': (a, b) => a / b,
@@ -13,7 +13,7 @@ export const OPERATORS = {
 export const initialState = { display: '0', pending: null, replace: true, history: '' };
 
 /** Formats without pretending to more precision than a double actually has. */
-export function trim(value) {
+function trim(value) {
   if (!Number.isFinite(value)) return 'Error';
   return String(Number(value.toPrecision(12)));
 }

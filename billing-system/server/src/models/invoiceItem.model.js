@@ -3,6 +3,20 @@ import { unsignedInteger } from './types.js';
 
 export default (sequelize) => sequelize.define('InvoiceItem', {
   id: { type: unsignedInteger(sequelize), autoIncrement: true, primaryKey: true },
+
+  /**
+   * Which balance this line sold from.
+   *
+   * `0` is the product's loose stock, which is what every line was until packs
+   * became sellable. A variant id addresses one packaged size, and that size
+   * keeps its own balance in `branch_stock` — a hundred 100g pouches is not the
+   * same thing as 10 kg loose, and selling one must not decrement the other.
+   *
+   * Without this column a pack sale had nowhere to record which pack, so it
+   * silently came off the loose pile: the shelf count for the pouches never
+   * moved and the loose stock went down by a quantity nobody took.
+   */
+  variantId: { type: unsignedInteger(sequelize), allowNull: false, defaultValue: 0 },
   // Printed on a bill of supply alongside the quantity.
   packing: { type: DataTypes.STRING(40) },
   um: { type: DataTypes.STRING(20) },

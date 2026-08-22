@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { User, Role } from '../models/index.js';
 import { setContextUser } from '../utils/requestContext.js';
 import { navigationFor, visibleMenus } from '../config/menu.js';
-import { getConfig } from '../services/config.service.js';
+import { getConfig } from '../modules/platform/config.service.js';
 
 export async function authenticate(req, res, next) {
   try {

@@ -1,7 +1,7 @@
 import SearchIcon from '@mui/icons-material/Search';
 import CloseIcon from '@mui/icons-material/Close';
 import { alpha, IconButton, InputAdornment, TextField, useTheme } from '@mui/material';
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 
 export default function SearchBox({ value, onChange, placeholder = 'Search…' }) {
   const theme = useTheme();

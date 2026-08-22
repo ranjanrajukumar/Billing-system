@@ -21,7 +21,7 @@ import { date as formatDate } from '../utils/formatters.js';
  * cannot quietly keep filtering to yesterday's window.
  */
 
-export const PERIOD_OPTIONS = [
+const PERIOD_OPTIONS = [
   { key: 'today', label: 'Today' },
   { key: 'thisMonth', label: 'This month' },
   { key: 'lastMonth', label: 'Last month' },
@@ -236,7 +236,7 @@ export function periodLabel(value = {}) {
 }
 
 /** Strips the filter down to the query parameters the API expects. */
-export function periodParams(value = {}) {
+function periodParams(value = {}) {
   if (value.from || value.to) {
     return { from: value.from || undefined, to: value.to || undefined };
   }

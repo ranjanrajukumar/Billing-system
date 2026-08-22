@@ -36,8 +36,17 @@ export default function AppLayout({ mode, onToggleMode }) {
         <Box
           sx={{
             flexGrow: 1,
-            px: { xs: 1.5, sm: 3 },
-            py: { xs: 2, sm: 3 },
+            // A column, so a page that asks to fill the height actually can:
+            // `flex: 1` on a child only means anything inside a flex parent.
+            // Pages that do not ask are unaffected — a single stretched child
+            // in a column is laid out exactly as a block child was.
+            display: 'flex',
+            flexDirection: 'column',
+            // The page gutter, matching Zentory's px-4. It used to be 24px,
+            // which on a wide table was a column of data you had to scroll to
+            // reach.
+            px: { xs: 1.25, sm: 2 },
+            py: { xs: 1.25, sm: 1.5 },
             // Extra bottom padding on mobile for bottom nav + safe area
             pb: { xs: 'calc(88px + env(safe-area-inset-bottom, 0px))', sm: 3 },
             maxWidth: '100%',

@@ -10,6 +10,12 @@ export default (sequelize) => sequelize.define('PurchaseItem', {
   batchNumber: { type: DataTypes.STRING(60), allowNull: true },
   germinationPercent: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
   expiryDate: { type: DataTypes.DATEONLY, allowNull: true },
+
+  // Which balance this line moves: 0 is the product's loose stock, a variant
+  // id one packaged size. A pack returned or received against the loose pile
+  // credits goods nobody has, and the two balances drift apart silently.
+  variantId: { type: unsignedInteger(sequelize), allowNull: false, defaultValue: 0 },
+
   quantity: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   rate: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
   gstPercent: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 0 },

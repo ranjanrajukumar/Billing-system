@@ -24,6 +24,7 @@ export const EXCEPTION_TYPES = [
   'STOCK_MISMATCH',  // counted quantity disagrees with the system
   'EXPIRED_BATCH',   // past its date and still on the shelf
   'MISSING_SCAN',    // a step was completed without the scan that proves it
+  'ENVIRONMENT_BREACH', // a chiller, freezer or curing room left its safe range
 ];
 
 export const EXCEPTION_STATUSES = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'REJECTED'];

@@ -1,5 +1,5 @@
 import { DataTypes } from 'sequelize';
-import { enumType, unsignedInteger } from './types.js';
+import { unsignedInteger } from './types.js';
 
 export default (sequelize) => sequelize.define('Role', {
   id: { type: unsignedInteger(sequelize), autoIncrement: true, primaryKey: true },

@@ -5,7 +5,7 @@
  *
  * A page missing from this map is open to every signed-in role.
  */
-export const PAGE_ROLES = {
+const PAGE_ROLES = {
   '/users': ['Admin'],
   '/audit-logs': ['Admin'],
   '/backups': ['Admin'],
@@ -14,7 +14,7 @@ export const PAGE_ROLES = {
 };
 
 /** Roles allowed to perform an action, for hiding buttons rather than pages. */
-export const ACTION_ROLES = {
+const ACTION_ROLES = {
   saveSettings: ['Admin', 'Accountant'],
   manageBranches: ['Admin', 'Accountant'],
   deleteBranch: ['Admin'],
@@ -31,7 +31,7 @@ export const ACTION_ROLES = {
  * Menu rights configured per role, keyed by page path. The server sends the
  * allowed keys with the signed-in user; this maps them back to routes.
  */
-export const MENU_KEY_BY_PATH = {
+const MENU_KEY_BY_PATH = {
   '/': 'dashboard',
   '/quick-bill': 'quickBill',
   '/invoices': 'invoices',
@@ -114,7 +114,7 @@ export function canOpen(path, role, menus = null) {
 }
 
 /** Whether a module is switched on for this company. */
-export function hasModule(moduleKey, modules) {
+function hasModule(moduleKey, modules) {
   if (!Array.isArray(modules)) return true;
   return modules.includes(moduleKey);
 }

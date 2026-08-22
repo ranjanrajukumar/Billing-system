@@ -40,6 +40,14 @@ import IdempotencyKeyModel from './idempotencyKey.model.js';
 import WarehouseExceptionModel from './warehouseException.model.js';
 import WarehouseTaskModel from './warehouseTask.model.js';
 import WarehouseStorageSnapshotModel from './warehouseStorageSnapshot.model.js';
+// Connected hardware and the outbound side of the API. One device table serves
+// handhelds, RFID readers and sensor gateways alike — see device.model.js.
+import DeviceModel from './device.model.js';
+import SensorReadingModel from './sensorReading.model.js';
+import SensorThresholdModel from './sensorThreshold.model.js';
+import RfidTagModel from './rfidTag.model.js';
+import WebhookEndpointModel from './webhookEndpoint.model.js';
+import WebhookDeliveryModel from './webhookDelivery.model.js';
 import ProductUomModel from './productUom.model.js';
 import ProductVariantModel from './productVariant.model.js';
 import ProductContainerModel from './productContainer.model.js';
@@ -63,6 +71,11 @@ import GrnModel from './grn.model.js';
 import GrnItemModel from './grnItem.model.js';
 import SrvModel from './srv.model.js';
 import SrvItemModel from './srvItem.model.js';
+import DepartmentModel from './department.model.js';
+import StockIssueModel from './stockIssue.model.js';
+import StockIssueItemModel from './stockIssueItem.model.js';
+import StockIssueReturnModel from './stockIssueReturn.model.js';
+import StockIssueReturnItemModel from './stockIssueReturnItem.model.js';
 import PurchaseReturnModel from './purchaseReturn.model.js';
 import PurchaseReturnItemModel from './purchaseReturnItem.model.js';
 import ProductSerialModel from './productSerial.model.js';
@@ -88,7 +101,7 @@ import QcInspectionModel from './qcInspection.model.js';
 import PickWaveModel from './pickWave.model.js';
 import ShipmentModel from './shipment.model.js';
 import RepairOrderModel from './repairOrder.model.js';
-import { installAuditHooks } from '../services/audit.service.js';
+import { installAuditHooks } from '../modules/platform/audit.service.js';
 import SubscriptionModel from './subscription.model.js';
 
 export const Role = RoleModel(sequelize);
@@ -131,6 +144,12 @@ export const IdempotencyKey = IdempotencyKeyModel(sequelize);
 export const WarehouseException = WarehouseExceptionModel(sequelize);
 export const WarehouseTask = WarehouseTaskModel(sequelize);
 export const WarehouseStorageSnapshot = WarehouseStorageSnapshotModel(sequelize);
+export const Device = DeviceModel(sequelize);
+export const SensorReading = SensorReadingModel(sequelize);
+export const SensorThreshold = SensorThresholdModel(sequelize);
+export const RfidTag = RfidTagModel(sequelize);
+export const WebhookEndpoint = WebhookEndpointModel(sequelize);
+export const WebhookDelivery = WebhookDeliveryModel(sequelize);
 export const ProductUom = ProductUomModel(sequelize);
 export const ProductVariant = ProductVariantModel(sequelize);
 export const ProductContainer = ProductContainerModel(sequelize);
@@ -155,6 +174,11 @@ export const Grn = GrnModel(sequelize);
 export const GrnItem = GrnItemModel(sequelize);
 export const Srv = SrvModel(sequelize);
 export const SrvItem = SrvItemModel(sequelize);
+export const Department = DepartmentModel(sequelize);
+export const StockIssue = StockIssueModel(sequelize);
+export const StockIssueItem = StockIssueItemModel(sequelize);
+export const StockIssueReturn = StockIssueReturnModel(sequelize);
+export const StockIssueReturnItem = StockIssueReturnItemModel(sequelize);
 export const PurchaseReturn = PurchaseReturnModel(sequelize);
 export const PurchaseReturnItem = PurchaseReturnItemModel(sequelize);
 export const ProductSerial = ProductSerialModel(sequelize);
@@ -233,6 +257,14 @@ SalesOrderItem.belongsTo(SalesOrder, { foreignKey: 'orderId' });
 Product.hasMany(SalesOrderItem, { foreignKey: 'productId' });
 SalesOrderItem.belongsTo(Product, { foreignKey: 'productId' });
 
+// The billing-to-warehouse seam. An order can be billed more than once over
+// its life — a part shipment now and the rest later — so this is hasMany
+// rather than hasOne, and "has this order been invoiced" is answered by
+// looking at the invoices, never by a flag on the order that somebody has to
+// remember to set.
+SalesOrder.hasMany(Invoice, { foreignKey: 'salesOrderId' });
+Invoice.belongsTo(SalesOrder, { foreignKey: 'salesOrderId' });
+
 Customer.hasMany(Quotation, { foreignKey: 'customerId' });
 Quotation.belongsTo(Customer, { foreignKey: 'customerId' });
 User.hasMany(Quotation, { foreignKey: 'createdBy' });
@@ -295,6 +327,31 @@ WarehouseTask.belongsTo(User, { foreignKey: 'assignedUserId', as: 'assignedTo' }
 WarehouseStorageSnapshot.belongsTo(Branch, { foreignKey: 'branchId' });
 WarehouseStorageSnapshot.belongsTo(Product, { foreignKey: 'productId' });
 WarehouseStorageSnapshot.belongsTo(StockOwner, { foreignKey: 'ownerId' });
+
+// ---- Connected devices ----
+Device.belongsTo(Branch, { foreignKey: 'branchId' });
+Device.belongsTo(WarehouseBin, { foreignKey: 'binId' });
+
+SensorReading.belongsTo(Device, { foreignKey: 'deviceId' });
+SensorReading.belongsTo(Branch, { foreignKey: 'branchId' });
+SensorReading.belongsTo(WarehouseBin, { foreignKey: 'binId' });
+SensorReading.belongsTo(SensorThreshold, { foreignKey: 'thresholdId' });
+SensorReading.belongsTo(WarehouseException, { foreignKey: 'exceptionId' });
+
+SensorThreshold.belongsTo(Branch, { foreignKey: 'branchId' });
+SensorThreshold.belongsTo(WarehouseBin, { foreignKey: 'binId' });
+
+RfidTag.belongsTo(Product, { foreignKey: 'productId' });
+RfidTag.belongsTo(ProductBatch, { foreignKey: 'batchId' });
+RfidTag.belongsTo(StockOwner, { foreignKey: 'ownerId' });
+RfidTag.belongsTo(Branch, { foreignKey: 'branchId' });
+RfidTag.belongsTo(WarehouseBin, { foreignKey: 'lastSeenBinId', as: 'lastSeenBin' });
+RfidTag.belongsTo(Device, { foreignKey: 'lastSeenDeviceId', as: 'lastSeenDevice' });
+
+// A delivery belongs to the endpoint it is aimed at; the queue is read
+// endpoint-first on the health screen and status-first by the sweeper.
+WebhookDelivery.belongsTo(WebhookEndpoint, { foreignKey: 'endpointId' });
+WebhookEndpoint.hasMany(WebhookDelivery, { foreignKey: 'endpointId' });
 
 // ---- Units, variants and containers ----
 // All hang off the product master: a pack size is a size *of* something, and
@@ -454,6 +511,29 @@ Srv.hasMany(SrvItem, { foreignKey: 'srvId', onDelete: 'CASCADE' });
 SrvItem.belongsTo(Srv, { foreignKey: 'srvId' });
 SrvItem.belongsTo(Product, { foreignKey: 'productId' });
 Srv.belongsTo(User, { foreignKey: 'receivedBy', as: 'receiver' });
+
+// ---- Store issue and material return: the outward mirror of the SRV ----
+StockIssue.belongsTo(Branch, { foreignKey: 'branchId' });
+StockIssue.belongsTo(Department, { foreignKey: 'departmentId' });
+StockIssue.belongsTo(User, { foreignKey: 'issuedToUserId', as: 'issuedTo' });
+StockIssue.belongsTo(User, { foreignKey: 'issuedBy', as: 'issuer' });
+StockIssue.hasMany(StockIssueItem, { foreignKey: 'issueId', onDelete: 'CASCADE' });
+StockIssueItem.belongsTo(StockIssue, { foreignKey: 'issueId' });
+StockIssueItem.belongsTo(Product, { foreignKey: 'productId' });
+
+// An issue has many returns: material comes back in the instalments it is
+// finished with, not all at once. How much is still out is the issue line's own
+// arithmetic, which is why those figures live there rather than being counted
+// up from here every time somebody asks.
+StockIssue.hasMany(StockIssueReturn, { foreignKey: 'issueId' });
+StockIssueReturn.belongsTo(StockIssue, { foreignKey: 'issueId' });
+StockIssueReturn.belongsTo(Branch, { foreignKey: 'branchId' });
+StockIssueReturn.belongsTo(User, { foreignKey: 'returnedByUserId', as: 'returnedBy' });
+StockIssueReturn.belongsTo(User, { foreignKey: 'receivedBy', as: 'receiver' });
+StockIssueReturn.hasMany(StockIssueReturnItem, { foreignKey: 'returnId', onDelete: 'CASCADE' });
+StockIssueReturnItem.belongsTo(StockIssueReturn, { foreignKey: 'returnId' });
+StockIssueReturnItem.belongsTo(StockIssueItem, { foreignKey: 'issueItemId' });
+StockIssueReturnItem.belongsTo(Product, { foreignKey: 'productId' });
 
 InboundAppointment.belongsTo(Supplier, { foreignKey: 'supplierId' });
 Supplier.hasMany(InboundAppointment, { foreignKey: 'supplierId' });

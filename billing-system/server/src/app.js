@@ -2,7 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import routes from './routes/index.js';
-import mediaRoutes from './routes/media.routes.js';
+// Side-effect import: this is what registers each domain's contributions to
+// the platform extension points. It has to happen before the first request.
+import './modules/hooks.js';
+import mediaRoutes from './modules/platform/media.routes.js';
 import { errorHandler, notFound } from './middleware/errorMiddleware.js';
 import { apiLimiter } from './middleware/rateLimiters.js';
 import { requestContext } from './middleware/requestContext.js';
@@ -22,7 +25,7 @@ import { requestContext } from './middleware/requestContext.js';
  * startup check warns about it instead. Requests with no Origin at all (curl,
  * server-to-server, same-origin navigation) are unaffected either way.
  */
-export function corsOptions() {
+function corsOptions() {
   const configured = (process.env.CORS_ORIGINS || process.env.CLIENT_URL || '')
     .split(',')
     .map((value) => value.trim().replace(/\/$/, ''))

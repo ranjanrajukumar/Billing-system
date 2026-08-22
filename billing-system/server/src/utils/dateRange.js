@@ -34,7 +34,7 @@ function financialYear(offset = 0) {
   };
 }
 
-export const PERIODS = {
+const PERIODS = {
   today: () => ({ from: iso(new Date()), to: iso(new Date()), label: 'Today' }),
   thisMonth: () => ({ from: iso(startOfMonth(new Date())), to: iso(endOfMonth(new Date())), label: 'This month' }),
   lastMonth: () => {

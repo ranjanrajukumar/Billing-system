@@ -39,7 +39,7 @@ export function resolveUnits(product, billedUnit) {
  * Converts a billed quantity into the primary unit that stock is held in.
  * Returns the quantity unchanged when no conversion applies.
  */
-export function toPrimaryQty(product, billedUnit, quantity) {
+function toPrimaryQty(product, billedUnit, quantity) {
   const { isSecondary, factor } = resolveUnits(product, billedUnit);
   const qty = Number(quantity || 0);
   return isSecondary ? qty * factor : qty;
@@ -82,7 +82,7 @@ export function primaryQtyFromLine(line, quantity) {
 }
 
 /** Human-readable conversion rule, phrased in the direction the engine uses. */
-export function conversionLabel(product) {
+function conversionLabel(product) {
   const { primaryUnit, secondaryUnit, factor } = resolveUnits(product);
   if (!secondaryUnit || !(factor > 1)) return null;
   return `1 ${secondaryUnit} = ${factor} ${primaryUnit}`;

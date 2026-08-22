@@ -60,6 +60,12 @@ export const DEFAULT_ACCOUNTS = [
   { code: '5280', name: 'Packaging', accountType: 'Expense', normalBalance: 'Debit', parent: '5200' },
   { code: '5290', name: 'Other Expenses', accountType: 'Expense', normalBalance: 'Debit', parent: '5200', system: true },
   { code: '5300', name: 'Inventory Write-off', accountType: 'Expense', normalBalance: 'Debit', parent: '5000', system: true },
+  // Stock issued out of the store and used rather than sold. Kept apart from
+  // Cost of Goods Sold, which is the cost of things a customer paid for, and
+  // from Inventory Write-off, which is the cost of things nobody got any use
+  // out of. Netting a workshop's consumption into either one makes the gross
+  // margin lie.
+  { code: '5310', name: 'Materials Consumed', accountType: 'Expense', normalBalance: 'Debit', parent: '5000', system: true },
 ];
 
 /** The codes the posting service depends on, named so call sites stay readable. */
@@ -80,6 +86,7 @@ export const ACCOUNTS = {
   PURCHASE_RETURNS: '5150',
   OTHER_EXPENSE: '5290',
   INVENTORY_WRITE_OFF: '5300',
+  MATERIALS_CONSUMED: '5310',
 };
 
 /** Maps the seeded expense categories onto their ledger accounts. */

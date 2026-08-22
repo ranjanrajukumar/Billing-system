@@ -47,20 +47,20 @@ export async function confirmAction({
   return result.isConfirmed;
 }
 
-export function alertSuccess(title, text = '') {
+function alertSuccess(title, text = '') {
   return Swal.fire({ ...base(), title, text, icon: 'success', timer: 2200, showConfirmButton: false });
 }
 
-export function alertError(title, text = '') {
+function alertError(title, text = '') {
   return Swal.fire({ ...base(), title, text, icon: 'error', confirmButtonText: 'Close' });
 }
 
-export function alertInfo(title, text = '') {
+function alertInfo(title, text = '') {
   return Swal.fire({ ...base(), title, text, icon: 'info', confirmButtonText: 'OK' });
 }
 
 /** Small corner toast, for confirmations that do not need to interrupt. */
-export function toastSuccess(title) {
+function toastSuccess(title) {
   return Swal.fire({
     ...palette(),
     toast: true,

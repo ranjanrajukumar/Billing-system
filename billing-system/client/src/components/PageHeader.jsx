@@ -1,97 +1,103 @@
-import { Box, Breadcrumbs, Link, Stack, Typography, alpha, useTheme } from '@mui/material';
-import { Link as RouterLink } from 'react-router-dom';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
+import { Box, Stack, Typography } from '@mui/material';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 
 /**
- * PageHeader — reusable page header
- * Props: title, subtitle, breadcrumbs ([{label, to}]), action (ReactNode), icon
+ * The band at the top of every page: Back, the trail, and the page's actions.
+ *
+ * Rebuilt to Zentory's proportions. The previous header was a 42px gradient
+ * icon tile beside a 24px bold title with a sentence of description under it —
+ * around ninety vertical pixels, plus 24px of margin, to say something the
+ * sidebar has already said by highlighting the current item. On a list screen
+ * those pixels are two rows of the table, which is what the user came for.
+ *
+ * The props are unchanged on purpose: `title`, `subtitle`, `breadcrumbs`,
+ * `action` and `icon` all still work, so the forty-nine pages using this get
+ * the shorter header without being edited. `subtitle` and `icon` no longer
+ * occupy space — the subtitle becomes the title's tooltip rather than being
+ * discarded, and the icon is dropped, since the trail already names the page.
  */
-export default function PageHeader({ title, subtitle, breadcrumbs, action, icon }) {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
+export default function PageHeader({ title, subtitle, breadcrumbs, action, backPath, onBack }) {
+  const navigate = useNavigate();
+
+  // Every list screen is reached from somewhere; history is the honest default,
+  // and an explicit path wins so a deep link still lands somewhere sensible.
+  const goBack = () => {
+    if (onBack) return onBack();
+    return backPath ? navigate(backPath) : navigate(-1);
+  };
+
+  const trail = [...(breadcrumbs || [])];
+  // The title is the last crumb. A page that passes both was otherwise
+  // printing its own name twice.
+  if (title && !trail.some((crumb) => crumb.label === title)) {
+    trail.push({ label: title, active: true });
+  }
 
   return (
-    <Box className="animate-fadeInUp" sx={{ mb: 3 }}>
-      {breadcrumbs && breadcrumbs.length > 0 && (
-        <Breadcrumbs
-          separator={<NavigateNextIcon sx={{ fontSize: 14 }} />}
-          sx={{ mb: 1 }}
-        >
-          {breadcrumbs.map((crumb, i) =>
-            crumb.to && i < breadcrumbs.length - 1 ? (
-              <Link
-                key={crumb.label}
+    <Stack
+      direction="row"
+      alignItems="center"
+      gap={0.5}
+      className="animate-fadeInUp"
+      sx={{ px: 0, py: 1, mb: 1.5, flexWrap: 'wrap' }}
+    >
+      <Box
+        component="button"
+        type="button"
+        onClick={goBack}
+        aria-label="Go back"
+        sx={{
+          display: 'flex', alignItems: 'center', gap: 0.75,
+          px: 1.5, py: 0.5, mr: 0.5,
+          border: 'none', borderRadius: 999, cursor: 'pointer',
+          bgcolor: 'action.hover', color: 'text.primary', font: 'inherit',
+          '&:hover': { bgcolor: 'action.selected' },
+        }}
+      >
+        <ArrowBackIcon sx={{ fontSize: 18 }} />
+        <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 500 }}>Back</Typography>
+      </Box>
+
+      {trail.map((crumb, index) => {
+        const isLast = index === trail.length - 1;
+        const label = (
+          <Typography
+            component="span"
+            title={isLast && subtitle ? subtitle : undefined}
+            sx={{
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              color: isLast ? 'primary.main' : 'text.primary',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {crumb.label}
+          </Typography>
+        );
+
+        return (
+          <Stack key={crumb.label} direction="row" alignItems="center" gap={0.5}>
+            {index > 0 && <NavigateNextIcon sx={{ fontSize: 15, color: 'text.secondary' }} />}
+            {crumb.to && !isLast ? (
+              <Box
                 component={RouterLink}
                 to={crumb.to}
-                underline="hover"
-                sx={{ fontSize: '0.8rem', color: 'text.secondary', fontWeight: 500 }}
+                sx={{ textDecoration: 'none', '&:hover span': { color: 'primary.main' } }}
               >
-                {crumb.label}
-              </Link>
-            ) : (
-              <Typography
-                key={crumb.label}
-                sx={{ fontSize: '0.8rem', color: 'primary.main', fontWeight: 600 }}
-              >
-                {crumb.label}
-              </Typography>
-            )
-          )}
-        </Breadcrumbs>
+                {label}
+              </Box>
+            ) : label}
+          </Stack>
+        );
+      })}
+
+      {action && (
+        <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+          {action}
+        </Box>
       )}
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        justifyContent="space-between"
-        alignItems={{ xs: 'flex-start', sm: 'center' }}
-        spacing={2}
-      >
-        <Stack direction="row" alignItems="center" spacing={1.5}>
-          {icon && (
-            <Box
-              sx={{
-                width: 42,
-                height: 42,
-                borderRadius: 2,
-                background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.15)} 0%, ${alpha(theme.palette.primary.main, 0.05)} 100%)`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'primary.main',
-                border: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`,
-              }}
-            >
-              {icon}
-            </Box>
-          )}
-          <Box>
-            <Typography
-              variant="h5"
-              sx={{
-                fontWeight: 800,
-                letterSpacing: '-0.02em',
-                lineHeight: 1.2,
-                fontSize: { xs: '1.25rem', sm: '1.5rem' },
-              }}
-            >
-              {title}
-            </Typography>
-            {subtitle && (
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ mt: 0.25 }}
-              >
-                {subtitle}
-              </Typography>
-            )}
-          </Box>
-        </Stack>
-        {action && (
-          <Box sx={{ width: { xs: '100%', sm: 'auto' } }}>
-            {action}
-          </Box>
-        )}
-      </Stack>
-    </Box>
+    </Stack>
   );
 }

@@ -4,8 +4,8 @@ import { sequelize } from './models/index.js';
 import { migrateDatabase } from './config/migration.js';
 import { assertEnvironment } from './config/env.js';
 import { startScheduler } from './jobs/scheduler.js';
-import { initBackupSchedule } from './services/backupScheduler.js';
-import { startBillingCron } from './services/billing.cron.js';
+import { initBackupSchedule } from './modules/platform/backupScheduler.js';
+import { startBillingCron } from './modules/platform/billing.cron.js';
 
 dotenv.config();
 
