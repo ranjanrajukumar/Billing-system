@@ -4,9 +4,16 @@ import { Outlet } from 'react-router-dom';
 import Navbar from '../components/Navbar.jsx';
 import Sidebar from '../components/Sidebar.jsx';
 import MobileBottomNav from '../components/MobileBottomNav.jsx';
+import { CONTENT_WIDTHS, readUiPrefs } from '../utils/uiPrefs.js';
+import { useAuth } from '../context/AuthContext.jsx';
 
 export default function AppLayout({ mode, onToggleMode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  // From the payload where we have it, storage otherwise — so a saved page
+  // width takes effect as soon as it is saved rather than on the next reload.
+  const { user } = useAuth();
+  const layoutKey = user?.ui?.layout || readUiPrefs().layout;
+  const contentMax = CONTENT_WIDTHS[layoutKey]?.max ?? CONTENT_WIDTHS.full.max;
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -49,7 +56,12 @@ export default function AppLayout({ mode, onToggleMode }) {
             py: { xs: 1.25, sm: 1.5 },
             // Extra bottom padding on mobile for bottom nav + safe area
             pb: { xs: 'calc(88px + env(safe-area-inset-bottom, 0px))', sm: 3 },
-            maxWidth: '100%',
+            // Capped and centred when the company asks for it: past about
+            // 1600px a row of figures stops being scannable, because the eye
+            // has to travel back across empty desk to find the next one.
+            maxWidth: contentMax,
+            width: '100%',
+            mx: 'auto',
             boxSizing: 'border-box',
           }}
         >

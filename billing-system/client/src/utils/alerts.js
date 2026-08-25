@@ -1,4 +1,11 @@
 import Swal from 'sweetalert2';
+import { UI_ACCENTS } from './theme.js';
+import { readUiPrefs } from './uiPrefs.js';
+
+// SweetAlert is rendered outside React, so it cannot read the theme provider.
+// It reads the saved accent directly instead — otherwise the one dialog that
+// asks "are you sure" stays indigo on a company that chose anything else.
+const accent = () => (UI_ACCENTS[readUiPrefs().accent] || UI_ACCENTS.indigo).main;
 
 // SweetAlert renders outside the MUI tree, so it needs the current palette
 // passed in rather than reading it from a theme provider.
@@ -15,7 +22,7 @@ function palette() {
 const base = () => ({
   ...palette(),
   buttonsStyling: true,
-  confirmButtonColor: '#4f46e5',
+  confirmButtonColor: accent(),
   cancelButtonColor: '#6b7280',
   reverseButtons: true,
   focusCancel: true,
@@ -42,7 +49,7 @@ export async function confirmAction({
     showCancelButton: true,
     confirmButtonText: confirmText,
     cancelButtonText: cancelText,
-    confirmButtonColor: danger ? '#dc2626' : '#4f46e5',
+    confirmButtonColor: danger ? '#dc2626' : accent(),
   });
   return result.isConfirmed;
 }

@@ -27,6 +27,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { mediaUrl } from '../utils/formatters.js';
+import { readBranding } from '../utils/uiPrefs.js';
 import CalculatorDialog from './CalculatorDialog.jsx';
 import DailyBriefing, { shouldShowBriefing } from '../modules/reporting/DailyBriefing.jsx';
 import BranchSwitcher from './BranchSwitcher.jsx';
@@ -118,17 +119,22 @@ export default function Navbar({ onMenu, mode, onToggleMode }) {
               width: 30,
               height: 30,
               borderRadius: 1.5,
-              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+              background: (t) => `linear-gradient(135deg, ${t.palette.primary.main} 0%, ${t.palette.primary.dark} 100%)`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#fff',
             }}
           >
-            <StorefrontIcon sx={{ fontSize: 16 }} />
+            {user?.companyLogoUrl
+              ? <Box component="img" src={mediaUrl(user.companyLogoUrl)} alt=""
+                  sx={{ width: '100%', height: '100%', objectFit: 'contain', p: 0.25 }} />
+              : <StorefrontIcon sx={{ fontSize: 16 }} />}
           </Box>
-          <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', letterSpacing: '-0.01em' }}>
-            ShopBill Pro
+          <Typography noWrap sx={{
+            fontWeight: 800, fontSize: '0.95rem', letterSpacing: '-0.01em', maxWidth: 220,
+          }}>
+            {user?.companyName || readBranding().name}
           </Typography>
         </Stack>
 
@@ -238,7 +244,7 @@ export default function Navbar({ onMenu, mode, onToggleMode }) {
                   height: 32,
                   fontSize: '0.8rem',
                   fontWeight: 700,
-                  background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                  background: (t) => `linear-gradient(135deg, ${t.palette.primary.main} 0%, ${t.palette.primary.dark} 100%)`,
                 }}
               >
                 {initials}

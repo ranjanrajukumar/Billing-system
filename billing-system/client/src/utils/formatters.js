@@ -23,4 +23,32 @@ export const currency = (value) => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(Number(value || 0));
   }
 };
+/**
+ * A money figure short enough for an axis tick.
+ *
+ * Axis labels are read in a glance and stacked vertically, so the full figure
+ * is both too long and unnecessary — the tooltip carries the exact number.
+ * Rupees group in lakhs and crores, which is what an Indian reader expects to
+ * see on a sales axis; everything else uses K/M.
+ */
+export const compactCurrency = (value) => {
+  const saved = localStorage.getItem('currency') || '';
+  const code = WELL_FORMED.test(saved) ? saved.toUpperCase() : 'INR';
+  const n = Number(value || 0);
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  const trim = (x) => String(Number(x.toFixed(1)));
+
+  if (code === 'INR') {
+    if (abs >= 1e7) return `${sign}${trim(abs / 1e7)}Cr`;
+    if (abs >= 1e5) return `${sign}${trim(abs / 1e5)}L`;
+    if (abs >= 1e3) return `${sign}${trim(abs / 1e3)}K`;
+  } else {
+    if (abs >= 1e9) return `${sign}${trim(abs / 1e9)}B`;
+    if (abs >= 1e6) return `${sign}${trim(abs / 1e6)}M`;
+    if (abs >= 1e3) return `${sign}${trim(abs / 1e3)}K`;
+  }
+  return `${sign}${trim(abs)}`;
+};
+
 export const date = (value) => value ? new Intl.DateTimeFormat('en-IN').format(new Date(value)) : '-';

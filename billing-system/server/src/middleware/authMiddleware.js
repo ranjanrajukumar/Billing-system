@@ -17,7 +17,7 @@ export async function authenticate(req, res, next) {
     // What this user sees is their role's rights narrowed to the modules the
     // company has switched on — so a Basic-mode shop never meets GRN or
     // journals, whatever role they signed in as.
-    const { mode, modules } = await getConfig();
+    const { mode, modules, currency, ui, companyName, companyLogoUrl } = await getConfig();
 
     req.user = {
       businessMode: mode,
@@ -34,6 +34,15 @@ export async function authenticate(req, res, next) {
       menus: visibleMenus(user.Role, modules),
       navigation: navigationFor(user.Role, modules),
       modules: [...modules],
+      // The same three the sign-in payload carries. /auth/me returns req.user
+      // verbatim and the client replaces its stored user with the result, so
+      // anything missing here is not merely absent from /me — it is erased
+      // from the session on the next page load. That is what made a saved
+      // appearance revert, and the company name vanish from the sidebar.
+      currency,
+      ui,
+      companyName,
+      companyLogoUrl,
     };
     // Attribute any database writes in this request to the caller.
     setContextUser(req.user);

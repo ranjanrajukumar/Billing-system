@@ -1,4 +1,5 @@
 import SaveIcon from '@mui/icons-material/Save';
+import PaletteIcon from '@mui/icons-material/Palette';
 import ImageIcon from '@mui/icons-material/Image';
 import BusinessIcon from '@mui/icons-material/Business';
 import ReceiptIcon from '@mui/icons-material/Receipt';
@@ -15,6 +16,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import Loader from '../../components/Loader.jsx';
 import ModeSetup from './ModeSetup.jsx';
+import AppearanceSetup from './AppearanceSetup.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
 import { settingsApi } from '../../services/resource.service.js';
@@ -77,6 +79,36 @@ export default function Settings() {
     setLogoPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [selectedLogo, savedLogoUrl]);
+
+  // Appearance saves on its own button rather than with the company form: it
+  // is the one setting whose result you want to see immediately, and burying it
+  // behind "Save Settings" at the foot of a long page hides that.
+  const [savingLook, setSavingLook] = useState(false);
+  const saveAppearance = async (look) => {
+    setSavingLook(true);
+    try {
+      const fd = new FormData();
+      Object.entries(look).forEach(([k, v]) => fd.append(k, v));
+      const saved = await settingsApi.saveCompany(fd);
+      if (saved?.uiAccent) {
+        // Mirrors the shape config.service.js sends at sign-in, so the shell
+        // reads one thing whether it came from a save or from the API.
+        localStorage.setItem('ui', JSON.stringify({
+          accent: saved.uiAccent, radius: saved.uiRadius,
+          density: saved.uiDensity, theme: saved.uiTheme,
+          layout: saved.uiLayout, sidebar: saved.uiSidebar, cards: saved.uiCards,
+          font: saved.uiFont,
+        }));
+      }
+      showToast('Appearance saved — reloading to apply it');
+      // A theme is built once at start-up, so the new one needs a fresh render
+      // tree. Reloading is honest about that rather than half-applying it.
+      setTimeout(() => window.location.reload(), 600);
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Could not save the appearance', 'error');
+      setSavingLook(false);
+    }
+  };
 
   const submit = async (values) => {
     const fd = new FormData();
@@ -153,6 +185,12 @@ export default function Settings() {
           decides what the rest of the app even shows. */}
       <SectionCard title="Business Mode & Modules" icon={<TuneIcon fontSize="small" />}>
         <ModeSetup />
+      </SectionCard>
+
+      {/* How it looks. After the module list, because what the application
+          shows matters more than what colour it shows it in. */}
+      <SectionCard title="Appearance" icon={<PaletteIcon fontSize="small" />}>
+        <AppearanceSetup value={data?.company} onSave={saveAppearance} saving={savingLook} />
       </SectionCard>
 
       {/* Company Logo Section */}

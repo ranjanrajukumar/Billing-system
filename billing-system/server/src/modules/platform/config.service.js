@@ -38,6 +38,25 @@ export async function getConfig() {
     multiBranch: Boolean(company?.multiBranchEnabled),
     companyState: company?.state || null,
     currency: company?.currency || 'INR',
+    // The business's own name, so the navigation can say whose system this is
+    // rather than the product's name. A distributor's staff know the company,
+    // not the software.
+    companyName: company?.name || null,
+    // The mark itself, not just the name. Uploaded in Settings and until now
+    // only ever printed on documents — the navigation showed a stock icon.
+    companyLogoUrl: company?.logoUrl || null,
+    // Travels with the config so the client can paint the right theme on its
+    // first render, rather than flashing the default and correcting itself.
+    ui: {
+      accent: company?.uiAccent || 'indigo',
+      radius: company?.uiRadius || 'rounded',
+      density: company?.uiDensity || 'comfortable',
+      theme: company?.uiTheme || 'light',
+      layout: company?.uiLayout || 'full',
+      sidebar: company?.uiSidebar || 'standard',
+      cards: company?.uiCards || 'outlined',
+      font: company?.uiFont || 'inter',
+    },
   };
 
   cache = { at: Date.now(), value };

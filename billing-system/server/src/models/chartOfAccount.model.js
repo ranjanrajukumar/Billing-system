@@ -39,5 +39,7 @@ export default (sequelize) => sequelize.define('ChartOfAccount', {
   createdAt: 'addondt',
   updatedAt: 'editondt',
   tableName: 'chart_of_accounts',
-  indexes: [{ fields: ['code'] }, { fields: ['account_type'] }, { fields: ['parent_id'] }]
+  // `unique: true` on the column already indexes it; a second index on the
+  // same column adds no lookup and makes re-sync fail with a duplicate key.
+  indexes: [{ fields: ['account_type'] }, { fields: ['parent_id'] }]
 });

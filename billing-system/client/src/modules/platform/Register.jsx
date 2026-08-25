@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link as RouterLink, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { readBranding } from '../../utils/uiPrefs.js';
 
 export default function Register() {
   const { register: registerUser, isAuthenticated } = useAuth();
@@ -33,14 +34,14 @@ export default function Register() {
       <Box className="animate-fadeInUp" sx={{ width: '100%', maxWidth: 460 }}>
         {/* Brand */}
         <Stack direction="row" alignItems="center" spacing={1.5} mb={4} justifyContent="center">
-          <Box sx={{ width: 44, height: 44, borderRadius: 2, background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 6px 20px rgba(79,70,229,0.4)' }}>
+          <Box sx={{ width: 44, height: 44, borderRadius: 2, background: (t) => `linear-gradient(135deg, ${t.palette.primary.main} 0%, ${t.palette.primary.dark} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 6px 20px rgba(79,70,229,0.4)' }}>
             <StorefrontIcon />
           </Box>
-          <Typography sx={{ fontWeight: 800, fontSize: '1.3rem' }}>ShopBill Pro</Typography>
+          <Typography sx={{ fontWeight: 800, fontSize: '1.3rem' }}>{readBranding().name}</Typography>
         </Stack>
 
         <Typography variant="h4" fontWeight={800} mb={0.5}>Create account</Typography>
-        <Typography variant="body2" color="text.secondary" mb={3}>Join ShopBill Pro to manage your shop billing</Typography>
+        <Typography variant="body2" color="text.secondary" mb={3}>Create your account</Typography>
 
         {error && <Alert severity="error" sx={{ mb: 2.5, borderRadius: 2 }}>{error}</Alert>}
 
@@ -80,7 +81,7 @@ export default function Register() {
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
           />
           <Button type="submit" variant="contained" size="large" disabled={isSubmitting} fullWidth
-            sx={{ borderRadius: 2, py: 1.4, fontWeight: 700, background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', boxShadow: '0 6px 24px rgba(79,70,229,0.4)' }}
+            sx={{ borderRadius: 2, py: 1.4, fontWeight: 700, background: (t) => `linear-gradient(135deg, ${t.palette.primary.main} 0%, ${t.palette.primary.dark} 100%)`, boxShadow: '0 6px 24px rgba(79,70,229,0.4)' }}
           >
             {isSubmitting ? 'Creating account…' : 'Create Account'}
           </Button>

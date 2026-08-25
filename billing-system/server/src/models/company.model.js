@@ -28,6 +28,22 @@ export default (sequelize) => sequelize.define('Company', {
   defaultInvoiceTemplate: { type: DataTypes.STRING(50), defaultValue: 'standard' },
   // Default currency code (e.g., INR, USD, EUR) used for formatting globally.
   currency: { type: DataTypes.STRING(3), allowNull: false, defaultValue: 'INR' },
+
+  // How the application looks. Company-wide rather than per-user because it is
+  // set up once for the business — a distributor who wants their brand colour
+  // and dense stock lists wants that on every terminal in the building, not on
+  // whichever one an admin happened to configure. The light/dark toggle in the
+  // top bar stays personal; this is only the default it starts from.
+  uiAccent: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'indigo' },
+  uiRadius: { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'rounded' },
+  uiDensity: { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'comfortable' },
+  uiTheme: { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'light' },
+  // Layout, as against colour: how wide the page runs, how much the navigation
+  // takes, and how panels separate themselves from what is behind them.
+  uiLayout: { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'full' },
+  uiSidebar: { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'standard' },
+  uiCards: { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'outlined' },
+  uiFont: { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'inter' },
   // Days a credit (udhar) sale is allowed before it counts as overdue.
   creditDays: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 30 },
   // Off by default: the app runs against a single implicit branch and behaves

@@ -20,8 +20,10 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link as RouterLink, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { readBranding } from '../../utils/uiPrefs.js';
 
 export default function Login() {
+  const branding = readBranding();
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
@@ -66,7 +68,10 @@ export default function Login() {
           justifyContent: 'center',
           position: 'relative',
           overflow: 'hidden',
-          background: 'linear-gradient(135deg, #312e81 0%, #4f46e5 40%, #7c3aed 70%, #0891b2 100%)',
+          // The sign-in hero follows the company accent too. It renders before
+          // anyone has signed in, but the accent is read from storage, so a
+          // returning browser shows the right brand from the login screen on.
+          background: (t) => `linear-gradient(135deg, ${t.palette.primary.dark} 0%, ${t.palette.primary.main} 40%, ${t.palette.primary.light} 70%, ${t.palette.info.main} 100%)`,
           backgroundSize: '200% 200%',
           animation: 'gradientShift 8s ease infinite',
         }}
@@ -114,7 +119,7 @@ export default function Login() {
             <StorefrontIcon sx={{ fontSize: 38, color: '#fff' }} />
           </Box>
           <Typography variant="h3" sx={{ fontWeight: 800, mb: 1.5, letterSpacing: '-0.02em' }}>
-            ShopBill Pro
+            {branding.name}
           </Typography>
           <Typography sx={{ opacity: 0.8, fontSize: '1.05rem', lineHeight: 1.7, maxWidth: 340 }}>
             All-in-one inventory &amp; billing platform for modern retail shops
@@ -170,7 +175,7 @@ export default function Login() {
                 width: 44,
                 height: 44,
                 borderRadius: 2,
-                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                background: (t) => `linear-gradient(135deg, ${t.palette.primary.main} 0%, ${t.palette.primary.dark} 100%)`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -182,7 +187,7 @@ export default function Login() {
             </Box>
             <Box>
               <Typography sx={{ fontWeight: 800, fontSize: '1.2rem', lineHeight: 1.1 }}>
-                ShopBill Pro
+                {branding.name}
               </Typography>
               <Typography variant="caption" color="text.secondary">Inventory &amp; Billing</Typography>
             </Box>
@@ -249,7 +254,7 @@ export default function Login() {
                 py: 1.4,
                 fontSize: '0.95rem',
                 fontWeight: 700,
-                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                background: (t) => `linear-gradient(135deg, ${t.palette.primary.main} 0%, ${t.palette.primary.dark} 100%)`,
                 boxShadow: '0 6px 24px rgba(79,70,229,0.4)',
                 '&:hover': {
                   boxShadow: '0 8px 28px rgba(79,70,229,0.5)',

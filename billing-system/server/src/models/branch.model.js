@@ -45,5 +45,7 @@ export default (sequelize) => sequelize.define('Branch', {
   createdAt: 'addondt',
   updatedAt: 'editondt',
   tableName: 'branches',
-  indexes: [{ fields: ['branch_code'] }, { fields: ['location_type'] }]
+  // `unique: true` on the column already indexes it; a second index on the
+  // same column adds no lookup and makes re-sync fail with a duplicate key.
+  indexes: [{ fields: ['location_type'] }]
 });

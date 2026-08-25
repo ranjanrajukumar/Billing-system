@@ -36,5 +36,7 @@ export default (sequelize) => sequelize.define('Purchase', {
   updatedAt: 'editondt',
   tableName: 'purchases',
   defaultScope: { attributes: { exclude: ['attachmentData'] } },
-  indexes: [{ fields: ['purchase_number'] }, { fields: ['purchase_date'] }]
+  // `unique: true` on the column already indexes it; a second index on the
+  // same column adds no lookup and makes re-sync fail with a duplicate key.
+  indexes: [{ fields: ['purchase_date'] }]
 });

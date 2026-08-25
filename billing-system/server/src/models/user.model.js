@@ -33,5 +33,7 @@ export default (sequelize) => sequelize.define('User', {
   tableName: 'users',
   // Avatar bytes are only needed by the media endpoint, which uses .unscoped().
   defaultScope: { attributes: { exclude: ['profileImageData'] } },
-  indexes: [{ fields: ['email'] }]
+  // `unique: true` on the column already indexes it; a second index on the
+  // same column adds no lookup and makes re-sync fail with a duplicate key.
+  indexes: []
 });

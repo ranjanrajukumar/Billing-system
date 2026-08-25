@@ -76,7 +76,7 @@ export default function Profile() {
                 sx={{
                   width: 96, height: 96,
                   fontSize: '2rem', fontWeight: 700,
-                  background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                  background: (t) => `linear-gradient(135deg, ${t.palette.primary.main} 0%, ${t.palette.primary.dark} 100%)`,
                   boxShadow: '0 8px 24px rgba(79,70,229,0.35)',
                 }}
               >

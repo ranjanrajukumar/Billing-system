@@ -248,7 +248,7 @@ function UserManager() {
         mobileKeyField="name"
         columns={[
           { field: 'photo', headerName: '', render: (r) => (
-            <Avatar src={mediaUrl(r.profileImageUrl)} sx={{ width: 34, height: 34, fontSize: '0.8rem', fontWeight: 700, background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}>
+            <Avatar src={mediaUrl(r.profileImageUrl)} sx={{ width: 34, height: 34, fontSize: '0.8rem', fontWeight: 700, background: (t) => `linear-gradient(135deg, ${t.palette.primary.main}, ${t.palette.primary.dark})` }}>
               {initials(r.name)}
             </Avatar>
           )},

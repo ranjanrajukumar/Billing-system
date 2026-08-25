@@ -62,8 +62,26 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
 import AutorenewIcon from '@mui/icons-material/Autorenew';
+import { SIDEBAR_WIDTHS, readBranding, readUiPrefs } from '../utils/uiPrefs.js';
+import { mediaUrl } from '../utils/formatters.js';
 
-const DRAWER_WIDTH = 256;
+/**
+ * How wide the rail is, for this company, right now.
+ *
+ * A hook rather than a module constant: read once at import time it froze at
+ * whatever storage held when the bundle loaded, so a saved width never showed
+ * until the page was reloaded by hand. The auth payload wins over storage for
+ * the same reason it does in App — storage makes the first paint correct, the
+ * payload keeps it current.
+ *
+ * Compact buys 48px of page on every screen in the building, which on a wide
+ * stock table is a column of figures you would otherwise scroll to reach.
+ */
+function useDrawerWidth() {
+  const { user } = useAuth();
+  const key = user?.ui?.sidebar || readUiPrefs().sidebar;
+  return SIDEBAR_WIDTHS[key]?.px ?? SIDEBAR_WIDTHS.standard.px;
+}
 
 /**
  * The one thing the sidebar still decides for itself.
@@ -161,7 +179,8 @@ function NavItem({ label, path, icon, onClose, nested = false, trailing = null }
       end={path === '/'}
       onClick={onClose}
       sx={{
-        borderRadius: '10px',
+        // Follows the company's corner setting, like everything else.
+        borderRadius: `${Math.max((theme.shape.borderRadius || 14) - 4, 2)}px`,
         // Nested items sit in from the parent and lose a little height, so a
         // glance down the rail reads the hierarchy without needing the labels.
         px: 1.5,
@@ -171,19 +190,25 @@ function NavItem({ label, path, icon, onClose, nested = false, trailing = null }
         color: 'text.secondary',
         '&.active': {
           bgcolor: isDark
-            ? alpha(theme.palette.primary.main, 0.2)
-            : alpha(theme.palette.primary.main, 0.09),
+            ? alpha(theme.palette.primary.main, 0.18)
+            : alpha(theme.palette.primary.main, 0.08),
           color: 'primary.main',
+          fontWeight: 600,
           '& .MuiListItemIcon-root': {
             color: 'primary.main',
           },
-          '&::after': {
+          '& .MuiListItemText-primary': {
+            fontWeight: 600,
+          },
+          '&::before': {
             content: '""',
             position: 'absolute',
-            right: 8,
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
+            left: 0,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 3,
+            height: '60%',
+            borderRadius: '0 3px 3px 0',
             bgcolor: 'primary.main',
           },
         },
@@ -295,6 +320,16 @@ function SidebarContent({ onClose }) {
   // nothing left to decide here.
   const groups = user?.navigation || [];
 
+  // The company's own name and accent. Staff know the business they work for,
+  // not the name of the software it runs on.
+  const brandName = user?.companyName || readBranding().name;
+  const brandLogo = user?.companyLogoUrl ? mediaUrl(user.companyLogoUrl) : null;
+  const [logoBroken, setLogoBroken] = useState(false);
+  const brand = theme.palette.primary.main;
+  const brandDark = theme.palette.primary.dark;
+
+  const DRAWER_WIDTH = useDrawerWidth();
+
   return (
     <Box sx={{ width: DRAWER_WIDTH, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Brand Header */}
@@ -307,7 +342,7 @@ function SidebarContent({ onClose }) {
           display: 'flex',
           alignItems: 'center',
           gap: 1.5,
-          borderBottom: `1px solid ${isDark ? alpha('#ffffff', 0.06) : alpha('#4f46e5', 0.08)}`,
+          borderBottom: `1px solid ${isDark ? alpha('#ffffff', 0.06) : alpha(brand, 0.08)}`,
           flexShrink: 0,
         }}
       >
@@ -316,30 +351,50 @@ function SidebarContent({ onClose }) {
             width: 38,
             height: 38,
             borderRadius: 2,
-            background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+            background: `linear-gradient(135deg, ${brand} 0%, ${brandDark} 100%)`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: '#fff',
             flexShrink: 0,
-            boxShadow: '0 4px 14px rgba(79,70,229,0.4)',
+            boxShadow: `0 4px 14px ${alpha(brand, 0.4)}`,
           }}
         >
-          <StorefrontIcon fontSize="small" />
+          {/* The company's own mark where there is one. It is already uploaded
+              for the invoices; showing a stock storefront icon above it said
+              this was somebody else's software. */}
+          {brandLogo && !logoBroken
+            ? <Box
+                component="img"
+                src={brandLogo}
+                alt=""
+                onError={() => setLogoBroken(true)}
+                onLoad={(e) => {
+                  // A placeholder pixel is not a logo. Anything this small
+                  // cannot read as a mark at 38px, so show the icon instead.
+                  if (e.currentTarget.naturalWidth < 8) setLogoBroken(true);
+                }}
+                sx={{ width: '100%', height: '100%', objectFit: 'contain', p: 0.5 }}
+              />
+            : <StorefrontIcon fontSize="small" />}
         </Box>
         <Box>
           <Typography
+            title={brandName}
             sx={{
               fontWeight: 800,
               fontSize: '1rem',
               lineHeight: 1.2,
-              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
+              color: 'text.primary',
+              // Long trading names are the norm; two lines beats an ellipsis
+              // that hides which company you are actually logged into.
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
             }}
           >
-            ShopBill Pro
+            {brandName}
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
             {user?.businessMode === 'Advanced' ? 'Business Management' : 'Inventory & Billing'}
@@ -354,13 +409,17 @@ function SidebarContent({ onClose }) {
             <Typography
               variant="caption"
               sx={{
-                px: 1,
-                mb: 0.5,
+                px: 1.5,
+                mt: 0.5,
+                mb: 0.75,
                 display: 'block',
-                fontWeight: 700,
-                fontSize: '0.68rem',
+                fontWeight: 600,
+                fontSize: '0.65rem',
                 textTransform: 'uppercase',
-                letterSpacing: '0.1em',
+                // Wider tracking and a lighter weight let the group read as a
+                // label for what follows rather than as another row competing
+                // with the items under it.
+                letterSpacing: '0.14em',
                 color: 'text.disabled',
               }}
             >
@@ -385,7 +444,7 @@ function SidebarContent({ onClose }) {
               )))}
             </List>
             {index < groups.length - 1 && (
-              <Divider sx={{ mt: 1.5, opacity: 0.5 }} />
+              <Box sx={{ height: 4 }} />
             )}
           </Box>
         ))}
@@ -401,7 +460,7 @@ function SidebarContent({ onClose }) {
         }}
       >
         <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.7rem' }}>
-          ShopBill Pro v2.0 • All rights reserved
+          {brandName}
         </Typography>
       </Box>
     </Box>
@@ -409,6 +468,7 @@ function SidebarContent({ onClose }) {
 }
 
 export default function Sidebar({ mobileOpen, onClose }) {
+  const DRAWER_WIDTH = useDrawerWidth();
   return (
     <>
       {/* Mobile drawer */}

@@ -15,7 +15,7 @@ const signToken = (user) => jwt.sign({ id: user.id }, process.env.JWT_SECRET, { 
 const buildAuthResponse = async (user) => {
   // The sidebar is built from these, so what a user is offered at sign-in is
   // already narrowed to the modules this company runs.
-  const { mode, modules } = await getConfig();
+  const { mode, modules, currency, ui, companyName, companyLogoUrl } = await getConfig();
 
   return {
     token: signToken(user),
@@ -32,7 +32,12 @@ const buildAuthResponse = async (user) => {
       navigation: navigationFor(user.Role, modules),
       modules: [...modules],
       businessMode: mode,
-      currency: (await getConfig()).currency,
+      currency,
+      companyName,
+      companyLogoUrl,
+      // The company's look, so the client paints it on first render instead of
+      // flashing the default and correcting itself a moment later.
+      ui,
     }
   };
 };

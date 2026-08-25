@@ -22,5 +22,7 @@ export default (sequelize) => sequelize.define('FeatureFlag', {
   createdAt: 'addondt',
   updatedAt: 'editondt',
   tableName: 'feature_flags',
-  indexes: [{ fields: ['module_key'] }]
+  // `unique: true` on the column already indexes it; a second index on the
+  // same column adds no lookup and makes re-sync fail with a duplicate key.
+  indexes: []
 });

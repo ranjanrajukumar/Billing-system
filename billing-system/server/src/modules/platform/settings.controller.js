@@ -16,6 +16,8 @@ const EDITABLE_FIELDS = [
   'loyaltyEnabled', 'loyaltyPointsPer100', 'loyaltyRedeemValue', 'loyaltyMinRedeem',
   'panNumber', 'licenseNo', 'cin', 'msmeReg',
   'currency',
+  'uiAccent', 'uiRadius', 'uiDensity', 'uiTheme',
+  'uiLayout', 'uiSidebar', 'uiCards', 'uiFont',
   // Thermal / Receipt Printer
   'thermalPaperSize', 'thermalCustomMm', 'thermalFontSize', 'thermalFooter',
   'thermalShowGst', 'thermalShowQr', 'thermalShowLogo',

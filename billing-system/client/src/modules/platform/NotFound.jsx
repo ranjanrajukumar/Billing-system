@@ -24,7 +24,7 @@ export default function NotFound() {
             fontSize: { xs: '6rem', sm: '10rem' },
             fontWeight: 900,
             lineHeight: 1,
-            background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #0891b2 100%)',
+            background: (t) => `linear-gradient(135deg, ${t.palette.primary.main} 0%, ${t.palette.primary.dark} 50%, ${t.palette.info.main} 100%)`,
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
@@ -72,7 +72,7 @@ export default function NotFound() {
           sx={{
             borderRadius: 2.5,
             px: 3,
-            background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+            background: (t) => `linear-gradient(135deg, ${t.palette.primary.main} 0%, ${t.palette.primary.dark} 100%)`,
             boxShadow: '0 6px 24px rgba(79,70,229,0.4)',
             fontWeight: 700,
             '&:hover': { boxShadow: '0 8px 28px rgba(79,70,229,0.5)', transform: 'translateY(-1px)' },

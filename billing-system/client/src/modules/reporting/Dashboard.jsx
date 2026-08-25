@@ -23,7 +23,7 @@ import {
   AgeingTile, AreaPanel, Band, SectionLabel, TodayTile,
 } from './SummaryBands.jsx';
 import { dashboardApi } from '../../services/resource.service.js';
-import { currency, date } from '../../utils/formatters.js';
+import { compactCurrency, currency, date } from '../../utils/formatters.js';
 import { useFetch } from '../../hooks/useFetch.js';
 
 /**
@@ -189,19 +189,53 @@ export default function Dashboard() {
               // Dimmed rather than removed, so the axes hold their place.
               <Box sx={{ opacity: refreshing ? 0.55 : 1, transition: 'opacity 0.15s' }}>
                 <LineChart
-                  height={260}
+                  height={280}
                   dataset={chart}
-                  xAxis={[{ dataKey: 'date', scaleType: 'point' }]}
+                  xAxis={[{
+                    dataKey: 'date',
+                    scaleType: 'point',
+                    // A tick per point is unreadable on a month of data; the
+                    // crosshair and tooltip carry the exact date.
+                    tickLabelStyle: { fontSize: 11 },
+                  }]}
+                  yAxis={[{ valueFormatter: compactCurrency, tickLabelStyle: { fontSize: 11 } }]}
                   series={[{
                     dataKey: 'total',
-                    label: 'Sales (₹)',
+                    // Named, for the tooltip. The card title already says what
+                    // this is, so a single series gets no legend box — see
+                    // slotProps below.
+                    label: 'Sales',
                     color: theme.palette.primary.main,
                     area: true,
                     showMark: false,
+                    // The exact figure, in the company's currency. The label
+                    // used to carry a hard-coded rupee sign.
+                    valueFormatter: (v) => (v == null ? '—' : currency(v)),
                   }]}
+                  // A crosshair is what makes a trend line readable: it ties the
+                  // point under the pointer to its date on the axis.
+                  axisHighlight={{ x: 'line', y: 'none' }}
+                  grid={{ horizontal: true }}
+                  slotProps={{ legend: { hidden: true } }}
+                  margin={{ left: 58, right: 16, top: 12, bottom: 28 }}
                   sx={{
                     '& .MuiAreaElement-root': { fill: alpha(theme.palette.primary.main, 0.12) },
-                    '& .MuiLineElement-root': { strokeWidth: 2.5 },
+                    '& .MuiLineElement-root': { strokeWidth: 2 },
+                    // Hairline, solid, one shade off the surface — a grid that
+                    // competes with the data is worse than no grid.
+                    '& .MuiChartsGrid-line': {
+                      stroke: alpha(theme.palette.text.primary, 0.08),
+                      strokeDasharray: 'none',
+                    },
+                    '& .MuiChartsAxis-line, & .MuiChartsAxis-tick': {
+                      stroke: alpha(theme.palette.text.primary, 0.12),
+                    },
+                    // Ticks stack vertically, so equal-width digits keep them
+                    // aligned. (Not on hero figures, where they read loose.)
+                    '& .MuiChartsAxis-tickLabel': {
+                      fill: theme.palette.text.secondary,
+                      fontVariantNumeric: 'tabular-nums',
+                    },
                   }}
                 />
               </Box>
