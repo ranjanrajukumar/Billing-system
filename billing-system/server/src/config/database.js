@@ -2,7 +2,10 @@ import dotenv from 'dotenv';
 import { Sequelize } from 'sequelize';
 import { getConnectionOptions, getDbSettings } from './dbSettings.js';
 
-dotenv.config();
+// Local overrides stay out of version control and take precedence over the
+// shared development defaults in .env. Hosting providers still supply their
+// variables through process.env, which dotenv never overwrites by default.
+dotenv.config({ path: ['.env.local', '.env'] });
 
 const settings = getDbSettings();
 

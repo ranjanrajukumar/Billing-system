@@ -175,6 +175,22 @@ export async function runProductImport(jobId) {
 }
 
 export async function resumeProductImports() {
-  const jobs = await ProductImportJob.findAll({ where: { status: { [Op.in]: ['Queued', 'Processing'] } }, attributes: ['id'] });
+  let jobs;
+  try {
+    jobs = await ProductImportJob.findAll({
+      where: { status: { [Op.in]: ['Queued', 'Processing'] } },
+      attributes: ['id']
+    });
+  } catch (error) {
+    // A service can be deployed before its schema migration has run. Resume is
+    // a convenience at boot, not a reason to keep the entire HTTP API down.
+    // The import endpoint will remain unavailable until the migration creates
+    // this table, but Render can bind its port and expose diagnostics.
+    if (error?.original?.code === 'ER_NO_SUCH_TABLE' || error?.parent?.code === 'ER_NO_SUCH_TABLE') {
+      console.warn('Product-import queue is unavailable: table "product_import_jobs" has not been migrated yet.');
+      return;
+    }
+    throw error;
+  }
   for (const job of jobs) enqueueProductImport(job.id);
 }
