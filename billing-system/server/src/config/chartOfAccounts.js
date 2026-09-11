@@ -6,6 +6,7 @@
  * without breaking a single automatic entry. Accounts marked `system: true`
  * are the ones the posting service needs and cannot be deleted.
  */
+
 export const DEFAULT_ACCOUNTS = [
   // ---- Assets (1xxx) ----
   { code: '1000', name: 'Assets', accountType: 'Asset', normalBalance: 'Debit', isGroup: true },
