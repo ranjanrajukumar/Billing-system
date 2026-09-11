@@ -26,10 +26,17 @@ import { requestContext } from './middleware/requestContext.js';
  * server-to-server, same-origin navigation) are unaffected either way.
  */
 function corsOptions() {
+  // This is the canonical public client. Keeping it here as a fallback means
+  // an API deployment remains usable if Render has not yet applied its
+  // CORS_ORIGINS/CLIENT_URL environment change.
+  const productionClientOrigins = [
+    'https://billing-system-client-jl38.onrender.com',
+  ];
+
   // Do not make CLIENT_URL a fallback here. A deployment can retain an older
   // CORS_ORIGINS value while CLIENT_URL has already been changed to the new
   // static-site URL; treating it as a fallback would reject the live client.
-  const configured = [process.env.CORS_ORIGINS, process.env.CLIENT_URL]
+  const configured = [...productionClientOrigins, process.env.CORS_ORIGINS, process.env.CLIENT_URL]
     .filter(Boolean)
     .join(',')
     .split(',')
