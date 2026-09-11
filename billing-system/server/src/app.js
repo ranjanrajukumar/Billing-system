@@ -26,7 +26,12 @@ import { requestContext } from './middleware/requestContext.js';
  * server-to-server, same-origin navigation) are unaffected either way.
  */
 function corsOptions() {
-  const configured = (process.env.CORS_ORIGINS || process.env.CLIENT_URL || '')
+  // Do not make CLIENT_URL a fallback here. A deployment can retain an older
+  // CORS_ORIGINS value while CLIENT_URL has already been changed to the new
+  // static-site URL; treating it as a fallback would reject the live client.
+  const configured = [process.env.CORS_ORIGINS, process.env.CLIENT_URL]
+    .filter(Boolean)
+    .join(',')
     .split(',')
     .map((value) => value.trim().replace(/\/$/, ''))
     .filter(Boolean);
