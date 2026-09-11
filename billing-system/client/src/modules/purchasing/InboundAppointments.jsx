@@ -22,6 +22,7 @@ import { useToast } from '../../context/ToastContext.jsx';
 import api from '../../services/api.js';
 import DataTable from '../../components/DataTable.jsx';
 import SupplierSelect from './SupplierSelect.jsx';
+import { confirmAction } from '../../utils/alerts.js';
 
 const STATUS_COLORS = {
   Scheduled: 'primary',
@@ -179,8 +180,8 @@ export default function InboundAppointments() {
         totalPages={appointments?.totalPages || 1}
         onPageChange={setPage}
         onEdit={handleOpen}
-        onDelete={(row) => {
-          if (confirm('Cancel this appointment?')) handleDelete(row.id);
+        onDelete={async (row) => {
+          if (await confirmAction({ title: 'Cancel appointment?', text: 'This inbound appointment will be cancelled.', confirmText: 'Cancel appointment' })) handleDelete(row.id);
         }}
       />
 

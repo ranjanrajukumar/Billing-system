@@ -17,6 +17,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import { useToast } from '../../context/ToastContext.jsx';
 import api from '../../services/api.js';
 import DataTable from '../../components/DataTable.jsx';
+import { confirmAction } from '../../utils/alerts.js';
 
 const GATEPASS_STATUS_COLORS = {
   Pending: 'warning',
@@ -160,8 +161,8 @@ export default function Gatepasses() {
         totalPages={gatepasses?.totalPages || 1}
         onPageChange={setPage}
         onEdit={handleOpen}
-        onDelete={(row) => {
-          if (confirm('Delete this gatepass?')) handleDelete(row.id);
+        onDelete={async (row) => {
+          if (await confirmAction({ title: 'Delete gatepass?', text: 'This gatepass will be permanently deleted.', confirmText: 'Delete gatepass' })) handleDelete(row.id);
         }}
       />
 

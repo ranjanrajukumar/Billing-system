@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getModules, getSettings, saveCompany, setBusinessMode, setModule } from './settings.controller.js';
+import { applyClientProfile, getModules, getSettings, saveCompany, setBusinessMode, setModule } from './settings.controller.js';
 import { authorize } from '../../middleware/authMiddleware.js';
 import { upload } from '../../middleware/upload.js';
 
@@ -13,6 +13,7 @@ router.put('/company', authorize('Admin', 'Accountant'), upload.single('logo'), 
 router.get('/modules', getModules);
 // Changing what the application *is* stays with the people who own it.
 router.put('/mode', authorize('Admin'), setBusinessMode);
+router.put('/profile', authorize('Admin'), applyClientProfile);
 router.put('/modules/:key', authorize('Admin'), setModule);
 
 export default router;

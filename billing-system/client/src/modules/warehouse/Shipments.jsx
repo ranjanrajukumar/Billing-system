@@ -17,6 +17,7 @@ import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import { useToast } from '../../context/ToastContext.jsx';
 import api from '../../services/api.js';
 import DataTable from '../../components/DataTable.jsx';
+import { confirmAction } from '../../utils/alerts.js';
 
 const STATUS_COLORS = {
   Pending: 'warning',
@@ -167,8 +168,8 @@ export default function Shipments() {
         totalPages={shipments?.totalPages || 1}
         onPageChange={setPage}
         onEdit={handleOpen}
-        onDelete={(row) => {
-          if (confirm('Cancel this shipment?')) handleDelete(row.id);
+        onDelete={async (row) => {
+          if (await confirmAction({ title: 'Cancel shipment?', text: 'This shipment will be cancelled.', confirmText: 'Cancel shipment' })) handleDelete(row.id);
         }}
       />
 

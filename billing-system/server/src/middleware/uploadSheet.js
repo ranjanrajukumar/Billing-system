@@ -1,5 +1,7 @@
 import multer from 'multer';
 import path from 'path';
+import os from 'node:os';
+import fs from 'node:fs';
 
 /**
  * Uploads for the spreadsheet importers.
@@ -56,6 +58,29 @@ export const uploadSheet = multer({
       ));
     }
 
+    return cb(null, true);
+  },
+});
+
+// Large catalogue imports are processed after the request returns. Keeping the
+// upload on disk avoids retaining a multi-lakh-row sheet in the API heap.
+const importDirectory = path.join(os.tmpdir(), 'billing-system-imports');
+fs.mkdirSync(importDirectory, { recursive: true });
+
+export const uploadLargeSheet = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, importDirectory),
+    filename: (_req, file, cb) => cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${path.extname(file.originalname)}`),
+  }),
+  limits: { fileSize: Number(process.env.LARGE_IMPORT_MAX_BYTES || 200 * 1024 * 1024) },
+  fileFilter: (_req, file, cb) => {
+    const extension = path.extname(file.originalname || '').toLowerCase();
+    if (!new Set(['.xlsx', '.csv']).has(extension)) {
+      return cb(Object.assign(new Error('Upload a spreadsheet saved as .xlsx or .csv'), { status: 400 }));
+    }
+    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      return cb(Object.assign(new Error(`A ${extension} file was expected but the upload looks like ${file.mimetype}`), { status: 400 }));
+    }
     return cb(null, true);
   },
 });

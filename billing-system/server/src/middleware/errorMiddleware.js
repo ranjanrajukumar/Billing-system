@@ -30,7 +30,7 @@ export function errorHandler(error, _req, res, _next) {
   // Multer surfaces upload problems (oversized file, unexpected field) as client errors.
   if (error.name === 'MulterError') {
     status = 400;
-    message = error.code === 'LIMIT_FILE_SIZE' ? 'File is too large (maximum 2MB)' : error.message;
+    message = error.code === 'LIMIT_FILE_SIZE' ? 'File is too large for this import' : error.message;
   }
 
   if (error.name === 'SequelizeForeignKeyConstraintError') {

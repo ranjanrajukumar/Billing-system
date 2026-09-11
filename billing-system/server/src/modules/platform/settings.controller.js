@@ -2,10 +2,11 @@ import { Company, FeatureFlag, Setting } from '../../models/index.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { imageColumns } from '../../utils/imageUpload.js';
 import { clearBranchCache } from '../../middleware/branchContext.js';
-import { getConfig, invalidateConfig, moduleStatus } from './config.service.js';
-import { BUSINESS_MODES, CORE_MODULE_KEYS, MODULE_BY_KEY } from '../../config/modules.js';
+import { getConfig, invalidateConfig, moduleStatus, clientProfiles } from './config.service.js';
+import { BUSINESS_MODES, CLIENT_PROFILE_BY_KEY, CORE_MODULE_KEYS, MODULE_BY_KEY, MODULES } from '../../config/modules.js';
 import { catalogueForModules } from '../../config/menu.js';
 import { emit, POINTS } from './extensions.service.js';
+import { seedChartOfAccounts } from '../accounting/accounting.service.js';
 
 // Only these are client-editable. The form posts back every column it read,
 // including audit fields that must never be overwritten from a request.
@@ -42,6 +43,8 @@ export const getModules = asyncHandler(async (_req, res) => {
   const [config, modules] = await Promise.all([getConfig(), moduleStatus()]);
   res.json({
     mode: config.mode,
+    profile: config.profile,
+    profiles: clientProfiles(),
     modes: BUSINESS_MODES,
     allowNegativeStock: config.allowNegativeStock,
     multiBranch: config.multiBranch,
@@ -78,6 +81,45 @@ export const setBusinessMode = asyncHandler(async (req, res) => {
   res.json({
     message: `Switched to ${mode} mode.`,
     mode: config.mode,
+    modules,
+    menuCatalogue: catalogueForModules(config.modules),
+  });
+});
+
+/** Applies a client-sized module set and records the choice on the company. */
+export const applyClientProfile = asyncHandler(async (req, res) => {
+  const profile = CLIENT_PROFILE_BY_KEY[req.body?.profile];
+  if (!profile) return res.status(400).json({ message: 'Choose a valid client profile.' });
+
+  const company = await Company.findOne();
+  if (!company) return res.status(404).json({ message: 'Company not set up yet' });
+
+  await company.update({
+    businessMode: profile.mode,
+    clientProfile: profile.key,
+    authlstedit: req.user?.id,
+  });
+
+  const selected = new Set(profile.modules);
+  for (const module of MODULES) {
+    if (module.core) continue;
+    const enabled = selected.has(module.key);
+    const [flag] = await FeatureFlag.findOrCreate({
+      where: { moduleKey: module.key },
+      defaults: { moduleKey: module.key, enabled, authadd: req.user?.id },
+    });
+    await flag.update({ enabled, detstatus: false, authlstedit: req.user?.id });
+  }
+
+  if (selected.has('accounting')) await seedChartOfAccounts();
+  invalidateConfig();
+  await emit(POINTS.MODE_CHANGED, { mode: profile.mode });
+
+  const [config, modules] = await Promise.all([getConfig(), moduleStatus()]);
+  res.json({
+    message: `${profile.label} profile applied.`,
+    mode: config.mode,
+    profile: config.profile,
     modules,
     menuCatalogue: catalogueForModules(config.modules),
   });

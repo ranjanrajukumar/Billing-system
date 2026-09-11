@@ -54,6 +54,39 @@ export async function confirmAction({
   return result.isConfirmed;
 }
 
+/**
+ * Replaces the browser's blocking prompt with a themed, cancellable input.
+ * `null` means the user cancelled; an empty string is a deliberate blank note.
+ */
+export async function promptAction({
+  title = 'Add a note',
+  text = '',
+  inputLabel = 'Note',
+  inputPlaceholder = '',
+  confirmText = 'Continue',
+  cancelText = 'Cancel',
+  required = false,
+} = {}) {
+  const result = await Swal.fire({
+    ...base(),
+    title,
+    text,
+    input: 'textarea',
+    inputLabel,
+    inputPlaceholder,
+    inputAttributes: { 'aria-label': inputLabel },
+    showCancelButton: true,
+    confirmButtonText: confirmText,
+    cancelButtonText: cancelText,
+    inputValidator: required
+      ? (value) => (!String(value || '').trim() ? `${inputLabel} is required` : undefined)
+      : undefined,
+  });
+  return result.isConfirmed ? String(result.value || '').trim() : null;
+}
+
+export { alertError, alertInfo, alertSuccess, toastSuccess };
+
 function alertSuccess(title, text = '') {
   return Swal.fire({ ...base(), title, text, icon: 'success', timer: 2200, showConfirmButton: false });
 }

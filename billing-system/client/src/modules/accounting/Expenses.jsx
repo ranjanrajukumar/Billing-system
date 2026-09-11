@@ -15,6 +15,7 @@ import useRequiredFields from '../../hooks/useRequiredFields.js';
 import { currency, date as fmtDate } from '../../utils/formatters.js';
 import api from '../../services/api.js';
 import { branchesApi, cashApi, expensesApi } from '../../services/resource.service.js';
+import { promptAction } from '../../utils/alerts.js';
 
 /**
  * Running costs, booked against the location that incurred them.
@@ -107,7 +108,10 @@ export default function Expenses() {
   const act = async (row, action) => {
     setBusy(true);
     try {
-      const reason = action === 'reject' ? window.prompt('Why is this rejected?') || '' : undefined;
+      const reason = action === 'reject'
+        ? await promptAction({ title: 'Reject expense', text: 'Why is this expense rejected?', inputLabel: 'Reason', confirmText: 'Reject expense', required: true })
+        : undefined;
+      if (reason === null) { setBusy(false); return; }
       await expensesApi[action](row.id, reason);
       showToast(`Expense ${action}${action.endsWith('e') ? 'd' : 'ed'}`);
       load();

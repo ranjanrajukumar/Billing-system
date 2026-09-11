@@ -15,6 +15,7 @@ import StatusChip from '../../components/StatusChip.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
 import { currency, date as fmtDate } from '../../utils/formatters.js';
 import { approvalsApi, usersApi } from '../../services/resource.service.js';
+import { promptAction } from '../../utils/alerts.js';
 
 /**
  * The approval queue and the rules behind it.
@@ -55,7 +56,14 @@ export default function Approvals() {
   useEffect(() => { load(); }, []);
 
   const decide = async (row, approved) => {
-    const note = window.prompt(approved ? 'Any note with this approval?' : 'Why is this rejected?') || '';
+    const note = await promptAction({
+      title: approved ? 'Approve request' : 'Reject request',
+      text: approved ? 'Add an optional approval note.' : 'Why is this rejected?',
+      inputLabel: 'Note',
+      confirmText: approved ? 'Approve request' : 'Reject request',
+      required: !approved,
+    });
+    if (note === null) return;
     setBusy(true);
     try {
       await approvalsApi[approved ? 'approve' : 'reject'](row.id, note);

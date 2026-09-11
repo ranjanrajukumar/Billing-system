@@ -9,8 +9,11 @@ const PAGE_ROLES = {
   '/users': ['Admin'],
   '/audit-logs': ['Admin'],
   '/backups': ['Admin'],
-  '/reports': ['Admin', 'Accountant'],
-  '/tax-reports': ['Admin', 'Accountant'],
+  // These are the operational roles that are already given the Reports menu
+  // by the server. Keep the route gate in step with that menu or a user sees a
+  // Reports link that only opens an access-denied panel.
+  '/reports': ['Admin', 'Accountant', 'Auditor', 'Branch Manager', 'Purchase Manager'],
+  '/tax-reports': ['Admin', 'Accountant', 'Auditor'],
 };
 
 /** Roles allowed to perform an action, for hiding buttons rather than pages. */

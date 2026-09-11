@@ -26,9 +26,9 @@ export const sendSMS = async (to, body) => {
 
   if (!twilioClient || !process.env.TWILIO_PHONE_NUMBER) {
     console.warn('Twilio is not configured. SMS not sent to:', to);
-    console.warn('Message body:', body);
-    // Return success true in dev mode to avoid failing transactions
-    return { success: true, mock: true, messageId: 'mock-id' };
+    // Never report a fictitious successful delivery. Callers can decide whether
+    // SMS is optional, but they must not present an unsent message as sent.
+    return { success: false, error: 'SMS service is not configured' };
   }
 
   try {

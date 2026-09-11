@@ -16,6 +16,7 @@ import { useToast } from '../../context/ToastContext.jsx';
 import useRequiredFields from '../../hooks/useRequiredFields.js';
 import { currency, date as fmtDate } from '../../utils/formatters.js';
 import { accountingApi } from '../../services/resource.service.js';
+import { promptAction } from '../../utils/alerts.js';
 
 /**
  * The journal.
@@ -106,7 +107,8 @@ export default function JournalEntries() {
   };
 
   const reverse = async (row) => {
-    const narration = window.prompt('Why is this being reversed?') || undefined;
+    const narration = await promptAction({ title: 'Reverse journal entry', text: 'Why is this entry being reversed?', inputLabel: 'Narration', confirmText: 'Reverse entry', required: true });
+    if (narration === null) return;
     setBusy(true);
     try {
       await accountingApi.reverseEntry(row.id, { narration });

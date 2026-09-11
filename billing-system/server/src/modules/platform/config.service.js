@@ -1,5 +1,5 @@
 import { Company, FeatureFlag } from '../../models/index.js';
-import { CORE_MODULE_KEYS, MODULES, resolveModules } from '../../config/modules.js';
+import { CLIENT_PROFILES, CORE_MODULE_KEYS, MODULES, resolveModules } from '../../config/modules.js';
 
 /**
  * The company's operating configuration — business mode, enabled modules and
@@ -32,6 +32,7 @@ export async function getConfig() {
 
   const value = {
     mode,
+    profile: company?.clientProfile || null,
     modules,
     flags,
     allowNegativeStock: Boolean(company?.allowNegativeStock),
@@ -104,3 +105,5 @@ export async function moduleStatus() {
     flag: flags[module.key],
   }));
 }
+
+export const clientProfiles = () => CLIENT_PROFILES;

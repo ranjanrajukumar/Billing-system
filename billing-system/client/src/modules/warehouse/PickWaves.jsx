@@ -17,6 +17,7 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import { useToast } from '../../context/ToastContext.jsx';
 import api from '../../services/api.js';
 import DataTable from '../../components/DataTable.jsx';
+import { confirmAction } from '../../utils/alerts.js';
 
 const STATUS_COLORS = {
   Planned: 'warning',
@@ -166,8 +167,8 @@ export default function PickWaves() {
         totalPages={waves?.totalPages || 1}
         onPageChange={setPage}
         onEdit={handleOpen}
-        onDelete={(row) => {
-          if (confirm('Cancel this wave?')) handleDelete(row.id);
+        onDelete={async (row) => {
+          if (await confirmAction({ title: 'Cancel wave?', text: 'This picking wave will be cancelled.', confirmText: 'Cancel wave' })) handleDelete(row.id);
         }}
       />
 

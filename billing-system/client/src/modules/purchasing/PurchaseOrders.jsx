@@ -17,6 +17,7 @@ import { useToast } from '../../context/ToastContext.jsx';
 import useRequiredFields from '../../hooks/useRequiredFields.js';
 import { currency } from '../../utils/formatters.js';
 import { branchesApi, productsApi, purchaseOrdersApi, suppliersApi } from '../../services/resource.service.js';
+import { promptAction } from '../../utils/alerts.js';
 import { useForm, Controller } from 'react-hook-form';
 
 /**
@@ -134,8 +135,15 @@ export default function PurchaseOrders() {
     setBusy(true);
     try {
       const reason = ['reject', 'close'].includes(action)
-        ? window.prompt(action === 'reject' ? 'Why is this order rejected?' : 'Why is this order being closed short?') || ''
+        ? await promptAction({
+          title: action === 'reject' ? 'Reject purchase order' : 'Close purchase order short',
+          text: action === 'reject' ? 'Why is this order rejected?' : 'Why is this order being closed short?',
+          inputLabel: 'Reason',
+          confirmText: action === 'reject' ? 'Reject order' : 'Close order',
+          required: true,
+        })
         : undefined;
+      if (reason === null) { setBusy(false); return; }
       const result = await purchaseOrdersApi[action](row.id, reason);
       // Submitting an order that trips no rule is approved outright, which is
       // worth saying out loud rather than leaving the user to notice.

@@ -6,7 +6,10 @@ import {
 import { authorize } from '../../middleware/authMiddleware.js';
 
 const router = Router();
-router.use(authorize('Admin', 'Accountant'));
+// These roles are already offered the Reports entry in the navigation. The
+// server remains the authority, so list the same roles here rather than
+// allowing a visible menu item to lead to a 403 response.
+router.use(authorize('Admin', 'Accountant', 'Auditor', 'Branch Manager', 'Purchase Manager'));
 router.get('/sales', salesReport);
 router.get('/customers', customerReport);
 router.get('/gst', gstReport);

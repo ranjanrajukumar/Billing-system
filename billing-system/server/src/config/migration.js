@@ -3,8 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import { Op, Sequelize } from 'sequelize';
 import {
-  sequelize, Role, User, Company, Category, Product, Branch, BranchStock, BinStock,
-  InvoiceTemplate, StockMovement, Warehouse, WarehouseBin, ExpenseCategory, ApprovalRule,
+  sequelize, Role, User, Company, Product, Branch, BranchStock, BinStock,
+  InvoiceTemplate, StockMovement, Warehouse, WarehouseBin, ApprovalRule,
 } from '../models/index.js';
 import { DEFAULT_TEMPLATES } from './defaultTemplates.js';
 import { assertSupportedAuth, getConnectionOptions, getDbSettings } from './dbSettings.js';
@@ -207,12 +207,6 @@ async function seedDefaults() {
       productAttributeDefinitions: [],
     }
   });
-  await Category.bulkCreate([{ name: 'General' }, { name: 'Electronics' }, { name: 'Services' }], { ignoreDuplicates: true });
-
-  // Expense heads, matched to ledger accounts by name in chartOfAccounts.js.
-  for (const name of ['Rent', 'Electricity', 'Salary', 'Transport', 'Maintenance', 'Internet', 'Marketing', 'Packaging', 'Other']) {
-    await ExpenseCategory.findOrCreate({ where: { name }, defaults: { name } });
-  }
 }
 
 /**

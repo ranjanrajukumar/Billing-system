@@ -1,6 +1,6 @@
 import { Op } from 'sequelize';
-import { Company, InvoiceTemplate } from '../../models/index.js';
-import { BLOCK_TYPES, defaultLayout, renderInvoiceHtml, sampleInvoice } from './invoiceHtml.service.js';
+import { Company, Customer, Invoice, InvoiceItem, InvoiceTemplate, Product } from '../../models/index.js';
+import { BLOCK_TYPES, defaultLayout, renderInvoiceHtml } from './invoiceHtml.service.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { paged } from '../../utils/pagination.js';
 import { buildInvoicePdf } from '../platform/pdf.service.js';
@@ -96,50 +96,17 @@ export const setDefault = asyncHandler(async (req, res) => {
   res.json(template);
 });
 
-// Renders a specimen invoice so a template can be previewed without real data.
-async function buildSamplePdf(templateConfig) {
-  const dummyInvoice = {
-    invoiceNumber: `${templateConfig.invoicePrefix || 'INV-'}0001${templateConfig.invoiceSuffix || ''}`,
-    invoiceDate: new Date().toISOString().split('T')[0],
-    subtotal: 1000,
-    cgst: 90,
-    sgst: 90,
-    igst: 0,
-    grandTotal: 1180,
-    amountInWords: 'One Thousand One Hundred and Eighty Only',
-    Customer: {
-      customerName: 'Sample Customer Ltd.',
-      gstNumber: '27AAACA1234A1Z5',
-      address: '123 Test Street, Testing City, Test State'
-    },
-    InvoiceItems: [
-      {
-        Product: { productName: 'Sample Product 1', hsnCode: '1234' },
-        quantity: 2,
-        rate: 300,
-        gstPercent: 18,
-        discount: 0,
-        amount: 600
-      },
-      {
-        Product: { productName: 'Sample Service 2', hsnCode: '9988' },
-        quantity: 1,
-        rate: 400,
-        gstPercent: 18,
-        discount: 0,
-        amount: 400
-      }
-    ]
-  };
+async function latestInvoice() {
+  return Invoice.findOne({
+    where: { detstatus: false },
+    include: [Customer, { model: InvoiceItem, include: [Product] }],
+    order: [['invoiceDate', 'DESC'], ['id', 'DESC']],
+  });
+}
 
-  const dummyCompany = {
-    name: templateConfig.companyName || 'Sample Company',
-    address: templateConfig.address || 'Sample Address',
-    gstNumber: templateConfig.gstNumber,
-    signatureUrl: templateConfig.authorizedSignatory ? 'dummy' : null 
-  };
-
-  return buildInvoicePdf(dummyInvoice, dummyCompany, templateConfig, templateConfig.invoiceTitle || 'TAX INVOICE');
+async function buildPreviewPdf(invoice, templateConfig) {
+  const company = await Company.findOne();
+  return buildInvoicePdf(invoice, company, templateConfig, templateConfig.invoiceTitle || 'TAX INVOICE');
 }
 
 function sendPdf(res, pdfBuffer, filename) {
@@ -151,9 +118,12 @@ function sendPdf(res, pdfBuffer, filename) {
   res.send(pdfBuffer);
 }
 
-// Live preview of a template configuration that has not been saved yet.
+// Previews use a real invoice. The system must never render hard-coded sample
+// customers, products, addresses, or monetary amounts as though they were data.
 export const generateSample = asyncHandler(async (req, res) => {
-  sendPdf(res, await buildSamplePdf(req.body), 'sample.pdf');
+  const invoice = await latestInvoice();
+  if (!invoice) return res.status(409).json({ message: 'Create an invoice before previewing a template.' });
+  sendPdf(res, await buildPreviewPdf(invoice, req.body), `invoice-${invoice.id}-preview.pdf`);
 });
 
 // Block palette for the drag-and-drop designer, so the client never has to
@@ -162,11 +132,12 @@ export const listBlockTypes = asyncHandler(async (_req, res) => {
   res.json({ blocks: BLOCK_TYPES, defaultLayout: defaultLayout() });
 });
 
-// Live preview while designing: renders the posted layout against sample data.
 export const htmlPreview = asyncHandler(async (req, res) => {
+  const invoice = await latestInvoice();
+  if (!invoice) return res.status(409).json({ message: 'Create an invoice before previewing a template.' });
   const company = await Company.findOne();
   const html = await renderInvoiceHtml({
-    invoice: sampleInvoice(),
+    invoice,
     company,
     template: req.body || {},
     mediaBase: `${req.protocol}://${req.get('host')}`,
@@ -178,5 +149,7 @@ export const htmlPreview = asyncHandler(async (req, res) => {
 export const previewTemplate = asyncHandler(async (req, res) => {
   const template = await InvoiceTemplate.findOne({ where: { id: req.params.id, detstatus: false } });
   if (!template) return res.status(404).json({ message: 'Template not found' });
-  sendPdf(res, await buildSamplePdf(template.toJSON()), `template-${template.id}.pdf`);
+  const invoice = await latestInvoice();
+  if (!invoice) return res.status(409).json({ message: 'Create an invoice before previewing a template.' });
+  sendPdf(res, await buildPreviewPdf(invoice, template.toJSON()), `template-${template.id}.pdf`);
 });

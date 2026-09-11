@@ -137,6 +137,11 @@ export default function DataTable(props) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [expanded, setExpanded] = useState([]);
+  // Not every grid is backed by a paginated API. Give those in-memory grids
+  // the same navigation as server-backed lists instead of silently rendering
+  // an unbounded number of rows.
+  const [localPage, setLocalPage] = useState(1);
+  const [localLimit, setLocalLimit] = useState(10);
 
   const columns = useMemo(() => normalizeColumns(rawColumns), [rawColumns]);
 
@@ -181,9 +186,34 @@ export default function DataTable(props) {
     });
   }, [hookDriven, visibleRows, sortColumn, sortDirection, columns]);
 
+  // A `meta` object means the caller has already supplied one page from the
+  // server. Re-slicing it would make later pages appear empty. Hook-driven
+  // tables are already paginated too. The remaining plain `rows` tables are
+  // paginated here so all application grids have a usable page control.
+  const localPagination = !hookDriven && !meta;
+  const localTotalPages = Math.max(1, Math.ceil(sortedRows.length / localLimit));
+  const safeLocalPage = Math.min(localPage, localTotalPages);
+  const renderedRows = localPagination
+    ? sortedRows.slice((safeLocalPage - 1) * localLimit, safeLocalPage * localLimit)
+    : sortedRows;
+  const tableTotal = hookDriven
+    ? totalItemsFromHook
+    : (meta?.total ?? (localPagination ? sortedRows.length : undefined));
+  const tablePage = hookDriven ? pageFromHook : (meta?.page ?? safeLocalPage);
+  const tablePages = hookDriven
+    ? totalPagesFromHook
+    : (meta?.pages ?? (localPagination ? localTotalPages : 0));
+  const tablePageChange = hookDriven
+    ? pageChangeFromHook
+    : (onPageChange ?? (localPagination ? setLocalPage : undefined));
+  const tableItemsPerPage = hookDriven ? itemsPerPageFromHook : localLimit;
+  const tableItemsPerPageChange = hookDriven
+    ? handleItemsPerPageChange
+    : (localPagination ? (nextLimit) => { setLocalLimit(nextLimit); setLocalPage(1); } : undefined);
+
   // ── Selection ────────────────────────────────────────────────────
   const selectedRows = selectedFromHook ?? [];
-  const pageKeys = sortedRows.map(rowKey);
+  const pageKeys = renderedRows.map(rowKey);
   const allPageSelected = pageKeys.length > 0 && pageKeys.every((key) => selectedRows.includes(key));
 
   // ── Leading columns ──────────────────────────────────────────────
@@ -195,7 +225,9 @@ export default function DataTable(props) {
   // ── Serial numbers ───────────────────────────────────────────────
   const serialOffset = meta?.page && meta?.limit
     ? (Number(meta.page) - 1) * Number(meta.limit)
-    : ((pageFromHook ?? 1) - 1) * (itemsPerPageFromHook ?? 0);
+    : (hookDriven
+      ? ((pageFromHook ?? 1) - 1) * (itemsPerPageFromHook ?? 0)
+      : (localPagination ? (safeLocalPage - 1) * localLimit : 0));
   const serialFor = (index) => serialOffset + index + 1;
 
   const toggleExpanded = (key) => setExpanded((current) => (
@@ -207,18 +239,25 @@ export default function DataTable(props) {
   // small screens get one card per row instead of a horizontal scroll.
   if (isMobile) {
     return (
-      <MobileCards
-        columns={columns}
-        rows={sortedRows}
-        rowKey={rowKey}
-        mobileKeyField={mobileKeyField}
-        showSerial={showSerial}
-        serialFor={serialFor}
-        loading={loading}
-        error={error}
-        emptyMessage={emptyMessage}
-        onRowClick={onRowClick ?? onViewRow}
-      />
+      <>
+        <MobileCards
+          columns={columns}
+          rows={renderedRows}
+          rowKey={rowKey}
+          mobileKeyField={mobileKeyField}
+          showSerial={showSerial}
+          serialFor={serialFor}
+          loading={loading}
+          error={error}
+          emptyMessage={emptyMessage}
+          onRowClick={onRowClick ?? onViewRow}
+        />
+        {localPagination && localTotalPages > 1 && (
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+            <Pager currentPage={safeLocalPage} totalPages={localTotalPages} onChange={setLocalPage} />
+          </Box>
+        )}
+      </>
     );
   }
 
@@ -268,7 +307,7 @@ export default function DataTable(props) {
         ...(fill ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : null),
       }}
     >
-      {(searchable || onRefresh || exportable || hasActiveFilters || hookDriven) && (
+      {(searchable || onRefresh || exportable || hasActiveFilters || hookDriven || localPagination) && (
         <Toolbar
           searchable={searchable}
           globalSearch={searchFromHook ?? ''}
@@ -280,13 +319,13 @@ export default function DataTable(props) {
           columns={columns}
           rows={filteredData ?? sortedRows}
           loading={loading}
-          shown={sortedRows.length}
-          total={hookDriven ? totalItemsFromHook : (meta?.total ?? undefined)}
-          currentPage={hookDriven ? pageFromHook : Number(meta?.page || 1)}
-          totalPages={hookDriven ? totalPagesFromHook : Number(meta?.pages || 0)}
-          onPageChange={hookDriven ? pageChangeFromHook : onPageChange}
-          itemsPerPage={itemsPerPageFromHook}
-          onItemsPerPageChange={handleItemsPerPageChange}
+          shown={renderedRows.length}
+          total={tableTotal}
+          currentPage={Number(tablePage || 1)}
+          totalPages={Number(tablePages || 0)}
+          onPageChange={tablePageChange}
+          itemsPerPage={tableItemsPerPage}
+          onItemsPerPageChange={tableItemsPerPageChange}
           itemsPerPageOptions={itemsPerPageOptions}
         />
       )}
@@ -371,8 +410,8 @@ export default function DataTable(props) {
             )}
           </TableHead>
 
-          <TableBody sx={loading && sortedRows.length > 0 ? { opacity: 0.55, pointerEvents: 'none' } : undefined}>
-            {loading && sortedRows.length === 0 && (
+          <TableBody sx={loading && renderedRows.length > 0 ? { opacity: 0.55, pointerEvents: 'none' } : undefined}>
+            {loading && renderedRows.length === 0 && (
               <SkeletonRows columnSpan={columnSpan} />
             )}
 
@@ -384,7 +423,7 @@ export default function DataTable(props) {
               />
             )}
 
-            {!error && sortedRows.map((row, index) => {
+            {!error && renderedRows.map((row, index) => {
               const key = rowKey(row) ?? index;
               const isExpanded = expanded.includes(key);
               const isSelected = selectedRows.includes(key);
@@ -496,7 +535,7 @@ export default function DataTable(props) {
               ];
             })}
 
-            {!loading && !error && sortedRows.length === 0 && (
+            {!loading && !error && renderedRows.length === 0 && (
               <StateRow
                 columnSpan={columnSpan}
                 icon={<InboxIcon sx={{ fontSize: 40, opacity: 0.3 }} />}

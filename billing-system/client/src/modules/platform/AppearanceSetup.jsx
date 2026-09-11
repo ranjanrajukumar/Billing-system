@@ -1,13 +1,26 @@
 import PaletteIcon from '@mui/icons-material/Palette';
 import CheckIcon from '@mui/icons-material/Check';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import {
   Alert, Box, Button, Chip, Grid, Paper, Stack, ToggleButton, ToggleButtonGroup,
   Tooltip, Typography, alpha,
 } from '@mui/material';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { UI_ACCENTS, UI_DENSITY, UI_RADIUS } from '../../utils/theme.js';
 import { UI_FONTS } from '../../utils/theme.js';
 import { CARD_STYLES, CONTENT_WIDTHS, DESIGN_PRESETS, SIDEBAR_WIDTHS } from '../../utils/uiPrefs.js';
+import { productsApi } from '../../services/resource.service.js';
+
+const DEFAULT_APPEARANCE = {
+  uiAccent: 'indigo',
+  uiRadius: 'rounded',
+  uiDensity: 'comfortable',
+  uiTheme: 'light',
+  uiLayout: 'full',
+  uiSidebar: 'standard',
+  uiCards: 'outlined',
+  uiFont: 'inter',
+};
 
 /**
  * How the application looks, chosen once for the business.
@@ -25,20 +38,36 @@ import { CARD_STYLES, CONTENT_WIDTHS, DESIGN_PRESETS, SIDEBAR_WIDTHS } from '../
  */
 export default function AppearanceSetup({ value, onChange, onSave, saving }) {
   const [local, setLocal] = useState({
-    uiAccent: value?.uiAccent || 'indigo',
-    uiRadius: value?.uiRadius || 'rounded',
-    uiDensity: value?.uiDensity || 'comfortable',
-    uiTheme: value?.uiTheme || 'light',
-    uiLayout: value?.uiLayout || 'full',
-    uiSidebar: value?.uiSidebar || 'standard',
-    uiCards: value?.uiCards || 'outlined',
-    uiFont: value?.uiFont || 'inter',
+    ...DEFAULT_APPEARANCE,
+    ...Object.fromEntries(Object.entries(DEFAULT_APPEARANCE)
+      .map(([key, fallback]) => [key, value?.[key] || fallback])),
   });
+  const [previewProducts, setPreviewProducts] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+
+    productsApi.list({ page: 1, limit: 2 })
+      .then((result) => {
+        if (active) setPreviewProducts(result?.data || []);
+      })
+      .catch(() => {
+        if (active) setPreviewProducts([]);
+      });
+
+    return () => { active = false; };
+  }, []);
 
   const set = (patch) => {
     const next = { ...local, ...patch };
     setLocal(next);
     onChange?.(next);
+  };
+
+  const resetAppearance = () => {
+    setLocal(DEFAULT_APPEARANCE);
+    onChange?.(DEFAULT_APPEARANCE);
+    onSave?.(DEFAULT_APPEARANCE);
   };
 
   const accent = UI_ACCENTS[local.uiAccent] || UI_ACCENTS.indigo;
@@ -275,24 +304,42 @@ export default function AppearanceSetup({ value, onChange, onSave, saving }) {
               </Box>
             </Box>
             <Box component="tbody">
-              {[['Tomato Seeds', '3', '135.00'], ['Urea 50kg', '12', '7,080.00']].map((row) => (
-                <Box component="tr" key={row[0]}>
-                  {row.map((cell, i) => (
-                    <Box component="td" key={cell} sx={{
+              {previewProducts.length === 0 ? (
+                <Box component="tr">
+                  <Box component="td" colSpan={3} sx={{
+                    padding: density.cell, fontSize: density.body, textAlign: 'center',
+                    color: previewDark ? '#94a3b8' : '#64748b',
+                  }}>No products available</Box>
+                </Box>
+              ) : previewProducts.map((product) => {
+                const row = [
+                  product.productName,
+                  Number(product.stock || 0).toLocaleString('en-IN'),
+                  Number(product.sellingPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+                ];
+                return (
+                  <Box component="tr" key={product.id}>
+                    {row.map((cell, i) => (
+                      <Box component="td" key={`${product.id}-${i}`} sx={{
                       textAlign: i === 0 ? 'left' : 'right',
                       padding: density.cell, fontSize: density.body,
                       color: previewDark ? '#f1f5f9' : '#0f172a',
                       borderBottom: `1px solid ${previewDark ? alpha('#fff', 0.06) : alpha('#000', 0.05)}`,
                     }}>{cell}</Box>
-                  ))}
-                </Box>
-              ))}
+                    ))}
+                  </Box>
+                );
+              })}
             </Box>
           </Box>
         </Paper>
       </Box>
 
-      <Stack direction="row" justifyContent="flex-end">
+      <Stack direction="row" justifyContent="space-between">
+        <Button color="inherit" onClick={resetAppearance} disabled={saving}
+          startIcon={<RestartAltIcon />} sx={{ borderRadius: 2 }}>
+          Reset to default
+        </Button>
         <Button variant="contained" onClick={() => onSave?.(local)} disabled={saving}
           startIcon={<PaletteIcon />} sx={{ borderRadius: 2 }}>
           {saving ? 'Saving…' : 'Apply appearance'}

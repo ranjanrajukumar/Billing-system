@@ -16,6 +16,7 @@ import StatusChip from '../../components/StatusChip.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
 import useRequiredFields from '../../hooks/useRequiredFields.js';
 import { branchesApi, productsApi, stockTransfersApi } from '../../services/resource.service.js';
+import { promptAction } from '../../utils/alerts.js';
 
 /**
  * Stock transfers between locations.
@@ -140,8 +141,15 @@ export default function StockTransfers() {
     setBusy(true);
     try {
       const reason = action === 'reject' || action === 'cancel'
-        ? window.prompt(`Why is this transfer being ${action === 'reject' ? 'rejected' : 'cancelled'}?`) || ''
+        ? await promptAction({
+          title: `Transfer ${action === 'reject' ? 'rejection' : 'cancellation'}`,
+          text: `Why is this transfer being ${action === 'reject' ? 'rejected' : 'cancelled'}?`,
+          inputLabel: 'Reason',
+          confirmText: action === 'reject' ? 'Reject transfer' : 'Cancel transfer',
+          required: true,
+        })
         : undefined;
+      if (reason === null) { setBusy(false); return; }
       await stockTransfersApi[action](row.id, reason);
       showToast(`Transfer ${action === 'cancel' ? 'cancelled' : `${action}d`}`);
       load();

@@ -14,7 +14,8 @@ export const customersApi     = makeResource('/customers');
 export const categoriesApi    = makeResource('/categories');
 export const productsApi = {
   ...makeResource('/products'),
-  import: (formData) => api.post('/products/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data)
+  import: (formData) => api.post('/products/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  importStatus: (jobId) => api.get(`/products/import/${jobId}`).then((r) => r.data),
 };
 export const unitsApi         = makeMasterDataResource('unit');
 export const suppliersApi     = makeResource('/suppliers');
@@ -104,6 +105,7 @@ export const settingsApi = {
   // What this installation currently offers: mode, module states, menu tree.
   modules:     ()       => api.get('/settings/modules').then((r) => r.data ?? {}),
   setMode:     (mode)   => api.put('/settings/mode', { mode }).then((r) => r.data ?? {}),
+  setProfile:  (profile)=> api.put('/settings/profile', { profile }).then((r) => r.data ?? {}),
   setModule:   (key, enabled) => api.put(`/settings/modules/${key}`, { enabled }).then((r) => r.data ?? {}),
 };
 

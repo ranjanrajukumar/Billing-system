@@ -54,6 +54,9 @@ export default (sequelize) => sequelize.define('Company', {
   // ERP workflow (PO/GRN, warehouses, transfers, accounting, approvals).
   // Existing installations start Basic, so nothing appears or changes for them.
   businessMode: { ...enumType(sequelize, BUSINESS_MODES), allowNull: false, defaultValue: 'Basic' },
+  // The last setup profile applied. It is informational; feature flags remain
+  // the authority because an administrator may customize any profile later.
+  clientProfile: { type: DataTypes.STRING(30), allowNull: true },
   // Selling into the negative is refused unless a business explicitly wants it
   // (e.g. back-dated data entry where receipts are keyed after the sales).
   allowNegativeStock: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },

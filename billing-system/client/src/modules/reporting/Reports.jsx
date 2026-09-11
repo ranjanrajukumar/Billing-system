@@ -1,13 +1,15 @@
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import DownloadIcon from '@mui/icons-material/Download';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import PeopleIcon from '@mui/icons-material/People';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
 import GavelIcon from '@mui/icons-material/Gavel';
+import BusinessIcon from '@mui/icons-material/Business';
 import {
-  alpha, Box, Button, Chip, CircularProgress, Divider,
-  Grid, Paper, Stack, Tab, Tabs, TextField, Typography, useTheme,
+  alpha, Avatar, Box, Button, CircularProgress,
+  Checkbox, Grid, ListItemText, Menu, MenuItem, Paper, Stack, Tab, Tabs, Typography, useTheme,
 } from '@mui/material';
 import { useEffect, useState } from 'react';
 import DataTable from '../../components/DataTable.jsx';
@@ -15,7 +17,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import PeriodFilter, { periodLabel } from '../../components/PeriodFilter.jsx';
 import api from '../../services/api.js';
 import { reportsApi } from '../../services/resource.service.js';
-import { currency, date } from '../../utils/formatters.js';
+import { currency, date, mediaUrl } from '../../utils/formatters.js';
 import { printDocument } from '../../utils/print.js';
 
 const REPORT_TYPES = [
@@ -118,9 +120,16 @@ export default function Reports() {
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [company, setCompany] = useState(null);
+  const [selectedFields, setSelectedFields] = useState({});
+  const [fieldMenuAnchor, setFieldMenuAnchor] = useState(null);
 
   const currentType = REPORT_TYPES[tab];
   const stats = summarise(currentType.key, rows);
+  const availableColumns = COLUMNS_MAP[currentType.key] || [];
+  const companyLogo = mediaUrl(company?.logoUrl);
+  // Each report begins with all fields selected; selections are retained per tab.
+  const printedFields = selectedFields[currentType.key] || availableColumns.map((column) => column.field);
+  const printedColumns = availableColumns.filter((column) => printedFields.includes(column.field));
 
   // Only for the printed header; a failure here must not stop reports working.
   useEffect(() => {
@@ -159,6 +168,7 @@ export default function Reports() {
 
   // Print the report rows on their own, without the surrounding app chrome.
   const printReport = () => {
+    if (!printedColumns.length) return;
     const period = periodLabel(filters);
     const generated = new Date().toLocaleString('en-IN');
 
@@ -168,12 +178,18 @@ export default function Reports() {
     printDocument({
       title: `${currentType.label} Report`,
       subtitle: [
-        company?.name,
         `Period: ${period}`,
         `${rows.length} records`,
         `Generated ${generated}`,
       ].filter(Boolean).join('  •  '),
-      columns: (COLUMNS_MAP[currentType.key] || []).map((column) => ({
+      header: {
+        companyName: company?.name,
+        logoUrl: companyLogo,
+        centered: true,
+        details: [company?.address, company?.city, company?.state, company?.mobile].filter(Boolean).join(' | '),
+      },
+      footer: `${company?.name || 'Billing System'} | ${currentType.label} report | ${generated}`,
+      columns: printedColumns.map((column) => ({
         header: column.headerName,
         numeric: column.numeric,
         value: (row) => (column.text ? column.text(row) : row[column.field] ?? ''),
@@ -187,6 +203,18 @@ export default function Reports() {
     });
   };
 
+  const togglePrintedField = (field) => {
+    setSelectedFields((previous) => {
+      const selected = previous[currentType.key] || availableColumns.map((column) => column.field);
+      return {
+        ...previous,
+        [currentType.key]: selected.includes(field)
+          ? selected.filter((value) => value !== field)
+          : [...selected, field],
+      };
+    });
+  };
+
   return (
     <Stack spacing={3} className="animate-fadeInUp">
       <PageHeader
@@ -194,6 +222,43 @@ export default function Reports() {
         subtitle="Analyse sales, GST, inventory and customer data"
         icon={<AssessmentIcon />}
       />
+
+      {/* A report is a client-facing business document as well as an internal
+          table. Keep the company identity visible while the user builds it. */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 2, sm: 2.5 }, borderRadius: 3, color: 'primary.contrastText',
+          bgcolor: 'primary.main', overflow: 'hidden', position: 'relative',
+          '&::after': {
+            content: '""', position: 'absolute', width: 220, height: 220, borderRadius: '50%',
+            right: -80, top: -120, bgcolor: alpha('#fff', 0.1),
+          },
+        }}
+      >
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }} position="relative" zIndex={1}>
+          <Avatar
+            variant="rounded"
+            src={companyLogo || undefined}
+            imgProps={{ alt: `${company?.name || 'Company'} logo` }}
+            sx={{ width: 58, height: 58, bgcolor: alpha('#fff', 0.16), color: 'inherit', borderRadius: 2.5 }}
+          >
+            <BusinessIcon />
+          </Avatar>
+          <Box flex={1} minWidth={0}>
+            <Typography variant="overline" sx={{ opacity: 0.78, letterSpacing: 1.2 }}>Reporting centre</Typography>
+            <Typography variant="h5" fontWeight={800} noWrap>{company?.name || 'Your Company'}</Typography>
+            <Typography variant="body2" sx={{ opacity: 0.86, mt: 0.25 }}>
+              {company?.gstNumber ? `GSTIN: ${company.gstNumber}  |  ` : ''}
+              Prepare clear, branded reports for management, auditors and clients.
+            </Typography>
+          </Box>
+          <Box sx={{ px: 1.5, py: 1, border: 1, borderColor: alpha('#fff', 0.3), borderRadius: 2, textAlign: { xs: 'left', sm: 'right' } }}>
+            <Typography variant="caption" sx={{ opacity: 0.8 }}>Selected report</Typography>
+            <Typography fontWeight={800}>{currentType.label}</Typography>
+          </Box>
+        </Stack>
+      </Paper>
 
       {/* Report type tabs */}
       <Paper variant="outlined" sx={{ borderRadius: 3, overflow: 'hidden' }}>
@@ -228,9 +293,13 @@ export default function Reports() {
             variant="outlined"
             sx={{ p: 2, borderRadius: 2.5, mb: 2.5, bgcolor: alpha(theme.palette.primary.main, 0.02) }}
           >
-            <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
-              Filter Options
-            </Typography>
+            <Stack direction="row" justifyContent="space-between" alignItems="baseline" mb={1.5}>
+              <Box>
+                <Typography variant="subtitle1" fontWeight={800}>Build your {currentType.label.toLowerCase()} report</Typography>
+                <Typography variant="caption" color="text.secondary">Choose a reporting period, then generate the live report.</Typography>
+              </Box>
+              <Typography variant="caption" color="primary.main" fontWeight={700}>Step 1 of 2</Typography>
+            </Stack>
             <Grid container spacing={2} alignItems="flex-end">
               <Grid item xs={12}>
                 <PeriodFilter disableContainer value={filters} onChange={(range) => setFilters({ ...filters, ...range })} />
@@ -253,6 +322,13 @@ export default function Reports() {
           {/* Summary if loaded */}
           {loaded && rows.length > 0 && (
             <Stack spacing={2} mb={2.5}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={0.75}>
+                <Box>
+                  <Typography variant="subtitle1" fontWeight={800}>Report overview</Typography>
+                  <Typography variant="caption" color="text.secondary">{periodLabel(filters)} · {rows.length} records ready for review</Typography>
+                </Box>
+                <Typography variant="caption" color="text.secondary">Step 2 of 2 · Export or print</Typography>
+              </Stack>
               {/* The figures that matter for this report, so nobody has to add
                   up a column of rows by hand. */}
               <Grid container spacing={1.5}>
@@ -299,13 +375,35 @@ export default function Reports() {
                 </Button>
                 <Button
                   size="small"
+                  startIcon={<ViewColumnIcon />}
+                  onClick={(event) => setFieldMenuAnchor(event.currentTarget)}
+                  variant="outlined"
+                  sx={{ borderRadius: 2 }}
+                >
+                  Print fields ({printedColumns.length})
+                </Button>
+                <Button
+                  size="small"
                   startIcon={<PictureAsPdfIcon />}
                   onClick={printReport}
+                  disabled={!printedColumns.length}
                   variant="outlined"
                   sx={{ borderRadius: 2 }}
                 >
                   Print PDF
                 </Button>
+                <Menu
+                  anchorEl={fieldMenuAnchor}
+                  open={Boolean(fieldMenuAnchor)}
+                  onClose={() => setFieldMenuAnchor(null)}
+                >
+                  {availableColumns.map((column) => (
+                    <MenuItem key={column.field} onClick={() => togglePrintedField(column.field)} dense>
+                      <Checkbox checked={printedFields.includes(column.field)} size="small" />
+                      <ListItemText primary={column.headerName} />
+                    </MenuItem>
+                  ))}
+                </Menu>
               </Stack>
             </Stack>
           )}

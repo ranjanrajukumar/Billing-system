@@ -6,6 +6,7 @@ import { assertEnvironment } from './config/env.js';
 import { startScheduler } from './jobs/scheduler.js';
 import { initBackupSchedule } from './modules/platform/backupScheduler.js';
 import { startBillingCron } from './modules/platform/billing.cron.js';
+import { resumeProductImports } from './modules/inventory/productImport.service.js';
 
 dotenv.config();
 
@@ -113,6 +114,7 @@ async function start() {
     if (schedule.enabled) console.log(`Nightly backup armed for ${schedule.nextRun}`);
 
     startBillingCron();
+    await resumeProductImports();
   } catch (error) {
     if (process.env.START_WITHOUT_DB === 'false') {
       console.error('Unable to start server:', error);

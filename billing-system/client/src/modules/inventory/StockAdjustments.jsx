@@ -15,6 +15,7 @@ import { useToast } from '../../context/ToastContext.jsx';
 import useRequiredFields from '../../hooks/useRequiredFields.js';
 import { currency } from '../../utils/formatters.js';
 import { branchesApi, productsApi, stockAdjustmentsApi } from '../../services/resource.service.js';
+import { promptAction } from '../../utils/alerts.js';
 
 /**
  * Deliberate corrections to stock — damage, expiry, loss, a found box.
@@ -101,7 +102,10 @@ export default function StockAdjustments() {
   const act = async (row, action) => {
     setBusy(true);
     try {
-      const reason = action === 'reject' ? window.prompt('Why is this rejected?') || '' : undefined;
+      const reason = action === 'reject'
+        ? await promptAction({ title: 'Reject adjustment', text: 'Why is this adjustment rejected?', inputLabel: 'Reason', confirmText: 'Reject adjustment', required: true })
+        : undefined;
+      if (reason === null) { setBusy(false); return; }
       await stockAdjustmentsApi[action](row.id, reason);
       showToast(action === 'approve' ? 'Approved — stock updated' : 'Adjustment rejected');
       load();

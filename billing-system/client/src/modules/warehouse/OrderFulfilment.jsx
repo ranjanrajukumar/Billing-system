@@ -10,6 +10,7 @@ import Modal from '../../components/Modal.jsx';
 import StatusChip from '../../components/StatusChip.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
 import { fulfilmentApi } from '../../services/resource.service.js';
+import { confirmAction } from '../../utils/alerts.js';
 
 /**
  * Fulfilling sales orders: allocate → pick → pack → dispatch.
@@ -180,7 +181,11 @@ export default function OrderFulfilment({ branchId, onChanged }) {
   };
 
   const cancel = async (order) => {
-    if (!window.confirm(`Cancel fulfilment of ${order.orderNumber}? Picked stock goes back to its bins.`)) return;
+    if (!(await confirmAction({
+      title: `Cancel fulfilment ${order.orderNumber}?`,
+      text: 'Picked stock will go back to its bins.',
+      confirmText: 'Cancel fulfilment',
+    }))) return;
     setBusy(true);
     try {
       const result = await fulfilmentApi.cancel(order.id);

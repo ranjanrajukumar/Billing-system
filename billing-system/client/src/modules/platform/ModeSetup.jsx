@@ -1,5 +1,6 @@
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
 import StorefrontIcon from '@mui/icons-material/Storefront';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import LockIcon from '@mui/icons-material/Lock';
 import {
   Alert, Box, Chip, Divider, Grid, Paper, Stack, Switch, Tooltip, Typography, alpha, useTheme,
@@ -29,6 +30,12 @@ const MODE_COPY = {
     title: 'Advanced — a business',
     blurb: 'Everything in Basic plus purchase orders and GRN, warehouses, stock transfers and counting, expenses, cash and bank, full accounting and approval workflows.',
   },
+};
+
+const PROFILE_ICONS = {
+  retail: <StorefrontIcon />,
+  wholesale: <LocalShippingIcon />,
+  enterprise: <BusinessCenterIcon />,
 };
 
 export default function ModeSetup() {
@@ -67,6 +74,21 @@ export default function ModeSetup() {
       setTimeout(() => window.location.reload(), 600);
     } catch (err) {
       showToast(err.response?.data?.message || 'Could not switch mode', 'error');
+    }
+    setBusy(null);
+  };
+
+  const applyProfile = async (profile) => {
+    if (profile === state.profile) return;
+    setBusy('profile');
+    try {
+      const result = await settingsApi.setProfile(profile);
+      showToast(result.message);
+      setState((s) => ({ ...s, mode: result.mode, profile: result.profile, modules: result.modules }));
+      await refreshMenus(result.modules);
+      setTimeout(() => window.location.reload(), 600);
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Could not apply the client profile', 'error');
     }
     setBusy(null);
   };
@@ -113,6 +135,45 @@ export default function ModeSetup() {
 
   return (
     <Stack spacing={2}>
+      <Box>
+        <Typography variant="body2" fontWeight={700} gutterBottom>Client setup</Typography>
+        <Typography variant="caption" color="text.secondary">
+          Apply a focused workspace now, then tailor individual modules below.
+        </Typography>
+      </Box>
+
+      <Grid container spacing={2}>
+        {(state.profiles || []).map((profile) => {
+          const active = state.profile === profile.key;
+          return (
+            <Grid item xs={12} md={4} key={profile.key}>
+              <Paper
+                variant="outlined"
+                onClick={() => !busy && applyProfile(profile.key)}
+                sx={{
+                  p: 2, height: '100%', cursor: busy ? 'wait' : 'pointer', borderRadius: 2,
+                  borderColor: active ? 'primary.main' : 'divider',
+                  borderWidth: active ? 2 : 1,
+                  bgcolor: active ? alpha(theme.palette.primary.main, 0.05) : 'transparent',
+                  '&:hover': { borderColor: 'primary.main' },
+                }}
+              >
+                <Stack spacing={1}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box sx={{ color: 'primary.main', display: 'grid', placeItems: 'center' }}>{PROFILE_ICONS[profile.key]}</Box>
+                    <Typography variant="body2" fontWeight={800}>{profile.label}</Typography>
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary">{profile.description}</Typography>
+                  {active && <Chip label="Active profile" size="small" color="primary" sx={{ alignSelf: 'flex-start', fontWeight: 700 }} />}
+                </Stack>
+              </Paper>
+            </Grid>
+          );
+        })}
+      </Grid>
+
+      <Divider />
+
       <Grid container spacing={2}>
         {['Basic', 'Advanced'].map((mode) => {
           const active = state.mode === mode;

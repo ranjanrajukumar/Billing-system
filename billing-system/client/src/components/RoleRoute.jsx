@@ -29,8 +29,8 @@ export default function RoleRoute({ children }) {
         <Box>
           <Typography variant="h6" fontWeight={800}>This page needs a different role</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            You are signed in as <strong>{user?.role || 'unknown'}</strong>. Users, roles and audit
-            logs are Admin-only; reports need Admin or Accountant.
+            You are signed in as <strong>{user?.role || 'unknown'}</strong>. Your current role does not
+            have permission to open this page. Ask an administrator to update your role or menu access.
           </Typography>
         </Box>
         <Button type="button" variant="contained" sx={{ borderRadius: 2 }} onClick={() => navigate('/')}>

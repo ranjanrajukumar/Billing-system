@@ -406,21 +406,3 @@ export async function renderInvoiceHtml({ invoice, company, template = {}, media
 <body><div class="sheet">${body}</div></body></html>`;
 }
 
-// Specimen invoice so a layout can be previewed before any real data exists.
-export function sampleInvoice() {
-  return {
-    invoiceNumber: 'INV-2026-00001',
-    invoiceDate: new Date().toISOString().slice(0, 10),
-    Customer: {
-      customerName: 'Sample Customer Pvt Ltd',
-      gstNumber: '33AAACA1234A1Z5',
-      address: '12 Anna Salai', city: 'Chennai', state: 'Tamil Nadu', pincode: '600002',
-    },
-    InvoiceItems: [
-      { Product: { productName: 'Sample Product A', hsnCode: '8471' }, quantity: 2, rate: 500, discount: 0, gstPercent: 18, amount: 1180 },
-      { Product: { productName: 'Sample Service B', hsnCode: '9983' }, quantity: 1, rate: 1500, discount: 100, gstPercent: 18, amount: 1652 },
-    ],
-    subtotal: 2400, cgst: 216, sgst: 216, igst: 0, roundOff: 0, grandTotal: 2832,
-    amountInWords: 'Two Thousand Eight Hundred Thirty Two Rupees Only',
-  };
-}

@@ -103,6 +103,7 @@ import ShipmentModel from './shipment.model.js';
 import RepairOrderModel from './repairOrder.model.js';
 import { installAuditHooks } from '../modules/platform/audit.service.js';
 import SubscriptionModel from './subscription.model.js';
+import ProductImportJobModel from './productImportJob.model.js';
 
 export const Role = RoleModel(sequelize);
 export const User = UserModel(sequelize);
@@ -205,6 +206,7 @@ export const PickWave = PickWaveModel(sequelize);
 export const Shipment = ShipmentModel(sequelize);
 export const RepairOrder = RepairOrderModel(sequelize);
 export const Subscription = SubscriptionModel(sequelize);
+export const ProductImportJob = ProductImportJobModel(sequelize);
 
 Role.hasMany(User, { foreignKey: 'roleId', onDelete: 'RESTRICT', onUpdate: 'CASCADE' });
 User.belongsTo(Role, { foreignKey: 'roleId', onDelete: 'RESTRICT', onUpdate: 'CASCADE' });

@@ -24,6 +24,7 @@ import { useToast } from '../../context/ToastContext.jsx';
 import { requiredRule } from '../../hooks/useRequiredFields.js';
 import { productsApi, purchasesApi, suppliersApi } from '../../services/resource.service.js';
 import { currency, date } from '../../utils/formatters.js';
+import { alertError } from '../../utils/alerts.js';
 
 const blankItem = { productId: '', quantity: 1, rate: 0, gstPercent: 18 };
 const PAYMENT_COLORS = { Paid: 'success', 'Partially Paid': 'warning', Unpaid: 'error' };
@@ -127,7 +128,7 @@ export default function Purchases() {
       const result = await purchasesApi.importCsv(formData);
       showToast(`Imported ${result.imported} purchases. Failed: ${result.failed}`);
       if (result.errors?.length) {
-        alert("Errors:\\n" + result.errors.join("\\n"));
+        await alertError('Some purchases could not be imported', result.errors.join('\n'));
       }
       load();
     } catch (err) {

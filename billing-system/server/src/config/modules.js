@@ -13,6 +13,28 @@
 
 export const BUSINESS_MODES = ['Basic', 'Advanced'];
 
+// A profile is a stored starting point, not a separate application. Every
+// profile can still be tailored module by module after setup.
+export const CLIENT_PROFILES = [
+  {
+    key: 'retail', label: 'Retail Shop', mode: 'Basic',
+    description: 'Fast billing, products, purchases, stock and daily cash.',
+    modules: ['batches', 'expenses', 'cashBank', 'cashFlow'],
+  },
+  {
+    key: 'wholesale', label: 'Wholesale & Distribution', mode: 'Advanced',
+    description: 'Orders, credit sales, purchase receipts, branches and stock control.',
+    modules: ['salesOrders', 'batches', 'expenses', 'cashBank', 'cashFlow', 'stockAudit', 'stockTransfers', 'stockAdjustments', 'purchaseOrders', 'purchaseReturns', 'accounting', 'approvals'],
+  },
+  {
+    key: 'enterprise', label: 'Enterprise & Warehouse', mode: 'Advanced',
+    description: 'Full inventory, warehouse, planning, accounting and approval operations.',
+    modules: ['salesOrders', 'coupons', 'batches', 'expenses', 'cashBank', 'cashFlow', 'stockAudit', 'warehouses', 'stockTransfers', 'demandPlanning', 'stockAdjustments', 'purchaseOrders', 'stockIssues', 'purchaseReturns', 'serials', 'gatepass', 'accounting', 'approvals'],
+  },
+];
+
+export const CLIENT_PROFILE_BY_KEY = Object.fromEntries(CLIENT_PROFILES.map((profile) => [profile.key, profile]));
+
 export const MODULES = [
   // ---- Always available, in both modes ----
   { key: 'dashboard', label: 'Dashboard', mode: 'Basic', core: true, menus: ['dashboard'] },
