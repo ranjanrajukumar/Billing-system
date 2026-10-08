@@ -1,4 +1,5 @@
 import { body } from 'express-validator';
+import { ADJUSTMENT_REASONS } from '../../models/stockAdjustment.model.js';
 
 const adjustmentItems = [
   body('items').isArray({ min: 1 }),
@@ -14,7 +15,8 @@ const transferItems = [
 
 export const stockAdjustmentRules = [
   body('adjustmentDate').optional({ checkFalsy: true }).isISO8601().toDate(),
-  body('reason').optional({ checkFalsy: true }).isString(),
+  // The column is an enum; anything else would fail the insert with a 500.
+  body('reason').optional({ checkFalsy: true }).isIn(ADJUSTMENT_REASONS),
   ...adjustmentItems
 ];
 

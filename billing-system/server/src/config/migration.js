@@ -25,7 +25,8 @@ async function ensureDatabase() {
 
   assertSupportedAuth();
 
-  const adminDatabase = dbDialect === 'mssql' ? 'master' : dbName;
+  // Connect without the target database: it may not exist yet.
+  const adminDatabase = dbDialect === 'mssql' ? 'master' : '';
   const adminConnection = new Sequelize(
     adminDatabase,
     settings.user,

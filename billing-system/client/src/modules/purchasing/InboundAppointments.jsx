@@ -27,7 +27,7 @@ import { confirmAction } from '../../utils/alerts.js';
 const STATUS_COLORS = {
   Scheduled: 'primary',
   Arrived: 'info',
-  Docked: 'warning',
+  Unloading: 'warning',
   Completed: 'success',
   Cancelled: 'error',
 };

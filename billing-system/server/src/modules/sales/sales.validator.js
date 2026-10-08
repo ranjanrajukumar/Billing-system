@@ -13,7 +13,8 @@ export const salesOrderRules = [
   body('orderDate').optional({ checkFalsy: true }).isISO8601().toDate(),
   body('expectedDeliveryDate').optional({ checkFalsy: true }).isISO8601().toDate(),
   body('customerId').isInt(),
-  body('status').optional().isIn(['Draft', 'Confirmed', 'Processing', 'Delivered', 'Cancelled']),
+  // Must match the SalesOrder model's enum, or the insert fails with a 500.
+  body('status').optional().isIn(['Pending', 'Approved', 'Shipped', 'Delivered', 'Cancelled']),
   ...commonItems
 ];
 
@@ -21,7 +22,8 @@ export const salesReturnRules = [
   body('returnDate').optional({ checkFalsy: true }).isISO8601().toDate(),
   body('customerId').isInt(),
   body('invoiceId').optional({ nullable: true }).isInt(),
-  body('status').optional().isIn(['Draft', 'Confirmed', 'Refunded']),
+  // Must match the SalesReturn model's enum, or the insert fails with a 500.
+  body('status').optional().isIn(['Pending', 'Completed', 'Rejected']),
   body('reason').optional({ checkFalsy: true }).isString(),
   ...commonItems
 ];

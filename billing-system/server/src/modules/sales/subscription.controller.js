@@ -9,7 +9,7 @@ export const listSubscriptions = asyncHandler(async (req, res) => {
     include: [{ model: Customer }, { model: Product }],
     limit,
     offset,
-    order: [['createdAt', 'DESC']]
+    order: [['addondt', 'DESC']]
   });
   res.json(paged(rows, count, page, limit));
 });

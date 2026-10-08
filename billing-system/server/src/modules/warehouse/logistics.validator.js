@@ -39,7 +39,7 @@ export const shipmentRules = [
 
 export const appointmentRules = [
   body('expectedArrival').optional({ checkFalsy: true }).isISO8601().toDate(),
-  body('status').optional().isIn(['Scheduled', 'Arrived', 'Docked', 'Completed', 'Cancelled']),
+  body('status').optional().isIn(['Scheduled', 'Arrived', 'Unloading', 'Completed', 'Cancelled']),
   body('supplierId').optional({ checkFalsy: true }).isInt(),
   body('poId').optional({ checkFalsy: true }).isInt(),
   body('dockNumber').optional({ checkFalsy: true }).isString(),

@@ -275,8 +275,8 @@ export default function SalesOrders() {
               { field: 'totalAmount', headerName: 'Total', render: (r) => <Typography fontWeight={800} color="success.main">{currency(r.totalAmount)}</Typography> },
               { field: 'actions', headerName: 'Actions', render: (r) => (
                 <Stack direction="row" spacing={0.25}>
-                  {/* Confirm — only for Pending/Approved orders */}
-                  {!['Confirmed', 'Cancelled', 'Delivered', 'Shipped'].includes(r.status) && (
+                  {/* Confirm — only for Pending orders; confirming sets Approved */}
+                  {!['Approved', 'Cancelled', 'Delivered', 'Shipped'].includes(r.status) && (
                     <Tooltip title="Confirm Order &amp; Reserve Stock">
                       <IconButton size="small" color="success" onClick={() => confirmOrder(r)} sx={{ borderRadius: 1.5 }}>
                         <CheckCircleIcon fontSize="small" />
